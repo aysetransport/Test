@@ -1,0 +1,22 @@
+# Gradle / Build
+.gradle/
+build/
+.kotlin/
+
+# Lokale Konfiguration
+local.properties
+
+# IDE
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signaturschlüssel und Build-Ergebnisse gehören nicht ins Repository
+*.jks
+*.keystore
+*.apk
+*.aab
+
+.DS_Store

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <!-- Keine Falldaten in die Cloud-Sicherung des Google-Kontos. -->
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </cloud-backup>
+    <!-- Für die Direktübertragung auf ein neues Gerät gibt es keine Ausschlüsse: alles zieht mit um. -->
+</data-extraction-rules>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Schadensfälle</string>
+    <string name="kanal_wiedervorlage_name">Wiedervorlagen</string>
+    <string name="kanal_wiedervorlage_beschreibung">Erinnert an Schadensfälle, bei denen nachgehakt werden muss</string>
+</resources>
