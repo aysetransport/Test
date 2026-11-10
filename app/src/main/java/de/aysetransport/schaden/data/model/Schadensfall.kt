@@ -32,7 +32,7 @@ data class Schadensfall(
     /** Laufende interne Nummer, z. B. `2026-003`. Wird beim Anlegen vergeben. */
     val fallnummer: String = "",
 
-    // Anspruchsteller
+    // Geschädigter (die Felder heißen aus Kompatibilitätsgründen weiter „kunde…“)
     val kundeName: String = "",
     val kundeFirma: String = "",
     val kundeTelefon: String = "",
@@ -41,8 +41,13 @@ data class Schadensfall(
     /** Aktenzeichen bzw. Bezug der Gegenseite. */
     val kundenAktenzeichen: String = "",
 
-    // Transportauftrag
+    // Auftraggeber
     val auftraggeber: String = "",
+    @ColumnInfo(defaultValue = "''") val auftraggeberKontakt: String = "",
+    @ColumnInfo(defaultValue = "''") val auftraggeberTelefon: String = "",
+    @ColumnInfo(defaultValue = "''") val auftraggeberEmail: String = "",
+
+    // Transportauftrag
     val auftragsReferenz: String = "",
     val tour: String = "",
     val fahrzeug: String = "",
@@ -141,6 +146,19 @@ data class Anlage(
     val istLokalVorhanden: Boolean get() = dateiname.isNotEmpty()
 }
 
+/** Ein Auftraggeber aus der Stammdatenliste – zum Auswählen im Formular. */
+@Serializable
+@Entity(tableName = "auftraggeber", indices = [Index("name"), Index("syncOffen")])
+data class AuftraggeberEintrag(
+    @PrimaryKey val uuid: String = neueKennung(),
+    val name: String,
+    val kontakt: String = "",
+    val telefon: String = "",
+    val email: String = "",
+    val geaendertAm: Instant = Instant.EPOCH,
+    val syncOffen: Boolean = true,
+)
+
 /** Was gelöscht wurde, merkt sich die App, bis die Löschung in der Cloud angekommen ist. */
 @Entity(tableName = "loeschung")
 data class Loeschung(
@@ -149,7 +167,7 @@ data class Loeschung(
     val fallUuid: String,
     val zeitpunkt: Instant,
 ) {
-    enum class Art { FALL, VERLAUF, ANLAGE }
+    enum class Art { FALL, VERLAUF, ANLAGE, AUFTRAGGEBER }
 }
 
 fun neueKennung(): String = UUID.randomUUID().toString()

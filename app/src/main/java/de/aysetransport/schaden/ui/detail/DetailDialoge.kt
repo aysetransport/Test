@@ -47,6 +47,7 @@ import de.aysetransport.schaden.data.model.FallStatus
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufTyp
 import de.aysetransport.schaden.domain.Datum
+import de.aysetransport.schaden.domain.Empfaenger
 import de.aysetransport.schaden.domain.Vorlage
 import de.aysetransport.schaden.ui.komponenten.DatumAuswahlDialog
 import java.time.LocalDate
@@ -280,6 +281,8 @@ fun StatusDialog(
 @Composable
 fun VorlagenDialog(
     titel: String,
+    /** Hinweis je Empfänger, z. B. „keine E-Mail-Adresse hinterlegt“, oder `null`. */
+    fehlt: (Empfaenger) -> String? = { null },
     onAbbrechen: () -> Unit,
     onAuswahl: (Vorlage) -> Unit,
 ) {
@@ -296,13 +299,23 @@ fun VorlagenDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
-                Vorlage.entries.forEach { vorlage ->
-                    ListItem(
-                        headlineContent = { Text(vorlage.titel) },
-                        supportingContent = { Text(vorlage.beschreibung) },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        modifier = Modifier.clickable { onAuswahl(vorlage) },
+                Empfaenger.entries.forEach { empfaenger ->
+                    Text(
+                        empfaenger.ueberschrift + (fehlt(empfaenger)?.let { " – $it" } ?: ""),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
                     )
+                    Vorlage.entries.filter { it.empfaenger == empfaenger }.forEach { vorlage ->
+                        ListItem(
+                            headlineContent = { Text(vorlage.titel) },
+                            supportingContent = { Text(vorlage.beschreibung) },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier
+                                .clickable { onAuswahl(vorlage) }
+                                .testTag("vorlage-${vorlage.name}"),
+                        )
+                    }
                 }
             }
         },
@@ -326,6 +339,34 @@ fun BestaetigenDialog(
         confirmButton = {
             TextButton(onClick = onBestaetigen) { Text(bestaetigen, color = MaterialTheme.colorScheme.error) }
         },
+        dismissButton = { TextButton(onClick = onAbbrechen) { Text("Abbrechen") } },
+    )
+}
+
+/** Wen anrufen? Erscheint nur, wenn Geschädigter und Auftraggeber eine Nummer haben. */
+@Composable
+fun AnrufDialog(
+    fall: Schadensfall,
+    onAbbrechen: () -> Unit,
+    onAuswahl: (Empfaenger) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onAbbrechen,
+        title = { Text("Wen anrufen?") },
+        text = {
+            Column {
+                listOf(Empfaenger.GESCHAEDIGTER, Empfaenger.AUFTRAGGEBER).forEach { e ->
+                    val name = if (e == Empfaenger.GESCHAEDIGTER) fall.kundeName.ifBlank { fall.kundeFirma } else fall.auftraggeberKontakt.ifBlank { fall.auftraggeber }
+                    ListItem(
+                        headlineContent = { Text(e.label + if (name.isNotBlank()) " · ${name.trim()}" else "") },
+                        supportingContent = { Text(e.telefon(fall)) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier.clickable { onAuswahl(e) },
+                    )
+                }
+            }
+        },
+        confirmButton = {},
         dismissButton = { TextButton(onClick = onAbbrechen) { Text("Abbrechen") } },
     )
 }

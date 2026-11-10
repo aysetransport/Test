@@ -74,7 +74,7 @@ import java.time.format.DateTimeFormatter
 private val WIEDERVORLAGE_OPTIONEN = listOf(3 to "3 Tage", 7 to "1 Woche", 14 to "2 Wochen", 30 to "30 Tage")
 
 @Composable
-fun EinstellungenScreen(viewModel: EinstellungenViewModel, onZurueck: () -> Unit) {
+fun EinstellungenScreen(viewModel: EinstellungenViewModel, onZurueck: () -> Unit, onAuftraggeber: () -> Unit = {}) {
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var uhrzeitOffen by remember { mutableStateOf(false) }
@@ -178,6 +178,10 @@ fun EinstellungenScreen(viewModel: EinstellungenViewModel, onZurueck: () -> Unit
                         }
                     }
                 }
+            }
+
+            Bereich("Auftraggeber", "Gespeicherte Auftraggeber lassen sich im Fall-Formular auswählen, statt sie einzutippen.") {
+                OutlinedButton(onClick = onAuftraggeber, modifier = Modifier.fillMaxWidth()) { Text("Auftraggeber verwalten") }
             }
 
             CloudBereich(viewModel)

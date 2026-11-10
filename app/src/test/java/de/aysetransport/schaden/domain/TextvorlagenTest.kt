@@ -69,10 +69,55 @@ class TextvorlagenTest {
     fun `Sachstandsanfrage richtet sich an Dritte und nennt deren Schadennummer`() {
         val nachricht = Textvorlagen.erstelle(Vorlage.SACHSTANDSANFRAGE, fall, absender, heute)
 
-        assertFalse(Vorlage.SACHSTANDSANFRAGE.anAnspruchsteller)
+        assertEquals(Empfaenger.DRITTE, Vorlage.SACHSTANDSANFRAGE.empfaenger)
         assertTrue(nachricht.text.startsWith("Sehr geehrte Damen und Herren,"))
-        assertTrue("Anspruchsteller: Anna Becker" in nachricht.text)
+        assertTrue("Geschädigter: Anna Becker" in nachricht.text)
         assertTrue("Schadennummer: VS-99" in nachricht.text)
         assertTrue("Ihr Zeichen VS-99" in nachricht.betreff)
+    }
+
+    private val mitAuftraggeber = fall.copy(
+        kundeTelefon = "0171 5550142",
+        kundeEmail = "a.becker@example.org",
+        forderungCent = 45_000,
+        beschreibung = "Sofa: Naht gerissen",
+        auftraggeber = "Möbelhaus Nordpark",
+        auftraggeberKontakt = "Frau Kaya",
+        auftraggeberEmail = "dispo@moebelhaus.example",
+        auftragsReferenz = "LS-48213",
+    )
+
+    @Test
+    fun `jede Vorlage hat genau einen Empfaenger und jeder Empfaenger eigene Vorlagen`() {
+        val jeEmpfaenger = Vorlage.entries.groupBy { it.empfaenger }
+        assertEquals(setOf(Empfaenger.GESCHAEDIGTER, Empfaenger.AUFTRAGGEBER, Empfaenger.DRITTE), jeEmpfaenger.keys)
+        assertEquals("a.becker@example.org", Empfaenger.GESCHAEDIGTER.email(mitAuftraggeber))
+        assertEquals("dispo@moebelhaus.example", Empfaenger.AUFTRAGGEBER.email(mitAuftraggeber))
+        assertEquals("", Empfaenger.DRITTE.email(mitAuftraggeber))
+    }
+
+    @Test
+    fun `Auftraggeber bekommt eigene Anrede und Bezug, aber keine Kontaktdaten oder Forderung des Geschaedigten`() {
+        for (vorlage in Vorlage.entries.filter { it.empfaenger == Empfaenger.AUFTRAGGEBER }) {
+            val n = Textvorlagen.erstelle(vorlage, mitAuftraggeber, absender, heute)
+            assertTrue(n.text.startsWith("Guten Tag Frau Kaya,"))
+            assertTrue(vorlage.name, "Auftrag: LS-48213" in n.text)
+            assertTrue(vorlage.name, "Empfänger der Lieferung: Anna Becker" in n.text)
+            assertTrue(n.betreff, "Ihr Auftrag LS-48213" in n.betreff && "unser Vorgang 2026-007" in n.betreff)
+            for (vertraulich in listOf("0171 5550142", "a.becker@example.org", "450", "AB-4711")) {
+                assertFalse("${vorlage.name} verrät „$vertraulich“", vertraulich in n.text || vertraulich in n.betreff)
+            }
+        }
+    }
+
+    @Test
+    fun `Geschaedigter erfaehrt nichts ueber den Auftraggeber`() {
+        for (vorlage in Vorlage.entries.filter { it.empfaenger == Empfaenger.GESCHAEDIGTER }) {
+            val n = Textvorlagen.erstelle(vorlage, mitAuftraggeber, absender, heute)
+            assertTrue(n.text.startsWith("Guten Tag Anna Becker,"))
+            for (intern in listOf("Möbelhaus", "Kaya", "LS-48213", "dispo@")) {
+                assertFalse("${vorlage.name} verrät „$intern“", intern in n.text || intern in n.betreff)
+            }
+        }
     }
 }

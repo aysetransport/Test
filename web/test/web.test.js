@@ -95,11 +95,11 @@ test('ohne Cloud: Fall anlegen, nachhaken, abschließen – bleibt nach dem Neul
   await s.getByRole('button', { name: '✓ Nachgehakt' }).click();
   await s.locator('#ergebnis').fill('Kundin schickt die Fotos bis Freitag');
   await s.getByRole('button', { name: '2 Wochen' }).click();
-  await s.locator('#wv-form').getByRole('button', { name: 'Anspruchsteller' }).click();
+  await s.locator('#wv-form').getByRole('button', { name: 'Geschädigter' }).click();
   await s.locator('#schritt').fill('Fotos prüfen');
   await s.locator('#wv-form button.voll').click();
   await s.locator('#wiedervorlage').getByText('in 14 Tagen fällig').waitFor();
-  await s.locator('#wiedervorlage').getByText('Wartet auf Anspruchsteller · Fotos prüfen').waitFor();
+  await s.locator('#wiedervorlage').getByText('Wartet auf Geschädigter · Fotos prüfen').waitFor();
   await s.locator('.verlauf').getByText('Kundin schickt die Fotos bis Freitag').waitFor();
 
   await s.reload();
@@ -255,17 +255,81 @@ test('E-Mail-Vorlage, Zusammenfassung und CSV-Export', async () => {
   const mail = await s.evaluate(() => window.__geoeffnet);
   assert.ok(mail.startsWith('mailto:a.becker@example.org?subject='));
   assert.ok(decodeURIComponent(mail).includes(`Erinnerung – unser Vorgang ${jahr}-001`));
-  await s.locator('.verlauf').getByText('E-Mail vorbereitet: Erinnerung').waitFor();
+  await s.locator('.verlauf').getByText('E-Mail an Geschädigter vorbereitet: Erinnerung').waitFor();
 
   await s.getByRole('button', { name: 'Weitere Aktionen' }).click();
   await s.locator('#teilen').click();
   await s.getByText('Text in die Zwischenablage kopiert').waitFor();
   const kopiert = await s.evaluate(() => navigator.clipboard.readText());
-  assert.ok(kopiert.startsWith(`Schadensfall ${jahr}-001\nStatus: Neu\nKunde/Absender: Anna Becker`));
+  assert.ok(kopiert.startsWith(`Schadensfall ${jahr}-001\nStatus: Neu\nGeschädigter: Anna Becker`));
 
   await s.locator('#einstellungen-knopf').click();
   const [download] = await Promise.all([s.waitForEvent('download'), s.locator('#csv').click()]);
   const csv = require('node:fs').readFileSync(await download.path(), 'utf8');
   assert.ok(csv.startsWith('﻿Fall-Nr.;Status;Tour;'));
   assert.ok(csv.includes(`${jahr}-001;Neu;Tour 3;`) && csv.includes(';1280,00;'));
+});
+
+test('Auftraggeber: Vorlage an dessen Adresse, Auswahl aus der Liste, Abgleich der Liste', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url);
+  await melde(a, PIN, true); await aktuell(a);
+  await legeFallAn(a, { kundeName: 'Anna Becker', kundeEmail: 'a.becker@example.org', auftraggeber: 'Möbelhaus Nordpark',
+    auftraggeberKontakt: 'Frau Kaya', auftraggeberTelefon: '02191 123', auftraggeberEmail: 'dispo@nordpark.example', auftragsReferenz: 'LS-48213' });
+  await a.locator('#detail').getByRole('heading', { name: 'Auftraggeber' }).waitFor();
+
+  await a.getByRole('button', { name: '✉ E-Mail' }).click();
+  await a.getByText('An den Auftraggeber').waitFor();
+  await a.locator('[data-vorlage=SCHADENSMITTEILUNG]').click();
+  const mail = decodeURIComponent(await a.evaluate(() => window.__geoeffnet));
+  assert.ok(mail.startsWith('mailto:dispo@nordpark.example?subject='), mail);
+  assert.ok(mail.includes('Guten Tag Frau Kaya,') && mail.includes('Ihr Auftrag LS-48213') && !mail.includes('a.becker@'));
+  await a.locator('.verlauf').getByText('E-Mail an Auftraggeber vorbereitet: Schadensmitteilung').waitFor();
+
+  // Nur der Auftraggeber hat eine Nummer: Anrufen wählt ihn direkt.
+  await a.locator('#detail').getByRole('button', { name: '☎ Anrufen' }).click();
+  assert.equal(await a.locator('[data-anruf]').count(), 0);
+  assert.equal(await a.evaluate(() => window.__geoeffnet), 'tel:02191123');
+  // Mit Nummer beim Geschädigten fragt die App, wen sie anrufen soll.
+  await a.getByRole('button', { name: 'Bearbeiten' }).click();
+  await a.locator('[name=kundeTelefon]').fill('0171 555');
+  await a.locator('#fall-form button.voll').click();
+  await a.locator('#detail').getByRole('button', { name: '☎ Anrufen' }).click();
+  await a.locator('[data-anruf=GESCHAEDIGTER]').click();
+  assert.equal(await a.evaluate(() => window.__geoeffnet), 'tel:0171555');
+
+  // Der Auftraggeber steht jetzt in der Liste – auf dem zweiten Gerät auswählbar.
+  await aktuell(a);
+  const b = await geraet(cloud.url);
+  await melde(b); await aktuell(b);
+  await b.locator('[data-neu]').first().click();
+  await b.locator('[name=kundeName]').fill('Carl Demir');
+  await b.locator('#ag-auswahl').selectOption({ label: 'Möbelhaus Nordpark · Frau Kaya' });
+  assert.equal(await b.locator('[name=auftraggeberEmail]').inputValue(), 'dispo@nordpark.example');
+  await b.locator('#fall-form button.voll').click();
+  await b.locator('#detail dd', { hasText: '02191 123' }).waitFor();
+
+  // In den Einstellungen bearbeiten – A übernimmt die Änderung.
+  await b.locator('#einstellungen-knopf').click();
+  await b.locator('[data-ag]').click();
+  await b.locator('#ag-form [name=kontakt]').fill('Herr Ott');
+  await b.locator('#ag-form button.voll').click();
+  await aktuell(b);
+  await abgleich(a);
+  assert.deepEqual(await a.evaluate(() => auftraggeberListe().map(e => [e.name, e.kontakt])), [['Möbelhaus Nordpark', 'Herr Ott']]);
+  await cloud.schliessen();
+});
+
+test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
+  const cloud = await starteCloud();
+  const s = await geraet(cloud.url);
+  await melde(s, PIN, true); await aktuell(s);
+  cloud.umgebung.kontext.API_VERSION = 1; // wie das bisher bereitgestellte Skript
+  await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
+  await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
+  assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
+  cloud.umgebung.kontext.API_VERSION = 2;
+  await abgleich(s);
+  assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
+  await cloud.schliessen();
 });

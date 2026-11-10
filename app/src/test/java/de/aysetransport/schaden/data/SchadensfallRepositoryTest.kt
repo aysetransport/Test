@@ -119,7 +119,7 @@ class SchadensfallRepositoryTest {
 
         val eintrag = verlauf(id).first { it.typ == VerlaufTyp.ANRUF }
         assertEquals(
-            "Kundin schickt Fotos bis Freitag\nWiedervorlage am 17.11.2026 · wartet auf Anspruchsteller · Fotos prüfen",
+            "Kundin schickt Fotos bis Freitag\nWiedervorlage am 17.11.2026 · wartet auf Geschädigter · Fotos prüfen",
             eintrag.text,
         )
         assertTrue(repository.faelligeFaelle(heute).isEmpty())
@@ -235,5 +235,20 @@ class SchadensfallRepositoryTest {
         assertTrue(repository.beobachteAnlagen(id).first().isEmpty())
         assertFalse(speicher.datei(anlage).exists())
         assertFalse(speicher.ordner(id).exists())
+    }
+
+    @Test
+    fun `neue Auftraggeber aus Faellen kommen automatisch in die Liste, bekannte nicht doppelt`() = runBlocking {
+        repository.anlegen(Schadensfall(kundeName = "A", auftraggeber = "Möbelhaus Nordpark", auftraggeberKontakt = "Frau Kaya", auftraggeberEmail = "dispo@nordpark.example"))
+        val id = repository.anlegen(Schadensfall(kundeName = "B", auftraggeber = "  möbelhaus NORDPARK "))
+        repository.speichern(repository.ladeFall(id)!!.copy(auftraggeber = "Küchenstudio Süd"))
+
+        val liste = repository.beobachteAuftraggeber().first()
+        assertEquals(listOf("Küchenstudio Süd", "Möbelhaus Nordpark"), liste.map { it.name })
+        assertEquals("dispo@nordpark.example", liste.single { it.name == "Möbelhaus Nordpark" }.email)
+
+        repository.auftraggeberLoeschen(liste.first())
+        assertEquals(listOf("Möbelhaus Nordpark"), repository.beobachteAuftraggeber().first().map { it.name })
+        assertEquals("Fall behält seinen Auftraggeber", "Küchenstudio Süd", repository.ladeFall(id)!!.auftraggeber)
     }
 }

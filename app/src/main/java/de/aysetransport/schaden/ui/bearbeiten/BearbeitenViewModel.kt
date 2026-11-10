@@ -11,10 +11,14 @@ import de.aysetransport.schaden.AppContainer
 import de.aysetransport.schaden.data.EinstellungenSpeicher
 import de.aysetransport.schaden.data.SchadensfallRepository
 import de.aysetransport.schaden.data.model.Ansprechpartner
+import de.aysetransport.schaden.data.model.AuftraggeberEintrag
 import de.aysetransport.schaden.data.model.FallStatus
 import de.aysetransport.schaden.data.model.Schadensart
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.domain.Geld
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Clock
 import java.time.LocalDate
@@ -28,6 +32,9 @@ data class Formular(
     val kundeAnschrift: String = "",
     val kundenAktenzeichen: String = "",
     val auftraggeber: String = "",
+    val auftraggeberKontakt: String = "",
+    val auftraggeberTelefon: String = "",
+    val auftraggeberEmail: String = "",
     val auftragsReferenz: String = "",
     val tour: String = "",
     val fahrzeug: String = "",
@@ -57,6 +64,9 @@ data class Formular(
             kundeAnschrift = fall.kundeAnschrift,
             kundenAktenzeichen = fall.kundenAktenzeichen,
             auftraggeber = fall.auftraggeber,
+            auftraggeberKontakt = fall.auftraggeberKontakt,
+            auftraggeberTelefon = fall.auftraggeberTelefon,
+            auftraggeberEmail = fall.auftraggeberEmail,
             auftragsReferenz = fall.auftragsReferenz,
             tour = fall.tour,
             fahrzeug = fall.fahrzeug,
@@ -80,7 +90,7 @@ data class Formular(
     }
 }
 
-enum class Formularfeld { ALLGEMEIN, FORDERUNG, VERGLEICH, EMAIL }
+enum class Formularfeld { ALLGEMEIN, FORDERUNG, VERGLEICH, EMAIL, AUFTRAGGEBER_EMAIL }
 
 class BearbeitenViewModel(
     private val fallId: Long,
@@ -90,6 +100,20 @@ class BearbeitenViewModel(
 ) : ViewModel() {
 
     val istNeu: Boolean get() = fallId == 0L
+
+    /** Gespeicherte Auftraggeber zum Auswählen. */
+    val auftraggeberListe: StateFlow<List<AuftraggeberEintrag>> = repository.beobachteAuftraggeber()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Übernimmt Firma und Kontaktdaten eines gespeicherten Auftraggebers ins Formular. */
+    fun auftraggeberUebernehmen(eintrag: AuftraggeberEintrag) = aendere {
+        copy(
+            auftraggeber = eintrag.name,
+            auftraggeberKontakt = eintrag.kontakt,
+            auftraggeberTelefon = eintrag.telefon,
+            auftraggeberEmail = eintrag.email,
+        )
+    }
 
     var laedt by mutableStateOf(true)
         private set
@@ -146,6 +170,9 @@ class BearbeitenViewModel(
             if (f.kundeEmail.isNotBlank() && !EMAIL_MUSTER.matches(f.kundeEmail.trim())) {
                 put(Formularfeld.EMAIL, "Die E-Mail-Adresse sieht unvollständig aus.")
             }
+            if (f.auftraggeberEmail.isNotBlank() && !EMAIL_MUSTER.matches(f.auftraggeberEmail.trim())) {
+                put(Formularfeld.AUFTRAGGEBER_EMAIL, "Die E-Mail-Adresse sieht unvollständig aus.")
+            }
         }
         if (gefunden.isNotEmpty()) {
             fehler = gefunden
@@ -163,6 +190,9 @@ class BearbeitenViewModel(
                 kundeAnschrift = f.kundeAnschrift.trim(),
                 kundenAktenzeichen = f.kundenAktenzeichen.trim(),
                 auftraggeber = f.auftraggeber.trim(),
+                auftraggeberKontakt = f.auftraggeberKontakt.trim(),
+                auftraggeberTelefon = f.auftraggeberTelefon.trim(),
+                auftraggeberEmail = f.auftraggeberEmail.trim(),
                 auftragsReferenz = f.auftragsReferenz.trim(),
                 tour = f.tour.trim(),
                 fahrzeug = f.fahrzeug.trim(),

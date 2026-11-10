@@ -146,7 +146,7 @@ class AppAblaufTest {
         warteAufTag("ergebnis")
         rule.onNodeWithTag("ergebnis").performTextInput("Kundin schickt die Fotos bis Freitag")
         rule.onNodeWithText("2 Wochen").performScrollTo().performClick()
-        // „Anspruchsteller“ steht auch als Überschrift im Fall dahinter – gemeint ist die Auswahl im Blatt.
+        // „Geschädigter“ steht auch als Überschrift im Fall dahinter – gemeint ist die Auswahl im Blatt.
         rule.onNode(hasText(Ansprechpartner.ANSPRUCHSTELLER.label) and hasClickAction()).performScrollTo().performClick()
         rule.onNodeWithTag("naechster-schritt").performScrollTo().performTextInput("Fotos prüfen")
         rule.onNodeWithText("Speichern").performScrollTo().performClick()
@@ -160,7 +160,7 @@ class AppAblaufTest {
 
         // Die Karte zeigt den neuen Termin, der Verlauf den Anruf.
         warteAufText("in 14 Tagen fällig", substring = true)
-        rule.onNodeWithText("Wartet auf Anspruchsteller · Fotos prüfen").assertIsDisplayed()
+        rule.onNodeWithText("Wartet auf Geschädigter · Fotos prüfen").assertIsDisplayed()
         rule.onNodeWithTag("falldetails").performScrollToNode(hasText("Kundin schickt die Fotos bis Freitag", substring = true))
         rule.onNodeWithText("Kundin schickt die Fotos bis Freitag", substring = true).assertIsDisplayed()
 

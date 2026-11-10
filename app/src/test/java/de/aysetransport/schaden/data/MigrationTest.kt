@@ -58,4 +58,33 @@ class MigrationTest {
         }
         db.query("SELECT COUNT(*) FROM loeschung").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
     }
+
+    @Test
+    fun `Version 2 nach 3 bildet die Auftraggeber-Liste aus den vorhandenen Faellen`() {
+        helfer.createDatabase("migration3.db", 2).use { db ->
+            fun fall(id: Int, ag: String, zeit: Int) = db.execSQL(
+                "INSERT INTO schadensfall (id, uuid, syncOffen, fallnummer, kundeName, kundeFirma, kundeTelefon, kundeEmail, kundeAnschrift, " +
+                    "kundenAktenzeichen, auftraggeber, auftragsReferenz, tour, fahrzeug, fahrer, beifahrer1, beifahrer2, schadensort, schadensart, " +
+                    "beschreibung, status, wiedervorlageNotiz, versicherungsNummer, erstelltAm, geaendertAm) VALUES " +
+                    "($id, 'u$id', 0, '2026-00$id', 'Kunde', '', '', '', '', '', '$ag', '', '', '', '', '', '', '', 'WARE', '', 'NEU', '', '', 1, $zeit)",
+            )
+            fall(1, "Möbelhaus Nordpark", 5)
+            fall(2, " möbelhaus nordpark ", 9)
+            fall(3, "Küchenstudio Süd", 3)
+            fall(4, "", 4)
+        }
+        val db = helfer.runMigrationsAndValidate("migration3.db", 3, true, SchadensfallDatenbank.MIGRATION_2_3)
+        val namen = buildList { db.query("SELECT name, syncOffen FROM auftraggeber ORDER BY name").use { c -> while (c.moveToNext()) add(c.getString(0) to c.getInt(1)) } }
+        // Gleiche Firma nur einmal (die zuletzt bearbeitete Schreibweise), leere Angaben fallen weg.
+        assertEquals(listOf("Küchenstudio Süd" to 1, "möbelhaus nordpark" to 1), namen)
+        db.query("SELECT auftraggeberKontakt, auftraggeberTelefon, auftraggeberEmail FROM schadensfall WHERE id = 1").use { c ->
+            c.moveToFirst(); assertEquals("", c.getString(0)); assertEquals("", c.getString(1)); assertEquals("", c.getString(2))
+        }
+    }
+
+    @Test
+    fun `Version 1 laesst sich in einem Zug auf 3 bringen`() {
+        helfer.createDatabase("migration13.db", 1).close()
+        helfer.runMigrationsAndValidate("migration13.db", 3, true, SchadensfallDatenbank.MIGRATION_1_2, SchadensfallDatenbank.MIGRATION_2_3).close()
+    }
 }

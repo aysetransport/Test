@@ -33,6 +33,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import androidx.compose.ui.test.performTextInput
 import org.junit.runner.RunWith
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
@@ -124,7 +125,7 @@ class AppAnbindungTest {
     }
 
     @Test
-    fun `E-Mail-Vorlage oeffnet einen Entwurf an den Anspruchsteller und wird vermerkt`() {
+    fun `E-Mail-Vorlage oeffnet einen Entwurf an den Geschaedigten und wird vermerkt`() {
         val id = oeffneBeispielfall()
         rule.onNode(hasText("E-Mail") and hasClickAction()).performClick()
         warteAufText("E-Mail vorbereiten")
@@ -140,11 +141,11 @@ class AppAnbindungTest {
         assertTrue(teile.getValue("body").startsWith("Guten Tag Anna Becker,\n\nwir kommen zurück auf unsere Nachricht zum Vorfall vom 03.11.$jahr."))
 
         warteBis { verlaufTexte(id, VerlaufTyp.EMAIL).isNotEmpty() }
-        assertEquals(listOf("E-Mail vorbereitet: Erinnerung"), verlaufTexte(id, VerlaufTyp.EMAIL))
+        assertEquals(listOf("E-Mail an Geschädigter vorbereitet: Erinnerung"), verlaufTexte(id, VerlaufTyp.EMAIL))
     }
 
     @Test
-    fun `Sachstandsanfrage geht nicht an den Anspruchsteller`() {
+    fun `Sachstandsanfrage geht nicht an den Geschaedigten`() {
         oeffneBeispielfall()
         rule.onNode(hasText("E-Mail") and hasClickAction()).performClick()
         warteAufText("E-Mail vorbereiten")
@@ -168,13 +169,13 @@ class AppAnbindungTest {
         assertEquals(Intent.ACTION_SEND, senden.action)
         assertEquals("text/plain", senden.type)
         assertTrue(senden.getStringExtra(Intent.EXTRA_TEXT)!!.startsWith("Guten Tag Anna Becker,\n\nwir bestätigen den Eingang"))
-        warteBis { verlaufTexte(id, VerlaufTyp.NACHRICHT) == listOf("Nachricht vorbereitet: Eingangsbestätigung") }
+        warteBis { verlaufTexte(id, VerlaufTyp.NACHRICHT) == listOf("Nachricht an Geschädigter vorbereitet: Eingangsbestätigung") }
 
         rule.onNodeWithContentDescription("Weitere Aktionen").performClick()
         rule.onNodeWithText("Zusammenfassung teilen").performClick()
         val zusammenfassung = naechsterStart().getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
         val text = zusammenfassung.getStringExtra(Intent.EXTRA_TEXT)!!
-        assertTrue(text.startsWith("Schadensfall $jahr-001\nStatus: Neu\nKunde/Absender: Anna Becker"))
+        assertTrue(text.startsWith("Schadensfall $jahr-001\nStatus: Neu\nGeschädigter: Anna Becker"))
     }
 
     @Test
@@ -315,5 +316,48 @@ class AppAnbindungTest {
 
         warteAufText(BackupManager.KEIN_BACKUP)
         assertEquals(1, runBlocking { repository.ladeAlleFaelle() }.size)
+    }
+
+    @Test
+    fun `Vorlage fuer den Auftraggeber geht an dessen Adresse`() {
+        val id = runBlocking {
+            repository.anlegen(
+                Schadensfall(
+                    kundeName = "Anna Becker", kundeEmail = "a.becker@example.org", auftraggeber = "Möbelhaus Nordpark",
+                    auftraggeberKontakt = "Frau Kaya", auftraggeberEmail = "dispo@nordpark.example", auftragsReferenz = "LS-48213",
+                ),
+            )
+        }
+        warteAufText("Anna Becker")
+        rule.onNodeWithText("Anna Becker").performClick()
+        warteAufText("Fall $jahr-001")
+        rule.onNode(hasText("E-Mail") and hasClickAction()).performClick()
+        warteAufText("An den Auftraggeber")
+        rule.onNodeWithTag("vorlage-SCHADENSMITTEILUNG").performScrollTo().performClick()
+
+        val start = naechsterStart()
+        assertTrue(start.dataString!!, start.dataString!!.startsWith("mailto:dispo@nordpark.example?subject="))
+        val text = Uri.decode(start.dataString)
+        assertTrue(text, "Guten Tag Frau Kaya," in text && "Ihr Auftrag LS-48213" in text)
+        assertFalse("a.becker@example.org" in text.substringAfter("?"))
+        warteBis { verlaufTexte(id, VerlaufTyp.EMAIL) == listOf("E-Mail an Auftraggeber vorbereitet: Schadensmitteilung") }
+    }
+
+    @Test
+    fun `Auftraggeber wird im Formular aus der Liste gewaehlt`() {
+        runBlocking { repository.auftraggeberSpeichern(de.aysetransport.schaden.data.model.AuftraggeberEintrag(name = "Möbelhaus Nordpark", kontakt = "Frau Kaya", telefon = "02191 123", email = "dispo@nordpark.example")) }
+        warteAufText("Noch keine Schadensfälle")
+        rule.onNodeWithContentDescription("Neuer Fall").performClick()
+        warteAufText("Neuer Schadensfall")
+        rule.onNodeWithTag("feld-name").performTextInput("Anna Becker")
+        rule.onNodeWithTag("auftraggeber-auswahl").performScrollTo().performClick()
+        warteAufText("Auftraggeber wählen")
+        rule.onNodeWithText("Möbelhaus Nordpark").performClick()
+        rule.onNodeWithText("Speichern").performClick()
+
+        warteBis { repository.ladeAlleFaelle().isNotEmpty() }
+        val fall = runBlocking { repository.ladeAlleFaelle() }.single()
+        assertEquals(listOf("Möbelhaus Nordpark", "Frau Kaya", "02191 123", "dispo@nordpark.example"),
+            listOf(fall.auftraggeber, fall.auftraggeberKontakt, fall.auftraggeberTelefon, fall.auftraggeberEmail))
     }
 }

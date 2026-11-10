@@ -89,6 +89,7 @@ import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
 import de.aysetransport.schaden.data.model.VerlaufTyp
 import de.aysetransport.schaden.domain.Datum
+import de.aysetransport.schaden.domain.Empfaenger
 import de.aysetransport.schaden.domain.Geld
 import de.aysetransport.schaden.domain.Textvorlagen
 import de.aysetransport.schaden.domain.Zusammenfassung
@@ -105,6 +106,7 @@ private sealed interface OffenerDialog {
     data object Status : OffenerDialog
     data object EmailVorlage : OffenerDialog
     data object NachrichtVorlage : OffenerDialog
+    data object Anruf : OffenerDialog
     data object FallLoeschen : OffenerDialog
     data class AnlageLoeschen(val anlage: Anlage) : OffenerDialog
     data class VerlaufLoeschen(val eintrag: VerlaufEintrag) : OffenerDialog
@@ -218,7 +220,9 @@ fun DetailScreen(
                 KontaktZeile(
                     fall = fall,
                     onAnrufen = {
-                        context.starte(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", fall.kundeTelefon.trim(), null)), viewModel::melde)
+                        val mitNummer = listOf(Empfaenger.GESCHAEDIGTER, Empfaenger.AUFTRAGGEBER).filter { it.telefon(fall).isNotEmpty() }
+                        if (mitNummer.size > 1) dialog = OffenerDialog.Anruf
+                        else mitNummer.firstOrNull()?.let { context.waehle(it.telefon(fall), viewModel::melde) }
                     },
                     onEmail = { dialog = OffenerDialog.EmailVorlage },
                     onNachricht = { dialog = OffenerDialog.NachrichtVorlage },
@@ -293,20 +297,29 @@ fun DetailScreen(
                     viewModel.statusAendern(status, notiz)
                 },
             )
+            OffenerDialog.Anruf -> AnrufDialog(
+                fall = fall,
+                onAbbrechen = { dialog = null },
+                onAuswahl = { e ->
+                    dialog = null
+                    context.waehle(e.telefon(fall), viewModel::melde)
+                },
+            )
             OffenerDialog.EmailVorlage -> VorlagenDialog(
                 titel = "E-Mail vorbereiten",
+                fehlt = { e -> if (e != Empfaenger.DRITTE && e.email(fall).isEmpty()) "keine E-Mail-Adresse hinterlegt" else null },
                 onAbbrechen = { dialog = null },
                 onAuswahl = { vorlage ->
                     dialog = null
                     val nachricht = Textvorlagen.erstelle(vorlage, fall, zustand.einstellungen.absender, zustand.heute)
-                    val empfaenger = fall.kundeEmail.trim().takeIf { vorlage.anAnspruchsteller }.orEmpty()
+                    val empfaenger = vorlage.empfaenger.email(fall)
                     val mailto = (
                         "mailto:" + Uri.encode(empfaenger, "@") +
                             "?subject=" + Uri.encode(nachricht.betreff) +
                             "&body=" + Uri.encode(nachricht.text)
                         ).toUri()
                     if (context.starte(Intent(Intent.ACTION_SENDTO, mailto), viewModel::melde, "Keine E-Mail-App gefunden")) {
-                        viewModel.verlaufHinzufuegen(VerlaufTyp.EMAIL, "E-Mail vorbereitet: ${vorlage.titel}")
+                        viewModel.verlaufHinzufuegen(VerlaufTyp.EMAIL, "E-Mail an ${vorlage.empfaenger.label} vorbereitet: ${vorlage.titel}")
                     }
                 },
             )
@@ -317,7 +330,7 @@ fun DetailScreen(
                     dialog = null
                     val nachricht = Textvorlagen.erstelle(vorlage, fall, zustand.einstellungen.absender, zustand.heute)
                     if (context.teileText(betreff = nachricht.betreff, text = nachricht.text, onFehler = viewModel::melde)) {
-                        viewModel.verlaufHinzufuegen(VerlaufTyp.NACHRICHT, "Nachricht vorbereitet: ${vorlage.titel}")
+                        viewModel.verlaufHinzufuegen(VerlaufTyp.NACHRICHT, "Nachricht an ${vorlage.empfaenger.label} vorbereitet: ${vorlage.titel}")
                     }
                 },
             )
@@ -462,7 +475,7 @@ private fun KontaktZeile(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         FilledTonalButton(
             onClick = onAnrufen,
-            enabled = fall.kundeTelefon.isNotBlank(),
+            enabled = fall.kundeTelefon.isNotBlank() || fall.auftraggeberTelefon.isNotBlank(),
             contentPadding = PaddingValues(horizontal = 12.dp),
             modifier = Modifier.weight(1f),
         ) {
@@ -500,19 +513,28 @@ private fun DatenKarte(fall: Schadensfall) {
                 leerText = "Noch keine Beschreibung erfasst.",
             )
             Datenblock(
-                titel = "Transportauftrag",
+                titel = "Auftraggeber",
                 zeilen = listOf(
-                    "Auftraggeber" to fall.auftraggeber,
+                    "Firma" to fall.auftraggeber,
+                    "Ansprechpartner" to fall.auftraggeberKontakt,
+                    "Telefon" to fall.auftraggeberTelefon,
+                    "E-Mail" to fall.auftraggeberEmail,
                     "Auftrags-Nr." to fall.auftragsReferenz,
+                ),
+                leerText = "Kein Auftraggeber erfasst.",
+            )
+            Datenblock(
+                titel = "Transport",
+                zeilen = listOf(
                     "Tour" to fall.tour,
                     "Fahrzeug" to fall.fahrzeug,
                     "Fahrer" to fall.fahrer,
                     "Beifahrer" to beifahrerText(fall).orEmpty(),
                 ),
-                leerText = "Keine Angaben zum Auftrag.",
+                leerText = "Keine Angaben zum Transport.",
             )
             Datenblock(
-                titel = "Anspruchsteller",
+                titel = "Geschädigter",
                 zeilen = listOf(
                     "Name" to fall.kundeName,
                     "Firma" to fall.kundeFirma,
@@ -746,6 +768,10 @@ private fun Context.starte(intent: Intent, onFehler: (String) -> Unit, fehlertex
         onFehler(fehlertext)
         false
     }
+
+private fun Context.waehle(nummer: String, onFehler: (String) -> Unit) {
+    starte(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", nummer, null)), onFehler)
+}
 
 private fun Context.teileText(betreff: String, text: String, onFehler: (String) -> Unit): Boolean {
     val senden = Intent(Intent.ACTION_SEND)

@@ -5,7 +5,7 @@
  * Alle Daten liegen im Google Drive des Kontos, das das Skript bereitstellt:
  *
  *   Schadensfaelle/
- *     daten.json        alle Fälle, Verlaufseinträge und Anlagen-Verzeichnis
+ *     daten.json        alle Fälle, Verlaufseinträge, Anlagen-Verzeichnis und Auftraggeber-Liste
  *     anlagen/          Fotos und Belege (Dateiname = Kennung der Anlage)
  *     sicherungen/      tägliche Kopie von daten.json (die letzten 14 Tage)
  *
@@ -29,7 +29,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 1;
+var API_VERSION = 2; // 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste
 
 // ============================== Einstieg ==============================
 
@@ -148,8 +148,8 @@ function stand() {
  * Nimmt die lokalen Änderungen eines Geräts entgegen und liefert alles zurück, was sich seit
  * dem letzten Abgleich dieses Geräts geändert hat.
  *
- * anfrage: { seit, kennung, faelle: […], verlauf: […], anlagen: […] }
- * antwort: { kennung, rev, faelle: […], verlauf: […], anlagen: […] }
+ * anfrage: { seit, kennung, faelle: […], verlauf: […], anlagen: […], auftraggeber: […] }
+ * antwort: { kennung, rev, faelle: […], verlauf: […], anlagen: […], auftraggeber: […] }
  *
  * Regeln: Bei einem Fall gewinnt der Stand mit dem späteren Änderungszeitpunkt. Gelöscht
  * bleibt gelöscht. Verlaufseinträge und Anlagen werden nur hinzugefügt oder gelöscht.
@@ -163,11 +163,12 @@ function sync(anfrage) {
     // Kennt das Gerät einen anderen Datenbestand (z. B. nach neu angelegtem Ordner), bekommt es alles.
     var seit = anfrage.kennung === d.kennung ? Math.max(0, Number(anfrage.seit) || 0) : 0;
     var vorher = d.rev;
-    var zurueck = { faelle: {}, verlauf: {}, anlagen: {} };
+    var zurueck = { faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {} };
 
     liste_(anfrage.faelle).forEach(function (roh) { uebernehmeFall_(d, roh, zurueck.faelle); });
     liste_(anfrage.verlauf).forEach(function (roh) { uebernehmeVerlauf_(d, roh); });
     liste_(anfrage.anlagen).forEach(function (roh) { uebernehmeAnlage_(d, roh); });
+    liste_(anfrage.auftraggeber).forEach(function (roh) { uebernehmeAuftraggeber_(d, roh, zurueck.auftraggeber); });
 
     if (d.rev !== vorher) speichereDaten_(d);
     return {
@@ -175,7 +176,8 @@ function sync(anfrage) {
       rev: d.rev,
       faelle: auswahl_(d.faelle, seit, zurueck.faelle),
       verlauf: auswahl_(d.verlauf, seit, zurueck.verlauf),
-      anlagen: auswahl_(d.anlagen, seit, zurueck.anlagen).map(ohneInterna_)
+      anlagen: auswahl_(d.anlagen, seit, zurueck.anlagen).map(ohneInterna_),
+      auftraggeber: auswahl_(d.auftraggeber, seit, zurueck.auftraggeber)
     };
   } finally {
     sperre.releaseLock();
@@ -201,6 +203,25 @@ function uebernehmeFall_(d, roh, zurueck) {
   neu.fallnummer = eindeutigeFallnummer_(d, neu);
   neu.rev = ++d.rev;
   d.faelle[neu.id] = neu;
+}
+
+/** Auftraggeber-Liste: wie bei Fällen gewinnt die spätere Änderung, Gelöschtes bleibt gelöscht. */
+function uebernehmeAuftraggeber_(d, roh, zurueck) {
+  roh = roh || {};
+  var neu = { id: kennung_(roh.id), geaendertAm: zeitpunkt_(roh.geaendertAm) };
+  var alt = d.auftraggeber[neu.id];
+  if (alt && alt.geloescht) { if (roh.geloescht !== true) zurueck[neu.id] = true; return; }
+  if (roh.geloescht === true) { d.auftraggeber[neu.id] = { id: neu.id, geloescht: true, geaendertAm: neu.geaendertAm, rev: ++d.rev }; return; }
+  neu.name = text_(roh.name).slice(0, 200);
+  neu.kontakt = text_(roh.kontakt).slice(0, 200);
+  neu.telefon = text_(roh.telefon).slice(0, 100);
+  neu.email = text_(roh.email).slice(0, 200);
+  if (alt && zeit_(neu.geaendertAm) <= zeit_(alt.geaendertAm)) {
+    if (!gleicherInhalt_(alt, neu)) zurueck[neu.id] = true;
+    return;
+  }
+  neu.rev = ++d.rev;
+  d.auftraggeber[neu.id] = neu;
 }
 
 /** Löscht einen Fall samt Verlauf und Anlagen. Zurück bleibt nur ein Vermerk ohne Inhalt. */
@@ -327,7 +348,7 @@ function ohneInterna_(anlage) {
 // Es wird nur übernommen, was die Apps kennen – unbekannte Felder und übergroße Texte fallen weg.
 
 var FALL_TEXTE = ['fallnummer', 'kundeName', 'kundeFirma', 'kundeTelefon', 'kundeEmail', 'kundeAnschrift',
-  'kundenAktenzeichen', 'auftraggeber', 'auftragsReferenz', 'tour', 'fahrzeug', 'fahrer', 'beifahrer1', 'beifahrer2', 'schadensort',
+  'kundenAktenzeichen', 'auftraggeber', 'auftraggeberKontakt', 'auftraggeberTelefon', 'auftraggeberEmail', 'auftragsReferenz', 'tour', 'fahrzeug', 'fahrer', 'beifahrer1', 'beifahrer2', 'schadensort',
   'beschreibung', 'wiedervorlageNotiz', 'versicherungsNummer'];
 var FALL_DATEN = ['schadensdatum', 'meldedatum', 'wiedervorlageAm', 'zahlungsfrist'];
 
@@ -436,6 +457,7 @@ function ladeDaten_() {
     d.faelle = d.faelle || {};
     d.verlauf = d.verlauf || {};
     d.anlagen = d.anlagen || {};
+    d.auftraggeber = d.auftraggeber || {};
     return d;
   }
   // Neuer Bestand: sofort anlegen, damit die Kennung bei jedem weiteren Aufruf gleich bleibt.
@@ -444,7 +466,7 @@ function ladeDaten_() {
   sperre.waitLock(25000);
   try {
     if (datenDatei_()) return ladeDaten_(); // inzwischen von einem anderen Aufruf angelegt
-    var neu = { kennung: Utilities.getUuid(), rev: 0, faelle: {}, verlauf: {}, anlagen: {} };
+    var neu = { kennung: Utilities.getUuid(), rev: 0, faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {} };
     ordner_().createFile(DATEN_DATEI, JSON.stringify(neu), 'application/json');
     return neu;
   } finally {

@@ -240,3 +240,20 @@ test('eine leere Cloud behält ihre Kennung – sonst würden Geräte endlos neu
   assert.equal(u.sync({ seit: 0 }).kennung, kennung);
   assert.equal(u.dateien('Schadensfaelle').filter(d => d.name === 'daten.json').length, 1);
 });
+
+test('Auftraggeber: Kontaktdaten am Fall und eigene Liste mit denselben Abgleichregeln', () => {
+  const u = eingerichtet();
+  const AG = 'cccccccc-0000-4000-8000-000000000001';
+  const r = u.sync({ seit: 0, faelle: [fall(A, { auftraggeber: 'Möbelhaus', auftraggeberKontakt: 'Frau Kaya', auftraggeberTelefon: '02191 1', auftraggeberEmail: 'dispo@x.example' })],
+    auftraggeber: [{ id: AG, name: 'Möbelhaus', kontakt: 'Frau Kaya', email: 'dispo@x.example', geaendertAm: '2026-11-10T08:00:00Z', fremd: 1 }] });
+  assert.deepEqual([r.faelle[0].auftraggeberKontakt, r.faelle[0].auftraggeberTelefon, r.faelle[0].auftraggeberEmail], ['Frau Kaya', '02191 1', 'dispo@x.example']);
+  assert.deepEqual(r.auftraggeber.map(e => [e.name, e.kontakt, e.telefon, e.fremd]), [['Möbelhaus', 'Frau Kaya', '', undefined]]);
+
+  const aelter = u.sync({ seit: r.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Alt', geaendertAm: '2026-11-09T08:00:00Z' }] });
+  assert.equal(aelter.auftraggeber[0].name, 'Möbelhaus', 'der neuere Stand gewinnt und geht an das Gerät zurück');
+  const weg = u.sync({ seit: aelter.rev, kennung: r.kennung, auftraggeber: [{ id: AG, geloescht: true, geaendertAm: '2026-11-11T08:00:00Z' }] });
+  assert.deepEqual(weg.auftraggeber.map(e => [e.geloescht, e.name]), [[true, undefined]]);
+  const spaeter = u.sync({ seit: weg.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Wieder da?', geaendertAm: '2026-11-12T08:00:00Z' }] });
+  assert.equal(spaeter.auftraggeber[0].geloescht, true, 'gelöscht bleibt gelöscht');
+  assert.equal(u.aufruf('status').api, 2);
+});

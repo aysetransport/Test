@@ -29,7 +29,7 @@ enum class Schadensart(val label: String) {
 
 /** Von wem die nächste Rückmeldung erwartet wird – also bei wem nachgehakt werden muss. */
 enum class Ansprechpartner(val label: String) {
-    ANSPRUCHSTELLER("Anspruchsteller"),
+    ANSPRUCHSTELLER("Geschädigter"), // Name bleibt: steht so in Datenbank und Cloud
     AUFTRAGGEBER("Auftraggeber"),
     VERSICHERUNG("Versicherung"),
     FAHRER("Fahrer"),

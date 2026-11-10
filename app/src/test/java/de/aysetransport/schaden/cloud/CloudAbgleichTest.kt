@@ -26,6 +26,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import de.aysetransport.schaden.data.model.AuftraggeberEintrag
 import org.junit.runner.RunWith
 import java.io.File
 import java.io.IOException
@@ -267,5 +268,53 @@ class CloudAbgleichTest {
         assertFalse(a.zustand().verbunden)
         assertEquals(1, a.faelle().size)
         assertNull(a.zustand().url.takeIf { it.isNotEmpty() })
+    }
+
+    @Test
+    fun `Auftraggeber-Liste und Kontaktdaten wandern zwischen den Geraeten`() {
+        val a = geraet(neuePin = true)
+        runBlocking {
+            a.repo.anlegen(Schadensfall(kundeName = "Anna Becker", auftraggeber = "Möbelhaus Nordpark", auftraggeberKontakt = "Frau Kaya", auftraggeberTelefon = "02191 123", auftraggeberEmail = "dispo@nordpark.example"))
+            a.repo.auftraggeberSpeichern(AuftraggeberEintrag(name = "Küchenstudio Süd", telefon = "0202 456"))
+        }
+        a.abgleichen()
+        val b = geraet()
+        b.abgleichen()
+        val fall = b.fall("Anna Becker")
+        assertEquals(listOf("Frau Kaya", "02191 123", "dispo@nordpark.example"), listOf(fall.auftraggeberKontakt, fall.auftraggeberTelefon, fall.auftraggeberEmail))
+        val liste = runBlocking { b.repo.beobachteAuftraggeber().first() }
+        assertEquals(listOf("Küchenstudio Süd", "Möbelhaus Nordpark"), liste.map { it.name })
+
+        // Auf B bearbeitet und gelöscht – A übernimmt beides.
+        b.spaeter(5)
+        runBlocking {
+            b.repo.auftraggeberSpeichern(liste.single { it.name == "Möbelhaus Nordpark" }.copy(kontakt = "Herr Ott"))
+            b.repo.auftraggeberLoeschen(liste.single { it.name == "Küchenstudio Süd" })
+        }
+        b.abgleichen(); a.abgleichen()
+        val beiA = runBlocking { a.repo.beobachteAuftraggeber().first() }
+        assertEquals(listOf("Möbelhaus Nordpark" to "Herr Ott"), beiA.map { it.name to it.kontakt })
+        assertTrue(runBlocking { a.db.dao().offeneAuftraggeber().isEmpty() })
+    }
+
+    @Test
+    fun `mit veraltetem Cloud-Skript wird nicht abgeglichen und nichts geht verloren`() {
+        val a = geraet(neuePin = true)
+        runBlocking { a.repo.anlegen(Schadensfall(kundeName = "Anna Becker", auftraggeber = "Möbelhaus", auftraggeberEmail = "dispo@moebel.example")) }
+        val aufrufe = mutableListOf<String>()
+        val alt = object : CloudApi(cloud.url) {
+            override suspend fun aufruf(fn: String, vararg args: kotlinx.serialization.json.JsonElement): kotlinx.serialization.json.JsonElement {
+                aufrufe += fn
+                return if (fn == "status") kotlinx.serialization.json.Json.parseToJsonElement("""{"name":"Schadensfälle","api":1,"eingerichtet":true}""")
+                else super.aufruf(fn, *args)
+            }
+        }
+        val abgleich = CloudAbgleich(a.db, a.speicher, a.cloudSpeicher, a.uhr) { alt }
+        val fehler = assertThrows(CloudFehler::class.java) { runBlocking { abgleich.abgleichen() } }
+        assertEquals(CloudAbgleich.VERALTET, fehler.message)
+        assertEquals(listOf("status"), aufrufe)
+        assertEquals(CloudAbgleich.VERALTET, a.zustand().fehler)
+        assertTrue("PIN bleibt", a.zustand().angemeldet)
+        assertTrue(a.fall("Anna Becker").syncOffen)
     }
 }

@@ -36,8 +36,8 @@ class ZusammenfassungTest {
             """
             Schadensfall 2026-007
             Status: In Prüfung
-            Kunde/Absender: Anna Becker, Becker GmbH
-            Kontakt: 0171 1234567
+            Geschädigter: Anna Becker, Becker GmbH
+            Kontakt Geschädigter: 0171 1234567
             Schadensdatum: 03.11.2026
             Tour/Fahrzeug: Tour 3 / RS-AT 123 (Fahrer: M. Yilmaz)
             Schaden: Schaden an Gebäude / Einrichtung – Türrahmen beim Eintragen beschädigt
@@ -53,7 +53,7 @@ class ZusammenfassungTest {
     fun `fehlende Angaben werden als unbekannt ausgewiesen`() {
         val text = Zusammenfassung.erstelle(Schadensfall(fallnummer = "2026-001"), anzahlAnlagen = 0)
 
-        assertTrue("Kunde/Absender: unbekannt" in text)
+        assertTrue("Geschädigter: unbekannt" in text)
         assertTrue("Schadensdatum: unbekannt" in text)
         assertTrue("Tour/Fahrzeug: unbekannt" in text)
         assertTrue("Schadenshöhe: unbekannt" in text)

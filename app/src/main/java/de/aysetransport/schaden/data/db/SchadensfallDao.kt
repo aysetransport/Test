@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import de.aysetransport.schaden.data.model.Anlage
+import de.aysetransport.schaden.data.model.AuftraggeberEintrag
 import de.aysetransport.schaden.data.model.Loeschung
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
@@ -160,9 +161,38 @@ interface SchadensfallDao {
     suspend fun alleAnlagenOffen()
 
     @Query("SELECT (SELECT COUNT(*) FROM schadensfall WHERE syncOffen = 1) + (SELECT COUNT(*) FROM verlauf WHERE syncOffen = 1) + " +
-        "(SELECT COUNT(*) FROM anlage WHERE syncOffen = 1 OR (inCloud = 0 AND dateiname != '')) + (SELECT COUNT(*) FROM loeschung)")
+        "(SELECT COUNT(*) FROM anlage WHERE syncOffen = 1 OR (inCloud = 0 AND dateiname != '')) + (SELECT COUNT(*) FROM loeschung) + (SELECT COUNT(*) FROM auftraggeber WHERE syncOffen = 1)")
     fun beobachteOffeneAenderungen(): Flow<Int>
 
     @Query("DELETE FROM loeschung")
     suspend fun vergissAlleLoeschungen()
+
+    // --- Auftraggeber-Liste ---
+
+    @Query("SELECT * FROM auftraggeber ORDER BY name COLLATE NOCASE")
+    fun beobachteAuftraggeber(): Flow<List<AuftraggeberEintrag>>
+
+    @Query("SELECT * FROM auftraggeber ORDER BY name COLLATE NOCASE")
+    suspend fun ladeAlleAuftraggeber(): List<AuftraggeberEintrag>
+
+    @Query("SELECT * FROM auftraggeber WHERE lower(trim(name)) = lower(trim(:name)) LIMIT 1")
+    suspend fun auftraggeberPerName(name: String): AuftraggeberEintrag?
+
+    @Query("SELECT * FROM auftraggeber WHERE uuid = :uuid")
+    suspend fun auftraggeberPerKennung(uuid: String): AuftraggeberEintrag?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun speichereAuftraggeber(eintrag: AuftraggeberEintrag)
+
+    @Query("DELETE FROM auftraggeber WHERE uuid = :uuid")
+    suspend fun loescheAuftraggeber(uuid: String)
+
+    @Query("SELECT * FROM auftraggeber WHERE syncOffen = 1")
+    suspend fun offeneAuftraggeber(): List<AuftraggeberEintrag>
+
+    @Query("UPDATE auftraggeber SET syncOffen = 0 WHERE uuid = :uuid AND geaendertAm = :geaendertAm")
+    suspend fun auftraggeberIstSynchron(uuid: String, geaendertAm: Long)
+
+    @Query("UPDATE auftraggeber SET syncOffen = 1")
+    suspend fun alleAuftraggeberOffen()
 }

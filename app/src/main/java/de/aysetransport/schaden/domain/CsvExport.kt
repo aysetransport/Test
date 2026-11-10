@@ -15,8 +15,8 @@ object CsvExport {
 
     val KOPFZEILE = listOf(
         "Fall-Nr.", "Status", "Tour", "Fahrzeug", "Fahrer", "Beifahrer 1", "Beifahrer 2", "Schadensdatum", "Gemeldet am",
-        "Kunde", "Firma", "Telefon", "E-Mail", "Anschrift", "Zeichen des Kunden",
-        "Auftraggeber", "Auftrags-Nr.", "Schadensart", "Schadensbeschreibung", "Schadensort",
+        "Geschädigter", "Firma Geschädigter", "Telefon Geschädigter", "E-Mail Geschädigter", "Anschrift Geschädigter", "Zeichen des Geschädigten",
+        "Auftraggeber", "Ansprechpartner Auftraggeber", "Telefon Auftraggeber", "E-Mail Auftraggeber", "Auftrags-Nr.", "Schadensart", "Schadensbeschreibung", "Schadensort",
         "Forderung (EUR)", "Vergleich (EUR)", "Zahlungsfrist", "Schadennr. Versicherung",
         "Wartet auf", "Wiedervorlage", "Nächster Schritt", "Anlagen", "Angelegt am", "Geändert am",
     )
@@ -46,6 +46,9 @@ object CsvExport {
                 fall.kundeAnschrift,
                 fall.kundenAktenzeichen,
                 fall.auftraggeber,
+                fall.auftraggeberKontakt,
+                fall.auftraggeberTelefon,
+                fall.auftraggeberEmail,
                 fall.auftragsReferenz,
                 fall.schadensart.label,
                 fall.beschreibung,

@@ -6,6 +6,7 @@ import de.aysetransport.schaden.data.AnlagenSpeicher
 import de.aysetransport.schaden.data.db.SchadensfallDatenbank
 import de.aysetransport.schaden.data.model.Anlage
 import de.aysetransport.schaden.data.model.Ansprechpartner
+import de.aysetransport.schaden.data.model.AuftraggeberEintrag
 import de.aysetransport.schaden.data.model.FallStatus
 import de.aysetransport.schaden.data.model.Loeschung
 import de.aysetransport.schaden.data.model.Schadensart
@@ -77,6 +78,7 @@ class CloudAbgleich(
      */
     suspend fun abgleichen(): AbgleichErgebnis = sperre.withLock {
         var summe = AbgleichErgebnis(0, 0)
+        speicher.aktuell().takeIf { it.angemeldet }?.let { pruefeVersion(it.url) }
         // Ein zweiter Durchlauf holt nach, was während des ersten geändert wurde.
         repeat(MAX_DURCHLAEUFE) {
             val z = speicher.aktuell()
@@ -97,12 +99,30 @@ class CloudAbgleich(
         summe
     }
 
+    /**
+     * Ein veraltetes Cloud-Skript würde Felder, die es nicht kennt, beim Speichern verwerfen und
+     * den gekürzten Stand zurückschicken. Deshalb wird dann gar nicht erst abgeglichen.
+     */
+    private suspend fun pruefeVersion(url: String) {
+        val version = try {
+            apiFuer(url).aufruf("status").jsonObject["api"]?.jsonPrimitive?.longOrNull ?: 0
+        } catch (e: IOException) {
+            speicher.fehler(e.message ?: "Keine Verbindung zur Cloud")
+            throw e
+        }
+        if (version < MIN_API) {
+            speicher.fehler(VERALTET)
+            throw CloudFehler(VERALTET)
+        }
+    }
+
     private class Durchlauf(val gesendet: Int, val empfangen: Int, val nochmal: Boolean)
 
     private suspend fun durchlauf(z: CloudZustand, api: CloudApi): Durchlauf {
         val faelle = dao.offeneFaelle()
         val verlauf = dao.offenerVerlauf()
         val anlagen = dao.offeneAnlagen()
+        val auftraggeber = dao.offeneAuftraggeber()
         val loeschungen = dao.loeschungen()
         val fallKennung = (faelle.map { it.id to it.uuid } + dao.ladeAlle().map { it.id to it.uuid }).toMap()
 
@@ -113,6 +133,8 @@ class CloudAbgleich(
                 loeschungen.filter { it.art == Loeschung.Art.FALL }.map { geloescht(it.uuid, it.fallUuid, it.zeitpunkt) }))
             put("verlauf", JsonArray(verlauf.mapNotNull { v -> fallKennung[v.fallId]?.let { v.alsJson(it) } } +
                 loeschungen.filter { it.art == Loeschung.Art.VERLAUF }.map { geloescht(it.uuid, it.fallUuid, it.zeitpunkt) }))
+            put("auftraggeber", JsonArray(auftraggeber.map { it.alsJson() } +
+                loeschungen.filter { it.art == Loeschung.Art.AUFTRAGGEBER }.map { geloescht(it.uuid, it.uuid, it.zeitpunkt) }))
             put("anlagen", JsonArray(anlagen.mapNotNull { a -> fallKennung[a.fallId]?.let { a.alsJson(it) } } +
                 loeschungen.filter { it.art == Loeschung.Art.ANLAGE }.map { geloescht(it.uuid, it.fallUuid, it.zeitpunkt) }))
         }
@@ -126,6 +148,7 @@ class CloudAbgleich(
         db.withTransaction {
             // Gesendetes gilt als angekommen, sofern es seit dem Absenden nicht erneut geändert wurde.
             faelle.forEach { dao.fallIstSynchron(it.uuid, it.geaendertAm.toEpochMilli()) }
+            auftraggeber.forEach { dao.auftraggeberIstSynchron(it.uuid, it.geaendertAm.toEpochMilli()) }
             if (verlauf.isNotEmpty()) dao.verlaufIstSynchron(verlauf.map { it.uuid })
             if (anlagen.isNotEmpty()) dao.anlagenSindSynchron(anlagen.map { it.uuid })
             if (loeschungen.isNotEmpty()) dao.vergissLoeschungen(loeschungen.map { it.uuid })
@@ -134,23 +157,24 @@ class CloudAbgleich(
             for (f in antwort.liste("faelle")) if (uebernimmFall(f, zuLoeschendeOrdner)) empfangen++
             for (v in antwort.liste("verlauf")) if (uebernimmVerlauf(v)) empfangen++
             for (a in antwort.liste("anlagen")) if (uebernimmAnlage(a, zuLoeschendeDateien)) empfangen++
+            for (a in antwort.liste("auftraggeber")) if (uebernimmAuftraggeber(a)) empfangen++
         }
         zuLoeschendeOrdner.forEach { anlagenSpeicher.loescheOrdner(it) }
         zuLoeschendeDateien.forEach { anlagenSpeicher.loesche(it) }
 
         if (z.kennung.isNotEmpty() && kennung != z.kennung) {
             // Der Bestand in der Cloud wurde neu angelegt: alles von diesem Gerät erneut hochladen.
-            db.withTransaction { dao.alleFaelleOffen(); dao.allerVerlaufOffen(); dao.alleAnlagenOffen() }
+            db.withTransaction { dao.alleFaelleOffen(); dao.allerVerlaufOffen(); dao.alleAnlagenOffen(); dao.alleAuftraggeberOffen() }
             speicher.abgeglichen(kennung, 0, uhr.millis())
-            return Durchlauf(faelle.size + verlauf.size + anlagen.size, empfangen, nochmal = true)
+            return Durchlauf(faelle.size + verlauf.size + anlagen.size + auftraggeber.size, empfangen, nochmal = true)
         }
         speicher.abgeglichen(kennung, rev, uhr.millis())
 
         dateienHochladen(api, z.pin)
         empfangen += dateienHerunterladen(api, z.pin)
 
-        val gesendet = faelle.size + verlauf.size + anlagen.size + loeschungen.size
-        val nochOffen = dao.offeneFaelle().isNotEmpty() || dao.offenerVerlauf().isNotEmpty() ||
+        val gesendet = faelle.size + verlauf.size + anlagen.size + auftraggeber.size + loeschungen.size
+        val nochOffen = dao.offeneFaelle().isNotEmpty() || dao.offenerVerlauf().isNotEmpty() || dao.offeneAuftraggeber().isNotEmpty() ||
             dao.offeneAnlagen().isNotEmpty() || dao.loeschungen().isNotEmpty()
         return Durchlauf(gesendet, empfangen, nochmal = nochOffen && gesendet > 0)
     }
@@ -179,6 +203,9 @@ class CloudAbgleich(
             kundeAnschrift = json.text("kundeAnschrift"),
             kundenAktenzeichen = json.text("kundenAktenzeichen"),
             auftraggeber = json.text("auftraggeber"),
+            auftraggeberKontakt = json.text("auftraggeberKontakt"),
+            auftraggeberTelefon = json.text("auftraggeberTelefon"),
+            auftraggeberEmail = json.text("auftraggeberEmail"),
             auftragsReferenz = json.text("auftragsReferenz"),
             tour = json.text("tour"),
             fahrzeug = json.text("fahrzeug"),
@@ -259,6 +286,29 @@ class CloudAbgleich(
         return true
     }
 
+    private suspend fun uebernimmAuftraggeber(json: JsonObject): Boolean {
+        val uuid = json.text("id")
+        val lokal = dao.auftraggeberPerKennung(uuid)
+        if (json.wahr("geloescht")) {
+            if (lokal == null) return false
+            dao.loescheAuftraggeber(uuid)
+            return true
+        }
+        if (lokal != null && lokal.syncOffen) return false
+        val eintrag = AuftraggeberEintrag(
+            uuid = uuid,
+            name = json.text("name"),
+            kontakt = json.text("kontakt"),
+            telefon = json.text("telefon"),
+            email = json.text("email"),
+            geaendertAm = json.zeitpunkt("geaendertAm"),
+            syncOffen = false,
+        )
+        if (eintrag == lokal) return false
+        dao.speichereAuftraggeber(eintrag)
+        return true
+    }
+
     // ------------------------------ Dateien ------------------------------
 
     private suspend fun dateienHochladen(api: CloudApi, pin: String) {
@@ -304,6 +354,9 @@ class CloudAbgleich(
         put("kundeAnschrift", kundeAnschrift)
         put("kundenAktenzeichen", kundenAktenzeichen)
         put("auftraggeber", auftraggeber)
+        put("auftraggeberKontakt", auftraggeberKontakt)
+        put("auftraggeberTelefon", auftraggeberTelefon)
+        put("auftraggeberEmail", auftraggeberEmail)
         put("auftragsReferenz", auftragsReferenz)
         put("tour", tour)
         put("fahrzeug", fahrzeug)
@@ -324,6 +377,15 @@ class CloudAbgleich(
         put("zahlungsfrist", CloudApi.text(zahlungsfrist?.toString()))
         put("versicherungsNummer", versicherungsNummer)
         put("erstelltAm", erstelltAm.toString())
+        put("geaendertAm", geaendertAm.toString())
+    }
+
+    private fun AuftraggeberEintrag.alsJson() = buildJsonObject {
+        put("id", uuid)
+        put("name", name)
+        put("kontakt", kontakt)
+        put("telefon", telefon)
+        put("email", email)
         put("geaendertAm", geaendertAm.toString())
     }
 
@@ -368,7 +430,9 @@ class CloudAbgleich(
     private inline fun <reified T : Enum<T>> aufzaehlung(name: String, standard: T): T =
         enumValues<T>().firstOrNull { it.name == name } ?: standard
 
-    private companion object {
-        const val MAX_DURCHLAEUFE = 3
+    companion object {
+        private const val MAX_DURCHLAEUFE = 3
+        const val MIN_API = 2L
+        const val VERALTET = "Das Cloud-Skript ist veraltet – bitte die neue Code.gs bereitstellen."
     }
 }

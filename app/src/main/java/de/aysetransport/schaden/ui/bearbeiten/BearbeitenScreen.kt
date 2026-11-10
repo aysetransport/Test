@@ -2,6 +2,17 @@ package de.aysetransport.schaden.ui.bearbeiten
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ListItem
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -92,7 +103,7 @@ fun BearbeitenScreen(
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
 
-            Abschnitt("Anspruchsteller") {
+            Abschnitt("Geschädigter") {
                 Textfeld("Name", f.kundeName, { viewModel.aendere { copy(kundeName = it) } }, gross = KeyboardCapitalization.Words, tag = "feld-name")
                 Textfeld("Firma", f.kundeFirma, { viewModel.aendere { copy(kundeFirma = it) } }, gross = KeyboardCapitalization.Words)
                 Textfeld("Telefon", f.kundeTelefon, { viewModel.aendere { copy(kundeTelefon = it) } }, tastatur = KeyboardType.Phone, tag = "feld-telefon")
@@ -135,9 +146,23 @@ fun BearbeitenScreen(
                 )
             }
 
-            Abschnitt("Transportauftrag") {
-                Textfeld("Auftraggeber", f.auftraggeber, { viewModel.aendere { copy(auftraggeber = it) } }, gross = KeyboardCapitalization.Words)
+            Abschnitt("Auftraggeber") {
+                AuftraggeberAuswahl(viewModel)
+                Textfeld("Firma", f.auftraggeber, { viewModel.aendere { copy(auftraggeber = it) } }, gross = KeyboardCapitalization.Words, tag = "feld-auftraggeber")
+                Textfeld("Ansprechpartner", f.auftraggeberKontakt, { viewModel.aendere { copy(auftraggeberKontakt = it) } }, gross = KeyboardCapitalization.Words, tag = "feld-auftraggeber-kontakt")
+                Textfeld("Telefon", f.auftraggeberTelefon, { viewModel.aendere { copy(auftraggeberTelefon = it) } }, tastatur = KeyboardType.Phone, tag = "feld-auftraggeber-telefon")
+                Textfeld(
+                    "E-Mail",
+                    f.auftraggeberEmail,
+                    { viewModel.aendere { copy(auftraggeberEmail = it) } },
+                    tastatur = KeyboardType.Email,
+                    fehler = fehler[Formularfeld.AUFTRAGGEBER_EMAIL],
+                    tag = "feld-auftraggeber-email",
+                )
                 Textfeld("Auftrags- / Lieferschein-Nr.", f.auftragsReferenz, { viewModel.aendere { copy(auftragsReferenz = it) } })
+            }
+
+            Abschnitt("Transport") {
                 Textfeld("Tour", f.tour, { viewModel.aendere { copy(tour = it) } }, gross = KeyboardCapitalization.Sentences, tag = "feld-tour")
                 Textfeld("Fahrzeug / Kennzeichen", f.fahrzeug, { viewModel.aendere { copy(fahrzeug = it) } }, gross = KeyboardCapitalization.Characters)
                 Textfeld("Fahrer", f.fahrer, { viewModel.aendere { copy(fahrer = it) } }, gross = KeyboardCapitalization.Words, tag = "feld-fahrer")
@@ -246,5 +271,62 @@ private fun Textfeld(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (tag != null) Modifier.testTag(tag) else Modifier),
+    )
+}
+
+/** Knopf „Aus Liste wählen“ mit Suchfeld – füllt Firma und Kontaktdaten des Auftraggebers. */
+@Composable
+private fun AuftraggeberAuswahl(viewModel: BearbeitenViewModel) {
+    val liste by viewModel.auftraggeberListe.collectAsStateWithLifecycle()
+    var offen by remember { mutableStateOf(false) }
+    OutlinedButton(
+        onClick = { offen = true },
+        enabled = liste.isNotEmpty(),
+        modifier = Modifier.testTag("auftraggeber-auswahl"),
+    ) { Text(if (liste.isEmpty()) "Noch keine gespeicherten Auftraggeber" else "Aus Liste wählen (${liste.size})") }
+    if (!offen) return
+
+    var suche by remember { mutableStateOf("") }
+    val treffer = liste.filter { e ->
+        suche.isBlank() || listOf(e.name, e.kontakt, e.telefon, e.email).any { it.contains(suche.trim(), ignoreCase = true) }
+    }
+    AlertDialog(
+        onDismissRequest = { offen = false },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .padding(horizontal = 24.dp)
+            .widthIn(max = 560.dp)
+            .fillMaxWidth(),
+        title = { Text("Auftraggeber wählen") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = suche,
+                    onValueChange = { suche = it },
+                    placeholder = { Text("Suchen …") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                    items(treffer, key = { it.uuid }) { e ->
+                        ListItem(
+                            headlineContent = { Text(e.name) },
+                            supportingContent = {
+                                val zeile = listOf(e.kontakt, e.telefon, e.email).filter { it.isNotBlank() }.joinToString(" · ")
+                                if (zeile.isNotEmpty()) Text(zeile)
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier.clickable {
+                                viewModel.auftraggeberUebernehmen(e)
+                                offen = false
+                            },
+                        )
+                    }
+                }
+                if (treffer.isEmpty()) Text("Kein Treffer.", modifier = Modifier.padding(8.dp))
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { offen = false }) { Text("Abbrechen") } },
     )
 }

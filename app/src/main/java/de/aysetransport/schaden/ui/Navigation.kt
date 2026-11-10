@@ -14,6 +14,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import de.aysetransport.schaden.AppContainer
 import de.aysetransport.schaden.domain.FallFilter
+import de.aysetransport.schaden.ui.auftraggeber.AuftraggeberScreen
+import de.aysetransport.schaden.ui.auftraggeber.AuftraggeberViewModel
 import de.aysetransport.schaden.ui.bearbeiten.BearbeitenScreen
 import de.aysetransport.schaden.ui.bearbeiten.BearbeitenViewModel
 import de.aysetransport.schaden.ui.detail.DetailScreen
@@ -36,6 +38,9 @@ data class BearbeitenZiel(val fallId: Long = 0)
 
 @Serializable
 data object EinstellungenZiel
+
+@Serializable
+data object AuftraggeberZiel
 
 /** Wohin die App springen soll, wenn sie über eine Benachrichtigung geöffnet wurde. */
 sealed interface Startauftrag {
@@ -116,7 +121,12 @@ fun SchadensfallNavigation(
             EinstellungenScreen(
                 viewModel = viewModel,
                 onZurueck = { nav.popBackStack<EinstellungenZiel>(inclusive = true) },
+                onAuftraggeber = { nav.navigate(AuftraggeberZiel) { launchSingleTop = true } },
             )
+        }
+        composable<AuftraggeberZiel> {
+            val viewModel: AuftraggeberViewModel = viewModel(factory = AuftraggeberViewModel.factory(container))
+            AuftraggeberScreen(viewModel = viewModel, onZurueck = { nav.popBackStack<AuftraggeberZiel>(inclusive = true) })
         }
     }
 }
