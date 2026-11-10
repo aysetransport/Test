@@ -43,6 +43,27 @@ Die Bilder zeigen erfundene Beispieldaten.
 Die Textvorlagen sind bewusst **haftungsneutral**: Sie erkennen keine Haftung an und lehnen
 sie nicht ab. Ablehnungs- und Vergleichsschreiben entstehen weiterhin außerhalb der App.
 
+## Windows-App
+
+`desktop/` ist die Windows-App: dieselbe Oberfläche wie die Web-App, in einem eigenen Programmfenster
+(Electron). Zusätzlich zur Web-App kann sie
+
+- **E-Mail** direkt per IMAP/SMTP senden und empfangen – mit denselben Regeln wie die Android-App
+  (Einrichtung unter ⚙ → E-Mail; das Passwort wird über das Windows-Konto verschlüsselt),
+- Windows-Benachrichtigungen bei neuen Mails zeigen,
+- Anlagen mit den Programmen des Rechners öffnen.
+
+Fälle, Verlauf, Anlagen und Auftraggeber gleichen sich über dieselbe Cloud mit Handy und Browser ab.
+
+**Installieren:** `Schadensfaelle-Setup-<Version>.exe` ausführen. Der Installer ist nicht
+signiert; Windows SmartScreen fragt deshalb beim ersten Start nach – „Weitere Informationen →
+Trotzdem ausführen“. Installiert wird ohne Administratorrechte für den angemeldeten Benutzer.
+
+**Bauen:** Der Workflow *Windows-App* testet auf einem Windows-Rechner, baut den Installer,
+installiert ihn testweise, startet das installierte Programm und stellt den Installer unter
+*Actions* als `Schadensfaelle-Windows-Setup` bereit. Lokal: `cd desktop && npm ci && npm test &&
+npm run dist:win` (unter Windows) bzw. `npm run dist:win:linux` (Linux mit Wine).
+
 ## E-Mail in der App
 
 Unter **Einstellungen → E-Mail** wird das Postfach eingerichtet (Vorlagen für IONOS, STRATO, GMX,
@@ -60,8 +81,8 @@ dem Postfach; das Passwort liegt verschlüsselt im Android-Schlüsselspeicher un
   verändert oder als gelesen markiert. Beim ersten Abruf werden die letzten 30 Tage durchsucht.
 - Zugeordnete Mails stehen im Verlauf des Falls (mit *Antworten*), Anhänge werden zu Anlagen,
   die Wiedervorlage rückt auf heute, und eine Benachrichtigung weist darauf hin.
-- Über den Verlauf sind die Mails auch in der Web-App lesbar; senden lässt sich nur aus der
-  Android-App.
+- Über den Verlauf sind die Mails auch in der Web-App lesbar; senden und empfangen lässt sich
+  aus der Android-App und der Windows-App.
 - Ohne eingerichtetes Postfach öffnet *E-Mail* wie bisher die Mail-App des Geräts.
 
 ## Cloud einrichten (einmalig)

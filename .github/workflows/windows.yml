@@ -1,0 +1,59 @@
+name: Windows-App
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Testen, Installer bauen und installiert prüfen
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      # Für den Test-Mailserver (GreenMail)
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Abhängigkeiten
+        run: npm ci
+
+      - name: Tests (Mail-Anbindung und gestartete App)
+        run: npm test
+
+      - name: Installer bauen
+        run: npm run dist:win
+
+      - name: Installieren und installiertes Programm starten
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\Schadensfaelle-Setup-*.exe | Select-Object -First 1
+          Start-Process -Wait -FilePath $setup.FullName -ArgumentList '/S'
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\schadensfaelle\Schadensfälle.exe'
+          if (-not (Test-Path $exe)) { Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs') -Recurse -Depth 2 | Select-Object FullName; throw "Nicht installiert: $exe" }
+          node scripts/rauchtest.js $exe
+
+      - name: Installer bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Schadensfaelle-Windows-Setup
+          path: |
+            desktop/dist/Schadensfaelle-Setup-*.exe
+            desktop/dist/rauchtest.png
+          if-no-files-found: error

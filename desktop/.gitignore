@@ -1,0 +1,5 @@
+node_modules/
+dist/
+# wird aus ../web erzeugt (npm run vorbereiten)
+app/
+test/.cache/

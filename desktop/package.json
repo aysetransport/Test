@@ -1,0 +1,56 @@
+{
+  "name": "schadensfaelle",
+  "productName": "Schadensfälle",
+  "version": "1.3.0",
+  "description": "Schadensfälle bei Transportaufträgen nachhaken und bearbeiten",
+  "main": "main.js",
+  "private": true,
+  "author": "Ayse Transport UG",
+  "license": "UNLICENSED",
+  "scripts": {
+    "vorbereiten": "node scripts/vorbereiten.js",
+    "start": "npm run vorbereiten && electron .",
+    "test": "npm run vorbereiten && node --test --test-timeout=180000 --test-concurrency=1 test/",
+    "dist:win": "npm run vorbereiten && electron-builder --win nsis --publish never",
+    "dist:win:linux": "npm run vorbereiten && electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "imapflow": "2.9.1",
+    "mailparser": "3.12.4",
+    "nodemailer": "10.2.1"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "26.18.1",
+    "playwright": "1.63.0"
+  },
+  "build": {
+    "appId": "de.aysetransport.schaden",
+    "productName": "Schadensfälle",
+    "files": [
+      "main.js",
+      "preload.js",
+      "mail.js",
+      "app/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "app/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Schadensfälle",
+      "artifactName": "Schadensfaelle-Setup-${version}.exe"
+    },
+    "publish": null
+  }
+}
