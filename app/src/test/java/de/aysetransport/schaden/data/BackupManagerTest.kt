@@ -170,4 +170,16 @@ class BackupManagerTest {
         assertTrue(repository.ladeAlleFaelle().isEmpty())
         assertTrue(speicher.wurzel.walkTopDown().none { it.isFile })
     }
+
+    @Test
+    fun `widerspruechliche Falldaten werden abgelehnt und der Bestand bleibt erhalten`() = runBlocking {
+        val id = legeBeispielAn()
+        val doppelt = """{"version": 1, "faelle": [{"id": 5, "fallnummer": "2026-001"}, {"id": 5, "fallnummer": "2026-002"}]}"""
+
+        val fehler = runCatching { backup.stelleWiederHer(ByteArrayInputStream(zip("daten.json" to doppelt.toByteArray()))) }.exceptionOrNull()
+
+        assertEquals(BackupManager.BESCHAEDIGT, (fehler as BackupUngueltigException).message)
+        assertEquals(listOf(id), repository.ladeAlleFaelle().map { it.id })
+        assertEquals(1, repository.beobachteAnlagen(id).first().size)
+    }
 }

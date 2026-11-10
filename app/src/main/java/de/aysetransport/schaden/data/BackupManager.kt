@@ -1,5 +1,6 @@
 package de.aysetransport.schaden.data
 
+import android.database.SQLException
 import androidx.room.withTransaction
 import de.aysetransport.schaden.data.db.SchadensfallDatenbank
 import de.aysetransport.schaden.data.model.Anlage
@@ -124,11 +125,17 @@ class BackupManager(
             val verlauf = daten.verlauf.filter { it.fallId in fallIds }
             val anlagen = daten.anlagen.filter { it.fallId in fallIds && istSichererName(it.dateiname) }
 
-            db.withTransaction {
-                dao.loescheAlleFaelle() // Verlauf und Anlagen hängen per Fremdschlüssel daran
-                dao.einfuegenFaelle(daten.faelle)
-                dao.einfuegenVerlauf(verlauf)
-                dao.einfuegenAnlagen(anlagen)
+            try {
+                db.withTransaction {
+                    dao.loescheAlleFaelle() // Verlauf und Anlagen hängen per Fremdschlüssel daran
+                    dao.einfuegenFaelle(daten.faelle)
+                    dao.einfuegenVerlauf(verlauf)
+                    dao.einfuegenAnlagen(anlagen)
+                }
+            } catch (e: SQLException) {
+                // Widersprüchliche Daten, z. B. doppelte Kennungen. Die Transaktion wurde
+                // zurückgerollt – der bisherige Bestand ist unverändert.
+                throw BackupUngueltigException(BESCHAEDIGT, e)
             }
             val wurzel = anlagenSpeicher.wurzel
             wurzel.deleteRecursively()

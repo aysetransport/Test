@@ -17,6 +17,7 @@ import de.aysetransport.schaden.data.model.FallStatus
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
 import de.aysetransport.schaden.data.model.VerlaufTyp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -104,6 +105,8 @@ class DetailViewModel(
             try {
                 repository.anlageHinzufuegen(fallId, quelle)
                 hinzugefuegt++
+            } catch (e: CancellationException) {
+                throw e // Bildschirm wurde verlassen – kein Fehler
             } catch (e: DateiZuGrossException) {
                 meldungsKanal.send("„${e.anzeigename}“ ist größer als 50 MB und wurde nicht übernommen")
             } catch (e: Exception) {
@@ -128,6 +131,8 @@ class DetailViewModel(
                 val name = "Foto " + LocalDateTime.now(uhr).format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH.mm.ss")) + ".jpg"
                 repository.anlageHinzufuegen(fallId, Uri.fromFile(datei), name)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             meldungsKanal.send("Das Foto konnte nicht gespeichert werden")
         } finally {
