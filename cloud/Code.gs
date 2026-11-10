@@ -23,7 +23,7 @@ var ANLAGEN_ORDNER = 'anlagen';
 var SICHERUNG_ORDNER = 'sicherungen';
 var SICHERUNGEN_BEHALTEN = 14;
 
-var MIN_PIN_LAENGE = 6;
+var MIN_PIN_LAENGE = 4;
 var MAX_FEHLVERSUCHE = 8;
 var SPERRE_MINUTEN = 60;
 

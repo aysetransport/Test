@@ -55,7 +55,7 @@ tägliche Sicherung der letzten 14 Tage). Android-App und Web-App gleichen sich 
 4. Die angezeigte Adresse (endet auf `/exec`) kopieren.
 5. In der Android-App unter **Einstellungen → Cloud** (oder in der Web-App unter ⚙) die Adresse
    eintragen und **Verbinden** tippen. Beim ersten Gerät wird eine **PIN** festgelegt
-   (mindestens 6 Zeichen), auf allen weiteren Geräten wird sie einmal abgefragt.
+   (mindestens 4 Zeichen), auf allen weiteren Geräten wird sie einmal abgefragt.
 
 Vorhandene Fälle auf dem Handy werden beim ersten Verbinden hochgeladen.
 

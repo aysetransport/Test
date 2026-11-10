@@ -146,7 +146,7 @@ class EinstellungenViewModel(
     /** Schritt 2: PIN festlegen bzw. prüfen, verbinden und alles abgleichen. */
     fun cloudVerbinden(pin: String, wiederholung: String?) {
         val abfrage = pinAbfrage ?: return
-        if (abfrage.neu && pin.length < 6) { pinFehler = "Die PIN braucht mindestens 6 Zeichen."; return }
+        if (abfrage.neu && pin.length < 4) { pinFehler = "Die PIN braucht mindestens 4 Zeichen."; return }
         if (abfrage.neu && pin != wiederholung) { pinFehler = "Die beiden Eingaben stimmen nicht überein."; return }
         if (cloudBeschaeftigt) return
         cloudBeschaeftigt = true

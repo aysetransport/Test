@@ -24,7 +24,8 @@ test('PIN wird beim ersten Verbinden festgelegt und danach verlangt', () => {
   const u = erstelleUmgebung();
   assert.equal(u.aufruf('status').eingerichtet, false);
   assert.throws(() => u.aufruf('anmelden', PIN), /PIN noch nicht festgelegt/);
-  assert.throws(() => u.aufruf('pinFestlegen', '123'), /mindestens 6 Zeichen/);
+  assert.throws(() => u.aufruf('pinFestlegen', '123'), /mindestens 4 Zeichen/);
+  assert.equal(erstelleUmgebung().aufruf('pinFestlegen', '1978').eingerichtet, true);
 
   u.aufruf('pinFestlegen', PIN);
   assert.equal(u.aufruf('status').eingerichtet, true);

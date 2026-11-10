@@ -396,7 +396,7 @@ private fun PinDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     if (abfrage.neu) {
-                        "Diese PIN schützt die Daten in der Cloud. Sie wird auf jedem Gerät einmal abgefragt (mindestens 6 Zeichen)."
+                        "Diese PIN schützt die Daten in der Cloud. Sie wird auf jedem Gerät einmal abgefragt (mindestens 4 Zeichen)."
                     } else {
                         "Die PIN der Schadensfälle-Cloud – dieselbe wie in der Web-App."
                     },
