@@ -10,7 +10,7 @@
   "scripts": {
     "vorbereiten": "node scripts/vorbereiten.js",
     "start": "npm run vorbereiten && electron .",
-    "test": "npm run vorbereiten && node --test --test-timeout=180000 --test-concurrency=1 test/",
+    "test": "npm run vorbereiten && node --test --test-timeout=180000 --test-concurrency=1 test/mail.test.js test/app.test.js",
     "dist:win": "npm run vorbereiten && electron-builder --win nsis --publish never",
     "dist:win:linux": "npm run vorbereiten && electron-builder --win nsis --x64 --publish never"
   },
