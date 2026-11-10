@@ -17,6 +17,9 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "1.1.0"
+
+        // Vorgabe in den Einstellungen; die PIN wird beim Verbinden abgefragt.
+        buildConfigField("String", "CLOUD_URL", "\"https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwhDnWP7p9XeoIz8NisZR7NApIj-Xfgd_lP5j8KjPE11OFbQuA/exec\"")
     }
 
     buildTypes {
@@ -51,6 +54,8 @@ android {
         unitTests {
             isIncludeAndroidResources = true
             all {
+                // Die Abgleich-Tests laufen gegen das Cloud-Skript – Änderungen daran sollen sie neu auslösen.
+                it.inputs.dir(rootProject.file("cloud")).withPropertyName("cloudSkript")
                 // Bildschirmfotos der Oberflächentests landen in app/build/outputs/roborazzi
                 it.systemProperty("roborazzi.test.record", "true")
                 it.maxHeapSize = "2g"

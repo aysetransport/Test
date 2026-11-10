@@ -319,7 +319,7 @@ private fun CloudBereich(viewModel: EinstellungenViewModel) {
     val zustand by viewModel.cloudZustand.collectAsStateWithLifecycle()
     val offen by viewModel.offeneAenderungen.collectAsStateWithLifecycle()
     val z = zustand ?: return
-    var adresse by rememberSaveable { mutableStateOf("") }
+    var adresse by rememberSaveable { mutableStateOf(BuildConfig.CLOUD_URL) }
 
     Bereich(
         "Cloud",

@@ -232,3 +232,11 @@ test('wird der Drive-Ordner gelöscht, beginnt ein neuer Bestand mit neuer Kennu
   assert.notEqual(neu.kennung, alt.kennung);
   assert.equal(neu.rev, 0);
 });
+
+test('eine leere Cloud behält ihre Kennung – sonst würden Geräte endlos neu hochladen', () => {
+  const u = eingerichtet();
+  const kennung = u.aufruf('anmelden', PIN).kennung;
+  assert.equal(u.aufruf('stand', PIN).kennung, kennung);
+  assert.equal(u.sync({ seit: 0 }).kennung, kennung);
+  assert.equal(u.dateien('Schadensfaelle').filter(d => d.name === 'daten.json').length, 1);
+});

@@ -438,8 +438,18 @@ function ladeDaten_() {
     d.anlagen = d.anlagen || {};
     return d;
   }
-  // Neuer Bestand: Die Kennung lässt die Geräte erkennen, dass sie alles neu hochladen müssen.
-  return { kennung: Utilities.getUuid(), rev: 0, faelle: {}, verlauf: {}, anlagen: {} };
+  // Neuer Bestand: sofort anlegen, damit die Kennung bei jedem weiteren Aufruf gleich bleibt.
+  // Ändert sie sich, erkennen die Geräte daran, dass sie alles neu hochladen müssen.
+  var sperre = LockService.getScriptLock();
+  sperre.waitLock(25000);
+  try {
+    if (datenDatei_()) return ladeDaten_(); // inzwischen von einem anderen Aufruf angelegt
+    var neu = { kennung: Utilities.getUuid(), rev: 0, faelle: {}, verlauf: {}, anlagen: {} };
+    ordner_().createFile(DATEN_DATEI, JSON.stringify(neu), 'application/json');
+    return neu;
+  } finally {
+    sperre.releaseLock();
+  }
 }
 
 function speichereDaten_(d) {
@@ -458,8 +468,10 @@ function sichereTaeglich_(datei) {
   var props = PropertiesService.getScriptProperties();
   var heute = new Date().toISOString().slice(0, 10);
   if (props.getProperty('LETZTE_SICHERUNG') === heute) return;
+  var bisher = datei.getBlob().getDataAsString('UTF-8');
+  if (JSON.parse(bisher).rev === 0) return; // ein leerer Bestand braucht keine Sicherung
   var ziel = unterordner_(SICHERUNG_ORDNER);
-  ziel.createFile('daten-' + heute + '.json', datei.getBlob().getDataAsString('UTF-8'), 'application/json');
+  ziel.createFile('daten-' + heute + '.json', bisher, 'application/json');
   props.setProperty('LETZTE_SICHERUNG', heute);
 
   var namen = [];

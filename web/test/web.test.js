@@ -17,11 +17,13 @@ test.after(async () => { await browser.close(); await seite.schliessen(); });
 /** Ein „Gerät“ = eigener Browser-Speicher. Mit cloudUrl ist die Cloud-Adresse schon eingetragen. */
 async function geraet(cloudUrl, optionen = {}) {
   const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1200, height: 900 }, acceptDownloads: true, ...optionen });
-  if (cloudUrl) {
-    await kontext.addInitScript(url => {
-      if (!localStorage.getItem('schadensfaelle-v1')) localStorage.setItem('schadensfaelle-v1', JSON.stringify({ apiUrl: url }));
-    }, cloudUrl);
-  }
+  // Tests sprechen nie die echte Cloud an: entweder die Test-Cloud oder „nur auf diesem Gerät“.
+  await kontext.route('https://script.google.com/**', route => route.abort());
+  await kontext.addInitScript(url => {
+    if (!localStorage.getItem('schadensfaelle-v1')) {
+      localStorage.setItem('schadensfaelle-v1', JSON.stringify(url ? { apiUrl: url } : { nurLokal: true }));
+    }
+  }, cloudUrl || '');
   const s = await kontext.newPage();
   s.on('pageerror', fehler => { throw fehler; });
   await s.goto(seite.url);
