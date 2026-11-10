@@ -79,6 +79,7 @@ fun UebersichtScreen(
     onEinstellungen: () -> Unit,
 ) {
     val zustand by viewModel.zustand.collectAsStateWithLifecycle()
+    val cloudHinweis by viewModel.cloudHinweis.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     var benachrichtigungenErlaubt by remember { mutableStateOf(Benachrichtigungen.duerfenAngezeigtWerden(context)) }
@@ -122,6 +123,22 @@ fun UebersichtScreen(
         ) {
             item(key = "kennzahlen") {
                 KennzahlenZeile(zustand.kennzahlen, onFilter = viewModel::setzeFilter)
+            }
+            cloudHinweis?.let { hinweis ->
+                item(key = "cloud") {
+                    Card(
+                        onClick = onEinstellungen,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "$hinweis – zum Beheben antippen",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(16.dp),
+                        )
+                    }
+                }
             }
             if (!benachrichtigungenErlaubt && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !zustand.ganzLeer) {
                 item(key = "berechtigung") {

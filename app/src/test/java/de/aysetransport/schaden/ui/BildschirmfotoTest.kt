@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
@@ -211,6 +212,8 @@ class BildschirmfotoTest {
         rule.onNodeWithContentDescription("Einstellungen").performClick()
         warteAufText("Absender")
         foto("10_einstellungen")
+        rule.onNodeWithText("Verbinden").performScrollTo()
+        foto("13_einstellungen_cloud")
         check(sofa > 0)
     }
 

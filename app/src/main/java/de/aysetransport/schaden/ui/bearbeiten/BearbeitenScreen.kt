@@ -140,7 +140,9 @@ fun BearbeitenScreen(
                 Textfeld("Auftrags- / Lieferschein-Nr.", f.auftragsReferenz, { viewModel.aendere { copy(auftragsReferenz = it) } })
                 Textfeld("Tour", f.tour, { viewModel.aendere { copy(tour = it) } }, gross = KeyboardCapitalization.Sentences, tag = "feld-tour")
                 Textfeld("Fahrzeug / Kennzeichen", f.fahrzeug, { viewModel.aendere { copy(fahrzeug = it) } }, gross = KeyboardCapitalization.Characters)
-                Textfeld("Fahrer", f.fahrer, { viewModel.aendere { copy(fahrer = it) } }, gross = KeyboardCapitalization.Words)
+                Textfeld("Fahrer", f.fahrer, { viewModel.aendere { copy(fahrer = it) } }, gross = KeyboardCapitalization.Words, tag = "feld-fahrer")
+                Textfeld("Beifahrer 1", f.beifahrer1, { viewModel.aendere { copy(beifahrer1 = it) } }, gross = KeyboardCapitalization.Words, tag = "feld-beifahrer1")
+                Textfeld("Beifahrer 2", f.beifahrer2, { viewModel.aendere { copy(beifahrer2 = it) } }, gross = KeyboardCapitalization.Words, tag = "feld-beifahrer2")
             }
 
             Abschnitt("Bearbeitung") {

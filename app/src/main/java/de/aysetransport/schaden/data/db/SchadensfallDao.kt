@@ -3,9 +3,11 @@ package de.aysetransport.schaden.data.db
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import de.aysetransport.schaden.data.model.Anlage
+import de.aysetransport.schaden.data.model.Loeschung
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
 import kotlinx.coroutines.flow.Flow
@@ -86,4 +88,81 @@ interface SchadensfallDao {
 
     @Delete
     suspend fun loesche(anlage: Anlage)
+
+    @Query("SELECT * FROM verlauf WHERE id = :id")
+    suspend fun ladeVerlaufEintrag(id: Long): VerlaufEintrag?
+
+    // --- Abgleich mit der Cloud ---
+
+    @Query("SELECT * FROM schadensfall WHERE uuid = :uuid")
+    suspend fun fallPerKennung(uuid: String): Schadensfall?
+
+    @Query("SELECT * FROM verlauf WHERE uuid = :uuid")
+    suspend fun verlaufPerKennung(uuid: String): VerlaufEintrag?
+
+    @Query("SELECT * FROM anlage WHERE uuid = :uuid")
+    suspend fun anlagePerKennung(uuid: String): Anlage?
+
+    @Query("SELECT * FROM schadensfall WHERE syncOffen = 1")
+    suspend fun offeneFaelle(): List<Schadensfall>
+
+    @Query("SELECT * FROM verlauf WHERE syncOffen = 1")
+    suspend fun offenerVerlauf(): List<VerlaufEintrag>
+
+    @Query("SELECT * FROM anlage WHERE syncOffen = 1")
+    suspend fun offeneAnlagen(): List<Anlage>
+
+    @Query("SELECT * FROM loeschung")
+    suspend fun loeschungen(): List<Loeschung>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun merkeLoeschung(loeschung: Loeschung)
+
+    @Query("DELETE FROM loeschung WHERE uuid IN (:uuids)")
+    suspend fun vergissLoeschungen(uuids: List<String>)
+
+    /** Nur wenn der Fall seit dem Absenden nicht erneut geändert wurde. */
+    @Query("UPDATE schadensfall SET syncOffen = 0 WHERE uuid = :uuid AND geaendertAm = :geaendertAm")
+    suspend fun fallIstSynchron(uuid: String, geaendertAm: Long)
+
+    @Query("UPDATE verlauf SET syncOffen = 0 WHERE uuid IN (:uuids)")
+    suspend fun verlaufIstSynchron(uuids: List<String>)
+
+    @Query("UPDATE anlage SET syncOffen = 0 WHERE uuid IN (:uuids)")
+    suspend fun anlagenSindSynchron(uuids: List<String>)
+
+    @Query("SELECT * FROM anlage WHERE syncOffen = 0 AND inCloud = 0 AND dateiname != ''")
+    suspend fun anlagenZumHochladen(): List<Anlage>
+
+    @Query("SELECT * FROM anlage WHERE inCloud = 1 AND dateiname = ''")
+    suspend fun anlagenZumHerunterladen(): List<Anlage>
+
+    @Query("UPDATE anlage SET inCloud = 1 WHERE uuid = :uuid")
+    suspend fun anlageIstInCloud(uuid: String)
+
+    @Query("UPDATE anlage SET dateiname = :dateiname, groesseBytes = :groesse WHERE uuid = :uuid")
+    suspend fun anlageHeruntergeladen(uuid: String, dateiname: String, groesse: Long)
+
+    @Query("DELETE FROM verlauf WHERE uuid = :uuid")
+    suspend fun loescheVerlaufPerKennung(uuid: String)
+
+    @Query("DELETE FROM anlage WHERE uuid = :uuid")
+    suspend fun loescheAnlagePerKennung(uuid: String)
+
+    /** Der Bestand in der Cloud ist neu: alles von diesem Gerät erneut hochladen. */
+    @Query("UPDATE schadensfall SET syncOffen = 1")
+    suspend fun alleFaelleOffen()
+
+    @Query("UPDATE verlauf SET syncOffen = 1")
+    suspend fun allerVerlaufOffen()
+
+    @Query("UPDATE anlage SET syncOffen = 1, inCloud = 0")
+    suspend fun alleAnlagenOffen()
+
+    @Query("SELECT (SELECT COUNT(*) FROM schadensfall WHERE syncOffen = 1) + (SELECT COUNT(*) FROM verlauf WHERE syncOffen = 1) + " +
+        "(SELECT COUNT(*) FROM anlage WHERE syncOffen = 1 OR (inCloud = 0 AND dateiname != '')) + (SELECT COUNT(*) FROM loeschung)")
+    fun beobachteOffeneAenderungen(): Flow<Int>
+
+    @Query("DELETE FROM loeschung")
+    suspend fun vergissAlleLoeschungen()
 }

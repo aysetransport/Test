@@ -65,4 +65,12 @@ class ZusammenfassungTest {
         val fall = Schadensfall(fallnummer = "2026-002", status = FallStatus.ERLEDIGT, wiedervorlageAm = LocalDate.of(2026, 11, 17))
         assertFalse("Wiedervorlage" in Zusammenfassung.erstelle(fall, 0))
     }
+
+    @Test
+    fun `Beifahrer erscheinen bei Tour und Fahrzeug`() {
+        val fall = Schadensfall(fallnummer = "2026-003", tour = "Tour 5", fahrer = "M. Yilmaz", beifahrer1 = "Ali Kaya", beifahrer2 = "Ben Ott")
+        assertTrue("Tour/Fahrzeug: Tour 5 (Fahrer: M. Yilmaz, Beifahrer: Ali Kaya, Ben Ott)" in Zusammenfassung.erstelle(fall, 0))
+        val nurZweiter = Schadensfall(fallnummer = "2026-004", beifahrer2 = "Ben Ott")
+        assertTrue("Tour/Fahrzeug: (Beifahrer: Ben Ott)" in Zusammenfassung.erstelle(nurZweiter, 0))
+    }
 }

@@ -4,11 +4,13 @@ import android.net.Uri
 import androidx.room.withTransaction
 import de.aysetransport.schaden.data.db.SchadensfallDatenbank
 import de.aysetransport.schaden.data.model.Anlage
+import de.aysetransport.schaden.data.model.Loeschung
 import de.aysetransport.schaden.data.model.Ansprechpartner
 import de.aysetransport.schaden.data.model.FallStatus
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
 import de.aysetransport.schaden.data.model.VerlaufTyp
+import de.aysetransport.schaden.data.model.neueKennung
 import de.aysetransport.schaden.domain.Datum
 import de.aysetransport.schaden.domain.Fallnummer
 import de.aysetransport.schaden.domain.faelligkeit
@@ -26,6 +28,8 @@ class SchadensfallRepository(
     private val db: SchadensfallDatenbank,
     private val anlagenSpeicher: AnlagenSpeicher,
     private val uhr: Clock = Clock.systemDefaultZone(),
+    /** Wird nach jeder Änderung aufgerufen – stößt den Abgleich mit der Cloud an. */
+    private val nachAenderung: () -> Unit = {},
 ) {
     private val dao = db.dao()
 
@@ -58,20 +62,20 @@ class SchadensfallRepository(
         val jahr = LocalDate.now(uhr).year
         val nummer = Fallnummer.naechste(jahr, dao.fallnummernMitPraefix(Fallnummer.praefix(jahr)))
         val id = dao.einfuegen(
-            entwurf.copy(id = 0, fallnummer = nummer, erstelltAm = jetzt, geaendertAm = jetzt).bereinigt(),
+            entwurf.copy(id = 0, uuid = neueKennung(), fallnummer = nummer, erstelltAm = jetzt, geaendertAm = jetzt).bereinigt(),
         )
         dao.einfuegen(VerlaufEintrag(fallId = id, zeitpunkt = jetzt, typ = VerlaufTyp.ANGELEGT, text = "Fall $nummer angelegt"))
         id
-    }
+    }.also { nachAenderung() }
 
     /**
      * Speichert die bearbeiteten Stammdaten. Fallnummer und Anlagedatum bleiben unverändert;
      * Status- und Terminänderungen werden im Verlauf vermerkt.
      */
-    suspend fun speichern(geaendert: Schadensfall) = db.withTransaction {
-        val alt = dao.lade(geaendert.id) ?: return@withTransaction
+    suspend fun speichern(geaendert: Schadensfall) = aenderung {
+        val alt = dao.lade(geaendert.id) ?: return@aenderung
         val jetzt = uhr.instant()
-        val neu = geaendert.copy(fallnummer = alt.fallnummer, erstelltAm = alt.erstelltAm, geaendertAm = jetzt).bereinigt()
+        val neu = geaendert.copy(uuid = alt.uuid, fallnummer = alt.fallnummer, erstelltAm = alt.erstelltAm, geaendertAm = jetzt).bereinigt()
         dao.aktualisieren(neu)
         if (alt.status != neu.status) {
             vermerke(neu.id, VerlaufTyp.STATUS, "Status: ${alt.status.label} → ${neu.status.label}")
@@ -81,9 +85,9 @@ class SchadensfallRepository(
         }
     }
 
-    suspend fun statusAendern(fallId: Long, neuerStatus: FallStatus, notiz: String = "") = db.withTransaction {
-        val alt = dao.lade(fallId) ?: return@withTransaction
-        if (alt.status == neuerStatus && notiz.isBlank()) return@withTransaction
+    suspend fun statusAendern(fallId: Long, neuerStatus: FallStatus, notiz: String = "") = aenderung {
+        val alt = dao.lade(fallId) ?: return@aenderung
+        if (alt.status == neuerStatus && notiz.isBlank()) return@aenderung
         dao.aktualisieren(alt.copy(status = neuerStatus, geaendertAm = uhr.instant()).bereinigt())
         val text = buildString {
             append("Status: ${alt.status.label} → ${neuerStatus.label}")
@@ -106,8 +110,8 @@ class SchadensfallRepository(
         naechsteWiedervorlage: LocalDate?,
         wartetAuf: Ansprechpartner?,
         naechsterSchritt: String,
-    ) = db.withTransaction {
-        val alt = dao.lade(fallId) ?: return@withTransaction
+    ) = aenderung {
+        val alt = dao.lade(fallId) ?: return@aenderung
         dao.aktualisieren(
             alt.copy(
                 wiedervorlageAm = naechsteWiedervorlage,
@@ -129,27 +133,32 @@ class SchadensfallRepository(
         datum: LocalDate?,
         wartetAuf: Ansprechpartner?,
         naechsterSchritt: String,
-    ) = db.withTransaction {
-        val alt = dao.lade(fallId) ?: return@withTransaction
+    ) = aenderung {
+        val alt = dao.lade(fallId) ?: return@aenderung
         val neu = alt.copy(
             wiedervorlageAm = datum,
             wartetAuf = wartetAuf,
             wiedervorlageNotiz = naechsterSchritt.trim(),
             geaendertAm = uhr.instant(),
         ).bereinigt()
-        if (neu.copy(geaendertAm = alt.geaendertAm) == alt) return@withTransaction
+        if (neu.copy(geaendertAm = alt.geaendertAm, syncOffen = alt.syncOffen) == alt) return@aenderung
         dao.aktualisieren(neu)
         vermerke(fallId, VerlaufTyp.WIEDERVORLAGE, wiedervorlageText(neu.wiedervorlageAm, neu.wartetAuf, neu.wiedervorlageNotiz))
     }
 
-    suspend fun verlaufHinzufuegen(fallId: Long, typ: VerlaufTyp, text: String) = db.withTransaction {
-        if (text.isBlank()) return@withTransaction
-        val fall = dao.lade(fallId) ?: return@withTransaction
+    suspend fun verlaufHinzufuegen(fallId: Long, typ: VerlaufTyp, text: String) = aenderung {
+        if (text.isBlank()) return@aenderung
+        val fall = dao.lade(fallId) ?: return@aenderung
         vermerke(fallId, typ, text.trim())
-        dao.aktualisieren(fall.copy(geaendertAm = uhr.instant()))
+        dao.aktualisieren(fall.copy(geaendertAm = uhr.instant(), syncOffen = true))
     }
 
-    suspend fun verlaufLoeschen(eintragId: Long) = dao.loescheVerlaufEintrag(eintragId)
+    suspend fun verlaufLoeschen(eintragId: Long) = aenderung {
+        val eintrag = dao.ladeVerlaufEintrag(eintragId) ?: return@aenderung
+        val fall = dao.lade(eintrag.fallId) ?: return@aenderung
+        dao.loescheVerlaufEintrag(eintragId)
+        dao.merkeLoeschung(Loeschung(eintrag.uuid, Loeschung.Art.VERLAUF, fall.uuid, uhr.instant()))
+    }
 
     /**
      * Kopiert die Datei hinter [quelle] in den App-Speicher und hängt sie an den Fall.
@@ -170,7 +179,7 @@ class SchadensfallRepository(
                 val id = dao.einfuegen(anlage)
                 vermerke(fallId, VerlaufTyp.ANLAGE, "Anlage hinzugefügt: ${datei.anzeigename}")
                 anlage.copy(id = id)
-            }
+            }.also { nachAenderung() }
         } catch (e: Exception) {
             // Fall existiert nicht (mehr) – die kopierte Datei nicht verwaist liegen lassen.
             anlagenSpeicher.loesche(anlage)
@@ -180,17 +189,29 @@ class SchadensfallRepository(
 
     suspend fun anlageLoeschen(anlage: Anlage) {
         db.withTransaction {
+            val fall = dao.lade(anlage.fallId)
             dao.loesche(anlage)
+            if (fall != null) dao.merkeLoeschung(Loeschung(anlage.uuid, Loeschung.Art.ANLAGE, fall.uuid, uhr.instant()))
             vermerke(anlage.fallId, VerlaufTyp.ANLAGE, "Anlage entfernt: ${anlage.anzeigename}")
         }
         anlagenSpeicher.loesche(anlage)
+        nachAenderung()
     }
 
     /** Löscht den Fall samt Verlauf, Anlagen-Einträgen und Dateien. */
     suspend fun fallLoeschen(fallId: Long) {
-        dao.loescheFall(fallId)
+        db.withTransaction {
+            val fall = dao.lade(fallId) ?: return@withTransaction
+            dao.loescheFall(fallId)
+            // Verlauf und Anlagen löscht die Cloud zusammen mit dem Fall.
+            dao.merkeLoeschung(Loeschung(fall.uuid, Loeschung.Art.FALL, fall.uuid, uhr.instant()))
+        }
         anlagenSpeicher.loescheOrdner(fallId)
+        nachAenderung()
     }
+
+    /** Führt eine Änderung in einer Transaktion aus und stößt danach den Abgleich an. */
+    private suspend fun <T> aenderung(block: suspend () -> T): T = db.withTransaction { block() }.also { nachAenderung() }
 
     private suspend fun vermerke(fallId: Long, typ: VerlaufTyp, text: String) {
         dao.einfuegen(VerlaufEintrag(fallId = fallId, zeitpunkt = uhr.instant(), typ = typ, text = text))
@@ -209,5 +230,5 @@ class SchadensfallRepository(
 
     /** Ein abgeschlossener Fall braucht keine Wiedervorlage mehr. */
     private fun Schadensfall.bereinigt(): Schadensfall =
-        if (status.offen) this else copy(wiedervorlageAm = null, wartetAuf = null, wiedervorlageNotiz = "")
+        (if (status.offen) this else copy(wiedervorlageAm = null, wartetAuf = null, wiedervorlageNotiz = "")).copy(syncOffen = true)
 }

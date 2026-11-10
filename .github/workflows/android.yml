@@ -20,6 +20,11 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      # Die Abgleich-Tests starten das Cloud-Skript in einer nachgebildeten Google-Umgebung (Node.js).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Lint, Tests und Debug-APK

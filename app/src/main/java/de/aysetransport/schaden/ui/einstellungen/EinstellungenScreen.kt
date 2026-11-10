@@ -7,6 +7,14 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,7 +64,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import de.aysetransport.schaden.BuildConfig
 import de.aysetransport.schaden.data.Einstellungen
+import de.aysetransport.schaden.domain.Datum
 import de.aysetransport.schaden.erinnerung.Benachrichtigungen
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -170,7 +180,9 @@ fun EinstellungenScreen(viewModel: EinstellungenViewModel, onZurueck: () -> Unit
                 }
             }
 
-            Bereich("Daten", "Alle Fälle liegen nur auf diesem Gerät. Ein Backup enthält Fälle, Verlauf und Anlagen.") {
+            CloudBereich(viewModel)
+
+            Bereich("Daten", "Ein Backup enthält alle Fälle, den Verlauf und die Anlagen dieses Geräts.") {
                 OutlinedButton(
                     enabled = !viewModel.beschaeftigt,
                     onClick = {
@@ -233,6 +245,16 @@ fun EinstellungenScreen(viewModel: EinstellungenViewModel, onZurueck: () -> Unit
         }
     }
 
+    viewModel.pinAbfrage?.let { abfrage ->
+        PinDialog(
+            abfrage = abfrage,
+            fehler = viewModel.pinFehler,
+            beschaeftigt = viewModel.cloudBeschaeftigt,
+            onAbbrechen = viewModel::pinAbfrageSchliessen,
+            onBestaetigen = viewModel::cloudVerbinden,
+        )
+    }
+
     wiederherstellenVon?.let { quelle ->
         AlertDialog(
             onDismissRequest = { wiederherstellenVon = null },
@@ -287,6 +309,131 @@ private fun UhrzeitDialog(start: LocalTime, onAbbrechen: () -> Unit, onAuswahl: 
         text = { TimePicker(state = zustand) },
         confirmButton = {
             TextButton(onClick = { onAuswahl(LocalTime.of(zustand.hour, zustand.minute)) }) { Text("Übernehmen") }
+        },
+        dismissButton = { TextButton(onClick = onAbbrechen) { Text("Abbrechen") } },
+    )
+}
+
+@Composable
+private fun CloudBereich(viewModel: EinstellungenViewModel) {
+    val zustand by viewModel.cloudZustand.collectAsStateWithLifecycle()
+    val offen by viewModel.offeneAenderungen.collectAsStateWithLifecycle()
+    val z = zustand ?: return
+    var adresse by rememberSaveable { mutableStateOf("") }
+
+    Bereich(
+        "Cloud",
+        if (z.verbunden) {
+            "Die Fälle liegen zusätzlich in Google Drive (Ordner „Schadensfaelle“) und werden mit der Web-App und anderen Geräten abgeglichen."
+        } else {
+            "Derzeit liegen die Fälle nur auf diesem Gerät. Mit der Adresse des Cloud-Skripts werden sie in Google Drive gespeichert und mit der Web-App geteilt."
+        },
+    ) {
+        if (!z.verbunden) {
+            OutlinedTextField(
+                value = adresse,
+                onValueChange = { adresse = it },
+                label = { Text("Cloud-Adresse (…/exec)") },
+                placeholder = { Text("https://script.google.com/macros/s/…/exec") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("cloud-adresse"),
+            )
+            Button(
+                onClick = { viewModel.cloudPruefen(adresse) },
+                enabled = adresse.isNotBlank() && !viewModel.cloudBeschaeftigt,
+            ) { Text("Verbinden") }
+            return@Bereich
+        }
+
+        val status = when {
+            !z.angemeldet -> z.fehler.ifEmpty { "PIN erforderlich" }
+            viewModel.cloudBeschaeftigt -> "Gleiche ab …"
+            z.fehler.isNotEmpty() -> "Letzter Versuch fehlgeschlagen: ${z.fehler}" + if (offen > 0) " · $offen Änderungen warten" else ""
+            offen > 0 -> "$offen Änderungen warten auf den Abgleich"
+            z.letzterAbgleich > 0 -> "Aktuell · zuletzt abgeglichen ${Datum.formatMitUhrzeit(Instant.ofEpochMilli(z.letzterAbgleich))}"
+            else -> "Noch nicht abgeglichen"
+        }
+        Text(
+            status,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (!z.angemeldet || z.fehler.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.testTag("cloud-status"),
+        )
+        Text(z.url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (z.angemeldet) {
+                Button(onClick = viewModel::jetztAbgleichen, enabled = !viewModel.cloudBeschaeftigt) { Text("Jetzt abgleichen") }
+            } else {
+                Button(onClick = viewModel::pinNeuEingeben, enabled = !viewModel.cloudBeschaeftigt) { Text("PIN eingeben") }
+            }
+            OutlinedButton(onClick = viewModel::cloudTrennen, enabled = !viewModel.cloudBeschaeftigt) { Text("Trennen") }
+        }
+    }
+}
+
+@Composable
+private fun PinDialog(
+    abfrage: PinAbfrage,
+    fehler: String?,
+    beschaeftigt: Boolean,
+    onAbbrechen: () -> Unit,
+    onBestaetigen: (String, String?) -> Unit,
+) {
+    var pin by rememberSaveable { mutableStateOf("") }
+    var wiederholung by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onAbbrechen,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .padding(horizontal = 24.dp)
+            .widthIn(max = 560.dp)
+            .fillMaxWidth(),
+        title = { Text(if (abfrage.neu) "PIN festlegen" else "PIN eingeben") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    if (abfrage.neu) {
+                        "Diese PIN schützt die Daten in der Cloud. Sie wird auf jedem Gerät einmal abgefragt (mindestens 6 Zeichen)."
+                    } else {
+                        "Die PIN der Schadensfälle-Cloud – dieselbe wie in der Web-App."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { pin = it },
+                    label = { Text("PIN") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("pin"),
+                )
+                if (abfrage.neu) {
+                    OutlinedTextField(
+                        value = wiederholung,
+                        onValueChange = { wiederholung = it },
+                        label = { Text("PIN wiederholen") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("pin-wiederholung"),
+                    )
+                }
+                if (fehler != null) Text(fehler, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onBestaetigen(pin, if (abfrage.neu) wiederholung else null) },
+                enabled = pin.isNotEmpty() && !beschaeftigt,
+            ) { Text(if (abfrage.neu) "Festlegen" else "Anmelden") }
         },
         dismissButton = { TextButton(onClick = onAbbrechen) { Text("Abbrechen") } },
     )

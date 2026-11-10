@@ -1,0 +1,269 @@
+'use strict';
+/**
+ * Bedient die Web-App in einem echten Browser gegen das lokale Cloud-Skript (cloud/test/mock-server.js).
+ * Start:  node --test web/test/
+ */
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { chromium } = require('playwright');
+const { starteCloud, starteWebseite } = require('../../cloud/test/mock-server');
+
+const PIN = 'geheim-2026';
+let browser, seite;
+test.before(async () => { browser = await chromium.launch(); seite = await starteWebseite(path.join(__dirname, '..')); });
+test.after(async () => { await browser.close(); await seite.schliessen(); });
+
+/** Ein „Gerät“ = eigener Browser-Speicher. Mit cloudUrl ist die Cloud-Adresse schon eingetragen. */
+async function geraet(cloudUrl, optionen = {}) {
+  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1200, height: 900 }, acceptDownloads: true, ...optionen });
+  if (cloudUrl) {
+    await kontext.addInitScript(url => {
+      if (!localStorage.getItem('schadensfaelle-v1')) localStorage.setItem('schadensfaelle-v1', JSON.stringify({ apiUrl: url }));
+    }, cloudUrl);
+  }
+  const s = await kontext.newPage();
+  s.on('pageerror', fehler => { throw fehler; });
+  await s.goto(seite.url);
+  await s.waitForFunction(() => window.__appBereit);
+  return s;
+}
+async function melde(s, pin = PIN, neu = false) {
+  await s.locator('#pin1').fill(pin);
+  if (neu) await s.locator('#pin2').fill(pin);
+  await s.locator('#pin-form button').click();
+}
+const aktuell = s => s.waitForFunction(() => document.querySelector('#sync').dataset.zustand === 'aktuell' && document.querySelector('#sync').textContent === 'Cloud aktuell');
+const abgleich = async s => { await s.evaluate(() => abgleich()); await aktuell(s); };
+async function legeFallAn(s, felder) {
+  await s.locator('[data-neu]').first().click();
+  for (const [name, wert] of Object.entries(felder)) await s.locator(`#fall-form [name="${name}"]`).fill(wert);
+  await s.locator('#fall-form button.voll').click();
+  await s.locator('#wiedervorlage').waitFor();
+}
+const cloudDaten = cloud => JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString('utf8'));
+const jahr = new Date().getFullYear();
+
+test('Fachlogik im Browser stimmt mit der Android-App überein', async () => {
+  const s = await geraet();
+  const r = await s.evaluate(() => ({
+    geld: ['1.234,56', '1,234.56', '1234,56 €', '450', '12.50', '1,5', '1.234', '1.234.567', '', 'abc', '-5', '1,234', '1,2,3', '12.5.1', ','].map(geldLesen),
+    format: [geld(123456), geld(5), geldOhneSymbol(123456)],
+    nummer: [naechsteFallnummer([], 2026), naechsteFallnummer([{ fallnummer: '2026-001' }, { fallnummer: '2026-007' }, { fallnummer: '2025-099' }, { fallnummer: '2026-abc' }], 2026)],
+    csv: ['=SUMME(A1)', '@cmd', "+cmd|' /C calc'!A0", '+49 171 1234567', '-12,50', 'a;b "c"'].map(csvZelle),
+    vorlage: vorlageText('EINGANGSBESTAETIGUNG', { fallnummer: '2026-007', kundeName: 'Anna Becker', kundenAktenzeichen: 'AB-4711', schadensdatum: '2026-11-03', meldedatum: '2026-11-05' },
+      { firma: 'Muster Transport GmbH', bearbeiter: 'Kim Beispiel', funktion: 'Schadensbearbeitung' }),
+    sachstand: vorlageText('SACHSTANDSANFRAGE', { fallnummer: '2026-007', kundeName: 'Anna Becker', versicherungsNummer: 'VS-99', schadensdatum: '2026-11-03' }, {}),
+    faellig: [-3, -1, 0, 1, 5].map(t => faelligkeit({ status: 'NEU', wiedervorlageAm: plusTage(heute(), t) }).text)
+      .concat(faelligkeit({ status: 'ERLEDIGT', wiedervorlageAm: plusTage(heute(), -3) }).text),
+  }));
+  assert.deepEqual(r.geld, [123456, 123456, 123456, 45000, 1250, 150, 123400, 123456700, null, null, null, null, null, null, null]);
+  assert.deepEqual(r.format, ['1.234,56 €', '0,05 €', '1234,56']);
+  assert.deepEqual(r.nummer, ['2026-001', '2026-008']);
+  assert.deepEqual(r.csv, ["'=SUMME(A1)", "'@cmd", "'+cmd|' /C calc'!A0", '+49 171 1234567', '-12,50', '"a;b ""c"""']);
+  assert.equal(r.vorlage.betreff, 'Ihre Schadensmeldung vom 05.11.2026 – Eingangsbestätigung – Ihr Zeichen AB-4711 – unser Vorgang 2026-007');
+  assert.ok(r.vorlage.text.startsWith('Guten Tag Anna Becker,\n\nwir bestätigen den Eingang Ihrer Schadensmeldung zum Vorfall vom 03.11.2026.'));
+  assert.ok(r.vorlage.text.endsWith('Mit freundlichen Grüßen\n\ni.A. Kim Beispiel\nSchadensbearbeitung\nMuster Transport GmbH'));
+  assert.ok(r.sachstand.text.startsWith('Sehr geehrte Damen und Herren,') && r.sachstand.text.includes('Schadennummer: VS-99') && r.sachstand.text.endsWith('Mit freundlichen Grüßen'));
+  assert.deepEqual(r.faellig, ['seit 3 Tagen überfällig', 'seit gestern überfällig', 'heute fällig', 'morgen fällig', 'in 5 Tagen fällig', 'Keine Wiedervorlage']);
+});
+
+test('ohne Cloud: Fall anlegen, nachhaken, abschließen – bleibt nach dem Neuladen erhalten', async () => {
+  const s = await geraet();
+  await s.getByText('Noch keine Schadensfälle').waitFor();
+  assert.equal(await s.locator('#sync').textContent(), 'Nur auf diesem Gerät');
+
+  await s.locator('[data-neu]').first().click();
+  await s.locator('#fall-form button.voll').click();
+  await s.getByText('Bitte mindestens Name, Firma oder Schadensbeschreibung angeben.').waitFor();
+  await s.locator('[name=kundeName]').fill('Anna Becker');
+  await s.locator('[name=forderung]').fill('12,345');
+  await s.locator('#fall-form button.voll').click();
+  await s.getByText('Kein gültiger Betrag, z. B. 1.250,00').waitFor();
+  await s.locator('[name=forderung]').fill('450');
+  await s.locator('[name=beschreibung]').fill('Sofa beim Eintragen beschädigt');
+  await s.locator('[name=tour]').fill('Tour 3');
+  await s.locator('#fall-form button.voll').click();
+
+  await s.getByText(`Fall ${jahr}-001 ·`).waitFor();
+  await s.locator('#detail').getByText('450,00').waitFor();
+  await s.locator('#wiedervorlage').getByText('in 7 Tagen fällig').waitFor();
+  await s.locator('#liste').getByText('Offen (1)').waitFor();
+
+  await s.getByRole('button', { name: '✓ Nachgehakt' }).click();
+  await s.locator('#ergebnis').fill('Kundin schickt die Fotos bis Freitag');
+  await s.getByRole('button', { name: '2 Wochen' }).click();
+  await s.locator('#wv-form').getByRole('button', { name: 'Anspruchsteller' }).click();
+  await s.locator('#schritt').fill('Fotos prüfen');
+  await s.locator('#wv-form button.voll').click();
+  await s.locator('#wiedervorlage').getByText('in 14 Tagen fällig').waitFor();
+  await s.locator('#wiedervorlage').getByText('Wartet auf Anspruchsteller · Fotos prüfen').waitFor();
+  await s.locator('.verlauf').getByText('Kundin schickt die Fotos bis Freitag').waitFor();
+
+  await s.reload();
+  await s.locator('.verlauf').getByText('Kundin schickt die Fotos bis Freitag').waitFor();
+
+  await s.getByRole('button', { name: 'Status ändern' }).click();
+  await s.getByLabel('Erledigt').check();
+  await s.getByRole('button', { name: 'Übernehmen' }).click();
+  await s.getByText('Der Fall ist abgeschlossen').waitFor();
+  await s.locator('#liste').getByText('Keine offenen Fälle').waitFor();
+  await s.locator('#liste').getByRole('button', { name: 'Abgeschlossen' }).click();
+  await s.locator('#liste').getByText('Anna Becker').waitFor();
+});
+
+test('mit der Cloud verbinden: PIN festlegen, Fälle landen in Google Drive', async () => {
+  const cloud = await starteCloud();
+  const s = await geraet();
+  await legeFallAn(s, { kundeName: 'Anna Becker', beschreibung: 'Schrankwand beschädigt' });
+
+  await s.locator('#einstellungen-knopf').click();
+  await s.locator('#cloud-url').fill(cloud.url);
+  await s.locator('#verbinden').click();
+  await s.getByRole('heading', { name: 'PIN festlegen' }).waitFor();
+  await s.locator('#pin1').fill(PIN); await s.locator('#pin2').fill('anders');
+  await s.locator('#pin-form button').click();
+  await s.getByText('Die beiden Eingaben stimmen nicht überein.').waitFor();
+  await melde(s, PIN, true);
+  await aktuell(s);
+
+  const d = cloudDaten(cloud);
+  assert.deepEqual(Object.values(d.faelle).map(f => [f.kundeName, f.fallnummer]), [['Anna Becker', `${jahr}-001`]]);
+  assert.equal(Object.values(d.verlauf)[0].text, `Fall ${jahr}-001 angelegt`);
+  await cloud.schliessen();
+});
+
+test('zwei Geräte: Änderungen wandern in beide Richtungen, falsche PIN wird abgelehnt', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url);
+  await melde(a, PIN, true); await aktuell(a);
+  await legeFallAn(a, { kundeName: 'Carl Demir', kundeTelefon: '0171 5550142', fahrer: 'M. Yilmaz', beifahrer1: 'Ali Kaya', beifahrer2: 'Ben Ott' });
+  await aktuell(a);
+
+  const b = await geraet(cloud.url);
+  await b.getByRole('heading', { name: 'PIN eingeben' }).waitFor();
+  await melde(b, 'falsche-pin');
+  await b.getByText('Die PIN war falsch.').waitFor();
+  await melde(b); await aktuell(b);
+  await b.locator('#liste').getByText('Carl Demir').click();
+  await b.locator('#detail dd', { hasText: 'Ali Kaya, Ben Ott' }).waitFor(); // Beifahrer kommen über die Cloud mit
+  await b.getByRole('button', { name: 'Status ändern' }).click();
+  await b.getByLabel('Bei Versicherung').check();
+  await b.locator('#status-notiz').fill('An die Versicherung gemeldet');
+  await b.getByRole('button', { name: 'Übernehmen' }).click();
+  await aktuell(b);
+
+  await a.evaluate(() => pruefeStand());
+  await a.locator('#detail .marke', { hasText: 'Bei Versicherung' }).waitFor();
+  await a.locator('.verlauf').getByText('An die Versicherung gemeldet').waitFor();
+
+  // Notiz während des Tippens: ein Abgleich im Hintergrund darf die Eingabe nicht verwerfen.
+  await a.locator('#notiz').fill('Halb getippte Not');
+  await b.locator('#notiz').fill('Notiz vom zweiten Gerät'); await b.locator('#notiz-form button').click(); await aktuell(b);
+  await abgleich(a);
+  await a.locator('.verlauf').getByText('Notiz vom zweiten Gerät').waitFor();
+  assert.equal(await a.locator('#notiz').inputValue(), 'Halb getippte Not');
+  await cloud.schliessen();
+});
+
+test('ohne Netz wird weitergearbeitet und später nachgereicht', async () => {
+  const cloud = await starteCloud();
+  const s = await geraet(cloud.url);
+  await melde(s, PIN, true); await aktuell(s);
+  await legeFallAn(s, { kundeName: 'Dora Engel' }); await aktuell(s);
+
+  cloud.zustand.gestoert = true;
+  await s.locator('#notiz').fill('Unterwegs notiert'); await s.locator('#notiz-form button').click();
+  await s.locator('#sync', { hasText: 'Offline · 2 Änderungen wartet' }).waitFor();
+  await s.reload(); // auch nach einem Neustart der Seite geht nichts verloren
+  await s.locator('.verlauf').getByText('Unterwegs notiert').waitFor();
+
+  cloud.zustand.gestoert = false;
+  await abgleich(s);
+  assert.ok(Object.values(cloudDaten(cloud).verlauf).some(v => v.text === 'Unterwegs notiert'));
+  await cloud.schliessen();
+});
+
+test('Anlage: hochladen, auf dem zweiten Gerät ansehen, dort löschen', async () => {
+  const cloud = await starteCloud();
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+  const a = await geraet(cloud.url);
+  await melde(a, PIN, true); await aktuell(a);
+  await legeFallAn(a, { kundeName: 'Emil Frank' });
+  await a.locator('#datei').setInputFiles({ name: 'Sofa Armlehne.png', mimeType: 'image/png', buffer: png });
+  await a.locator('.anlage img').waitFor();
+  await aktuell(a);
+  assert.equal(cloud.umgebung.dateien('Schadensfaelle/anlagen').length, 1);
+  assert.ok(cloud.umgebung.dateien('Schadensfaelle/anlagen')[0].bytes.equals(png), 'Datei liegt unverändert in Drive');
+
+  const b = await geraet(cloud.url);
+  await melde(b); await aktuell(b);
+  await b.locator('#liste').getByText('Emil Frank').click();
+  await b.getByText('Anlagen (1)').waitFor();
+  await b.locator('.anlage img').waitFor(); // wurde aus der Cloud nachgeladen
+  await b.locator('.verlauf').getByText('Anlage hinzugefügt: Sofa Armlehne.png').waitFor();
+
+  await b.getByRole('button', { name: 'Anlage Sofa Armlehne.png entfernen' }).click();
+  await b.getByRole('button', { name: 'Entfernen', exact: true }).click();
+  await aktuell(b);
+  assert.equal(cloud.umgebung.dateien('Schadensfaelle/anlagen').length, 0);
+  await abgleich(a);
+  await a.getByText('Noch keine Fotos oder Belege.').waitFor();
+  await cloud.schliessen();
+});
+
+test('gleiche Fallnummer auf zwei Geräten wird beim Abgleich aufgelöst; Löschen wirkt überall', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url);
+  await melde(a, PIN, true); await aktuell(a);
+  const b = await geraet(cloud.url);
+  await melde(b); await aktuell(b);
+
+  cloud.zustand.gestoert = true; // beide arbeiten ohne Netz
+  await legeFallAn(a, { kundeName: 'Gerät A' });
+  await legeFallAn(b, { kundeName: 'Gerät B' });
+  cloud.zustand.gestoert = false;
+  await abgleich(a); await abgleich(b); await abgleich(a);
+  for (const s of [a, b]) {
+    await s.locator('#liste').getByText('Gerät A').waitFor();
+    await s.locator('#liste').getByText('Gerät B').waitFor();
+  }
+  const nummern = Object.values(cloudDaten(cloud).faelle).map(f => f.fallnummer).sort();
+  assert.deepEqual(nummern, [`${jahr}-001`, `${jahr}-002`]);
+  await b.locator('#detail').getByText(`Fall ${jahr}-002`).waitFor();
+
+  await b.getByRole('button', { name: 'Weitere Aktionen' }).click();
+  await b.locator('#loeschen').click();
+  await b.getByRole('button', { name: 'Löschen', exact: true }).click();
+  await aktuell(b);
+  await abgleich(a);
+  await a.locator('#liste').getByText('Offen (1)').waitFor();
+  assert.equal(await a.locator('#liste').getByText('Gerät B').count(), 0);
+  assert.ok(!JSON.stringify(cloudDaten(cloud)).includes('Gerät B'));
+  await cloud.schliessen();
+});
+
+test('E-Mail-Vorlage, Zusammenfassung und CSV-Export', async () => {
+  const kontextOptionen = { permissions: ['clipboard-read', 'clipboard-write'] };
+  const s = await geraet(null, kontextOptionen);
+  await legeFallAn(s, { kundeName: 'Anna Becker', kundeEmail: 'a.becker@example.org', tour: 'Tour 3', forderung: '1.280' });
+
+  await s.getByRole('button', { name: '✉ E-Mail' }).click();
+  await s.locator('[data-vorlage=ERINNERUNG]').click();
+  const mail = await s.evaluate(() => window.__geoeffnet);
+  assert.ok(mail.startsWith('mailto:a.becker@example.org?subject='));
+  assert.ok(decodeURIComponent(mail).includes(`Erinnerung – unser Vorgang ${jahr}-001`));
+  await s.locator('.verlauf').getByText('E-Mail vorbereitet: Erinnerung').waitFor();
+
+  await s.getByRole('button', { name: 'Weitere Aktionen' }).click();
+  await s.locator('#teilen').click();
+  await s.getByText('Text in die Zwischenablage kopiert').waitFor();
+  const kopiert = await s.evaluate(() => navigator.clipboard.readText());
+  assert.ok(kopiert.startsWith(`Schadensfall ${jahr}-001\nStatus: Neu\nKunde/Absender: Anna Becker`));
+
+  await s.locator('#einstellungen-knopf').click();
+  const [download] = await Promise.all([s.waitForEvent('download'), s.locator('#csv').click()]);
+  const csv = require('node:fs').readFileSync(await download.path(), 'utf8');
+  assert.ok(csv.startsWith('﻿Fall-Nr.;Status;Tour;'));
+  assert.ok(csv.includes(`${jahr}-001;Neu;Tour 3;`) && csv.includes(';1280,00;'));
+});

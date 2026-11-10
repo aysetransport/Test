@@ -92,6 +92,7 @@ import de.aysetransport.schaden.domain.Datum
 import de.aysetransport.schaden.domain.Geld
 import de.aysetransport.schaden.domain.Textvorlagen
 import de.aysetransport.schaden.domain.Zusammenfassung
+import de.aysetransport.schaden.domain.beifahrerText
 import de.aysetransport.schaden.domain.faelligkeit
 import de.aysetransport.schaden.ui.komponenten.StatusMarke
 import de.aysetransport.schaden.ui.komponenten.farbe
@@ -506,6 +507,7 @@ private fun DatenKarte(fall: Schadensfall) {
                     "Tour" to fall.tour,
                     "Fahrzeug" to fall.fahrzeug,
                     "Fahrer" to fall.fahrer,
+                    "Beifahrer" to beifahrerText(fall).orEmpty(),
                 ),
                 leerText = "Keine Angaben zum Auftrag.",
             )

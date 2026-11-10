@@ -5,12 +5,16 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import de.aysetransport.schaden.AppContainer
+import de.aysetransport.schaden.cloud.CloudZustand
 import de.aysetransport.schaden.data.SchadensfallRepository
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.domain.FallFilter
 import de.aysetransport.schaden.domain.Fallliste
 import de.aysetransport.schaden.domain.Kennzahlen
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -32,8 +36,14 @@ data class UebersichtZustand(
 
 class UebersichtViewModel(
     repository: SchadensfallRepository,
+    cloudZustand: Flow<CloudZustand> = flowOf(CloudZustand()),
     private val uhr: Clock = Clock.systemDefaultZone(),
 ) : ViewModel() {
+
+    /** Hinweis, wenn die Cloud verbunden ist, aber nicht abgeglichen werden kann (z. B. PIN ungültig). */
+    val cloudHinweis: StateFlow<String?> = cloudZustand
+        .map { z -> if (z.verbunden && !z.angemeldet) "Cloud: ${z.fehler.ifEmpty { "PIN erforderlich" }}" else null }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val filter = MutableStateFlow(FallFilter.OFFEN)
     private val suchtext = MutableStateFlow("")
@@ -67,7 +77,7 @@ class UebersichtViewModel(
 
     companion object {
         fun factory(container: AppContainer) = viewModelFactory {
-            initializer { UebersichtViewModel(container.repository) }
+            initializer { UebersichtViewModel(container.repository, container.cloudSpeicher.zustand) }
         }
     }
 }

@@ -80,6 +80,9 @@ class AppAblaufTest {
         rule.onNodeWithTag("feld-beschreibung").performScrollTo().performTextInput("Sofa beim Eintragen beschädigt")
         rule.onNodeWithTag("feld-forderung").performScrollTo().performTextInput("450")
         rule.onNodeWithTag("feld-tour").performScrollTo().performTextInput("Tour 3")
+        rule.onNodeWithTag("feld-fahrer").performScrollTo().performTextInput("M. Yilmaz")
+        rule.onNodeWithTag("feld-beifahrer1").performScrollTo().performTextInput("Ali Kaya")
+        rule.onNodeWithTag("feld-beifahrer2").performScrollTo().performTextInput("Ben Ott")
         rule.onNodeWithText("Speichern").performClick()
 
         // Nach dem Speichern landet man direkt im neuen Fall.
@@ -92,6 +95,7 @@ class AppAblaufTest {
         assertEquals("Anna Becker", gespeichert.kundeName)
         assertEquals("0171 1234567", gespeichert.kundeTelefon)
         assertEquals("Tour 3", gespeichert.tour)
+        assertEquals(listOf("M. Yilmaz", "Ali Kaya", "Ben Ott"), listOf(gespeichert.fahrer, gespeichert.beifahrer1, gespeichert.beifahrer2))
         assertEquals(45_000L, gespeichert.forderungCent)
         assertEquals(FallStatus.NEU, gespeichert.status)
         assertEquals(heute, gespeichert.meldedatum)

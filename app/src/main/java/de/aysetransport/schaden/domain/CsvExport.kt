@@ -14,7 +14,7 @@ object CsvExport {
     private const val BOM = "\uFEFF"
 
     val KOPFZEILE = listOf(
-        "Fall-Nr.", "Status", "Tour", "Fahrzeug", "Fahrer", "Schadensdatum", "Gemeldet am",
+        "Fall-Nr.", "Status", "Tour", "Fahrzeug", "Fahrer", "Beifahrer 1", "Beifahrer 2", "Schadensdatum", "Gemeldet am",
         "Kunde", "Firma", "Telefon", "E-Mail", "Anschrift", "Zeichen des Kunden",
         "Auftraggeber", "Auftrags-Nr.", "Schadensart", "Schadensbeschreibung", "Schadensort",
         "Forderung (EUR)", "Vergleich (EUR)", "Zahlungsfrist", "Schadennr. Versicherung",
@@ -35,6 +35,8 @@ object CsvExport {
                 fall.tour,
                 fall.fahrzeug,
                 fall.fahrer,
+                fall.beifahrer1,
+                fall.beifahrer2,
                 fall.schadensdatum?.let(Datum::format).orEmpty(),
                 fall.meldedatum?.let(Datum::format).orEmpty(),
                 fall.kundeName,

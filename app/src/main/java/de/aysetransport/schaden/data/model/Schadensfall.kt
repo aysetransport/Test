@@ -2,6 +2,7 @@
 
 package de.aysetransport.schaden.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -10,6 +11,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import java.time.Instant
 import java.time.LocalDate
+import java.util.UUID
 
 /**
  * Ein Schadensfall zu einem Transportauftrag.
@@ -19,10 +21,14 @@ import java.time.LocalDate
 @Serializable
 @Entity(
     tableName = "schadensfall",
-    indices = [Index("status"), Index("wiedervorlageAm")],
+    indices = [Index("status"), Index("wiedervorlageAm"), Index(value = ["uuid"], unique = true), Index("syncOffen")],
 )
 data class Schadensfall(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** Geräteübergreifende Kennung für den Abgleich mit der Cloud. */
+    @ColumnInfo(defaultValue = "''") val uuid: String = neueKennung(),
+    /** `true`, solange die letzte Änderung noch nicht in der Cloud angekommen ist. */
+    @ColumnInfo(defaultValue = "1") val syncOffen: Boolean = true,
     /** Laufende interne Nummer, z. B. `2026-003`. Wird beim Anlegen vergeben. */
     val fallnummer: String = "",
 
@@ -41,6 +47,8 @@ data class Schadensfall(
     val tour: String = "",
     val fahrzeug: String = "",
     val fahrer: String = "",
+    @ColumnInfo(defaultValue = "''") val beifahrer1: String = "",
+    @ColumnInfo(defaultValue = "''") val beifahrer2: String = "",
     val schadensort: String = "",
 
     // Schaden
@@ -85,10 +93,12 @@ data class Schadensfall(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("fallId")],
+    indices = [Index("fallId"), Index(value = ["uuid"], unique = true), Index("syncOffen")],
 )
 data class VerlaufEintrag(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(defaultValue = "''") val uuid: String = neueKennung(),
+    @ColumnInfo(defaultValue = "1") val syncOffen: Boolean = true,
     val fallId: Long,
     val zeitpunkt: Instant,
     val typ: VerlaufTyp,
@@ -107,12 +117,19 @@ data class VerlaufEintrag(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("fallId")],
+    indices = [Index("fallId"), Index(value = ["uuid"], unique = true), Index("syncOffen")],
 )
 data class Anlage(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(defaultValue = "''") val uuid: String = neueKennung(),
+    @ColumnInfo(defaultValue = "1") val syncOffen: Boolean = true,
+    /** Die Datei selbst liegt in der Cloud (Eintrag und Inhalt sind dort vollständig). */
+    @ColumnInfo(defaultValue = "0") val inCloud: Boolean = false,
     val fallId: Long,
-    /** Dateiname innerhalb des Fallordners (zufällig vergeben, ohne Pfadanteile). */
+    /**
+     * Dateiname innerhalb des Fallordners (zufällig vergeben, ohne Pfadanteile). Leer, solange
+     * eine auf einem anderen Gerät hinzugefügte Anlage noch nicht heruntergeladen ist.
+     */
     val dateiname: String,
     /** Ursprünglicher Name, wie er dem Nutzer angezeigt wird. */
     val anzeigename: String,
@@ -121,4 +138,18 @@ data class Anlage(
     val hinzugefuegtAm: Instant,
 ) {
     val istBild: Boolean get() = mimeType.startsWith("image/")
+    val istLokalVorhanden: Boolean get() = dateiname.isNotEmpty()
 }
+
+/** Was gelöscht wurde, merkt sich die App, bis die Löschung in der Cloud angekommen ist. */
+@Entity(tableName = "loeschung")
+data class Loeschung(
+    @PrimaryKey val uuid: String,
+    val art: Art,
+    val fallUuid: String,
+    val zeitpunkt: Instant,
+) {
+    enum class Art { FALL, VERLAUF, ANLAGE }
+}
+
+fun neueKennung(): String = UUID.randomUUID().toString()

@@ -16,9 +16,13 @@ object Zusammenfassung {
         val kontakt = listOf(fall.kundeTelefon, fall.kundeEmail).filter { it.isNotBlank() }.joinToString(" · ")
         val tour = buildString {
             append(listOf(fall.tour, fall.fahrzeug).filter { it.isNotBlank() }.joinToString(" / "))
-            if (fall.fahrer.isNotBlank()) {
+            val besatzung = listOfNotNull(
+                fall.fahrer.takeIf { it.isNotBlank() }?.let { "Fahrer: ${it.trim()}" },
+                beifahrerText(fall)?.let { "Beifahrer: $it" },
+            )
+            if (besatzung.isNotEmpty()) {
                 if (isNotEmpty()) append(" ")
-                append("(Fahrer: ${fall.fahrer.trim()})")
+                append("(${besatzung.joinToString(", ")})")
             }
         }
         val auftrag = listOf(fall.auftraggeber, fall.auftragsReferenz).filter { it.isNotBlank() }.joinToString(" · ")
@@ -50,3 +54,7 @@ object Zusammenfassung {
 
     private fun String.oderUnbekannt() = ifBlank { UNBEKANNT }
 }
+
+/** „Ali Kaya, Ben Ott“ – oder `null`, wenn kein Beifahrer eingetragen ist. */
+fun beifahrerText(fall: Schadensfall): String? =
+    listOf(fall.beifahrer1, fall.beifahrer2).map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ").ifEmpty { null }

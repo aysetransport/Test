@@ -108,7 +108,7 @@ class DetailViewModel(
             } catch (e: CancellationException) {
                 throw e // Bildschirm wurde verlassen – kein Fehler
             } catch (e: DateiZuGrossException) {
-                meldungsKanal.send("„${e.anzeigename}“ ist größer als 50 MB und wurde nicht übernommen")
+                meldungsKanal.send("„${e.anzeigename}“ ist größer als 25 MB und wurde nicht übernommen")
             } catch (e: Exception) {
                 meldungsKanal.send("Eine Datei konnte nicht gelesen werden")
             }

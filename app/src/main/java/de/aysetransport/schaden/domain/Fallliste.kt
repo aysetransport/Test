@@ -63,7 +63,7 @@ object Fallliste {
     private fun Schadensfall.passtZu(begriffe: List<String>): Boolean {
         val heuhaufen = listOf(
             fallnummer, kundeName, kundeFirma, kundeTelefon, kundeEmail, kundenAktenzeichen,
-            auftraggeber, auftragsReferenz, tour, fahrzeug, fahrer, schadensort,
+            auftraggeber, auftragsReferenz, tour, fahrzeug, fahrer, beifahrer1, beifahrer2, schadensort,
             beschreibung, versicherungsNummer, status.label,
         ).joinToString("\n").lowercase()
         return begriffe.all { it in heuhaufen }

@@ -15,8 +15,8 @@ android {
         // Bewusst Android 16: Das Laufzeitverhalten dieser Stufe ist getestet. Auf neueren
         // Geräten läuft die App im Kompatibilitätsmodus unverändert weiter.
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     buildTypes {
@@ -40,6 +40,11 @@ android {
     lint {
         // Siehe Kommentar an targetSdk.
         disable += "OldTargetApi"
+    }
+
+    sourceSets {
+        // Für den Migrationstest: die exportierten Datenbankschemata (Robolectric liest die Assets der Debug-Variante)
+        getByName("debug").assets.directories.add("$projectDir/schemas")
     }
 
     testOptions {
@@ -102,6 +107,10 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.ext.junit)
     testImplementation(libs.androidx.work.testing)
+    testImplementation(libs.androidx.room.testing)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.compose.ui.test.junit4)
 }
+
+// Das Datenbankschema entsteht beim Kompilieren (KSP) und wird für den Migrationstest als Asset gebraucht.
+tasks.matching { it.name == "mergeDebugAssets" }.configureEach { dependsOn("kspDebugKotlin") }

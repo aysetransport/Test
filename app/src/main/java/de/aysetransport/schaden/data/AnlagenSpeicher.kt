@@ -26,9 +26,11 @@ class DateiZuGrossException(val anzeigename: String) : IOException("Datei zu gro
  * Verwaltet die Dateien der Anlagen im privaten App-Speicher:
  * `files/anlagen/<fallId>/<zufallsname>.<endung>`.
  */
-class AnlagenSpeicher(private val context: Context) {
-
-    val wurzel: File get() = File(context.filesDir, ORDNER)
+class AnlagenSpeicher(
+    private val context: Context,
+    /** Ablageort der Anlagen; Tests geben jedem simulierten Gerät einen eigenen. */
+    val wurzel: File = File(context.filesDir, ORDNER),
+) {
 
     fun ordner(fallId: Long): File = File(wurzel, fallId.toString())
 
@@ -88,8 +90,15 @@ class AnlagenSpeicher(private val context: Context) {
             }
         }
 
+    /** Legt den Inhalt einer aus der Cloud geladenen Anlage ab und gibt den Dateinamen zurück. */
+    suspend fun speichere(fallId: Long, bytes: ByteArray, anzeigename: String, mimeType: String): String = withContext(Dispatchers.IO) {
+        val ziel = File(ordner(fallId).apply { mkdirs() }, UUID.randomUUID().toString() + endung(anzeigename, mimeType))
+        ziel.writeBytes(bytes)
+        ziel.name
+    }
+
     suspend fun loesche(anlage: Anlage) = withContext(Dispatchers.IO) {
-        datei(anlage).delete()
+        if (anlage.istLokalVorhanden) datei(anlage).delete()
         Unit
     }
 
@@ -121,7 +130,10 @@ class AnlagenSpeicher(private val context: Context) {
         private const val KAMERA_ORDNER = "kamera"
         private const val EXPORT_ORDNER = "export"
 
-        /** Obergrenze je Datei, damit ein versehentlich gewähltes Video nicht den Speicher füllt. */
-        const val MAX_BYTES = 50L * 1024 * 1024
+        /**
+         * Obergrenze je Datei, damit ein versehentlich gewähltes Video nicht den Speicher füllt.
+         * Entspricht der Grenze des Cloud-Skripts.
+         */
+        const val MAX_BYTES = 25L * 1024 * 1024
     }
 }
