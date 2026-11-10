@@ -8,6 +8,8 @@ import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
 import de.aysetransport.schaden.cloud.CloudSpeicher
 import de.aysetransport.schaden.data.EinstellungenSpeicher
+import de.aysetransport.schaden.mail.MailSpeicher
+import de.aysetransport.schaden.mail.PasswortTresor
 import de.aysetransport.schaden.data.db.SchadensfallDatenbank
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +47,11 @@ class TestContainer(context: Context) : AppContainer(context) {
         CloudSpeicher(PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO + SupervisorJob())) { datei })
     }
 
+    override val mailSpeicher: MailSpeicher by lazy {
+        val datei = File(appContext.cacheDir, "mail-${UUID.randomUUID()}.preferences_pb")
+        MailSpeicher(PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO + SupervisorJob())) { datei }, KlartextTresor)
+    }
+
     /** Tests stoßen den Abgleich selbst an. */
     override fun nachAenderung() = Unit
 
@@ -54,4 +61,10 @@ class TestContainer(context: Context) : AppContainer(context) {
             PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO + SupervisorJob())) { datei },
         )
     }
+}
+
+/** Robolectric kennt den Android-Schlüsselspeicher nicht – in Tests bleibt das Passwort unverschlüsselt. */
+object KlartextTresor : PasswortTresor {
+    override fun verschluessele(klartext: String) = "klar:$klartext"
+    override fun entschluessele(geheim: String) = geheim.removePrefix("klar:")
 }

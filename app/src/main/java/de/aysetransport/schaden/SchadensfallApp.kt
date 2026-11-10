@@ -3,6 +3,7 @@ package de.aysetransport.schaden
 import android.app.Application
 import de.aysetransport.schaden.cloud.CloudPlaner
 import de.aysetransport.schaden.erinnerung.Benachrichtigungen
+import de.aysetransport.schaden.mail.MailPlaner
 import de.aysetransport.schaden.erinnerung.ErinnerungsPlaner
 import kotlinx.coroutines.launch
 
@@ -33,6 +34,11 @@ open class SchadensfallApp : Application() {
                 einstellungen.erinnerungUhrzeit,
                 bestehendenPlanErsetzen = false,
             )
+        }
+        container.appScope.launch {
+            val mitKonto = container.mailSpeicher.aktuell().konfig != null
+            MailPlaner.regelmaessig(this@SchadensfallApp, mitKonto)
+            if (mitKonto) MailPlaner.jetzt(this@SchadensfallApp)
         }
         container.appScope.launch {
             val cloud = container.cloudSpeicher.aktuell()

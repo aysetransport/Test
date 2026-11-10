@@ -15,6 +15,7 @@ import de.aysetransport.schaden.MainActivity
 import de.aysetransport.schaden.R
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.domain.faelligkeit
+import de.aysetransport.schaden.mail.NeueMail
 import java.time.LocalDate
 
 object Benachrichtigungen {
@@ -23,6 +24,7 @@ object Benachrichtigungen {
     const val EXTRA_FALL_ID = "de.aysetransport.schaden.FALL_ID"
     const val EXTRA_ZEIGE_FAELLIGE = "de.aysetransport.schaden.ZEIGE_FAELLIGE"
     private const val BENACHRICHTIGUNG_ID = 1001
+    private const val MAIL_ID = 1002
     private const val MAX_ZEILEN = 6
 
     fun kanalAnlegen(context: Context) {
@@ -34,6 +36,35 @@ object Benachrichtigungen {
             description = context.getString(R.string.kanal_wiedervorlage_beschreibung)
         }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(kanal)
+    }
+
+    /** Neue E-Mails zu Fällen: bei einer Mail direkt in den Fall, sonst in die Liste „Fällig“. */
+    fun zeigeNeueMails(context: Context, mails: List<NeueMail>): Boolean {
+        if (mails.isEmpty() || !duerfenAngezeigtWerden(context)) return false
+        val faelle = mails.map { it.fall.id }.distinct()
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            if (faelle.size == 1) putExtra(EXTRA_FALL_ID, faelle.single()) else putExtra(EXTRA_ZEIGE_FAELLIGE, true)
+        }
+        val antippen = PendingIntent.getActivity(context, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val titel = if (mails.size == 1) "Neue E-Mail zu Fall ${mails.single().fall.fallnummer}" else "${mails.size} neue E-Mails zu Schadensfällen"
+        val stil = NotificationCompat.InboxStyle().also { s -> mails.take(MAX_ZEILEN).forEach { s.addLine("${it.fall.fallnummer} · ${it.von}: ${it.betreff}") } }
+        val n = NotificationCompat.Builder(context, KANAL_ID)
+            .setSmallIcon(R.drawable.ic_benachrichtigung)
+            .setColor(ContextCompat.getColor(context, R.color.akzent))
+            .setContentTitle(titel)
+            .setContentText(mails.first().let { "${it.von}: ${it.betreff}" })
+            .setStyle(stil)
+            .setContentIntent(antippen)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_EMAIL)
+            .build()
+        return try {
+            NotificationManagerCompat.from(context).notify(MAIL_ID, n)
+            true
+        } catch (e: SecurityException) {
+            false
+        }
     }
 
     fun duerfenAngezeigtWerden(context: Context): Boolean {

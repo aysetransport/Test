@@ -117,8 +117,11 @@ fun DetailScreen(
     viewModel: DetailViewModel,
     onZurueck: () -> Unit,
     onBearbeiten: () -> Unit,
+    /** Öffnet das Schreibfenster: Vorlage oder Empfänger (ohne Vorlage) oder Antwort auf einen Verlaufseintrag. */
+    onMailSchreiben: (vorlage: String, empfaenger: String, antwortAuf: String) -> Unit = { _, _, _ -> },
 ) {
     val zustand by viewModel.zustand.collectAsStateWithLifecycle()
+    val mailEingerichtet by viewModel.mailEingerichtet.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var dialog by remember { mutableStateOf<OffenerDialog?>(null) }
@@ -176,6 +179,16 @@ fun DetailScreen(
                                     )
                                 },
                             )
+                            if (mailEingerichtet) {
+                                DropdownMenuItem(
+                                    text = { Text(if (viewModel.ruftAb) "Postfach wird abgerufen …" else "Postfach abrufen") },
+                                    enabled = !viewModel.ruftAb,
+                                    onClick = {
+                                        menueOffen = false
+                                        viewModel.postfachAbrufen()
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Fall löschen") },
                                 onClick = {
@@ -263,7 +276,15 @@ fun DetailScreen(
                 VerlaufKopf(onNotiz = { viewModel.verlaufHinzufuegen(VerlaufTyp.NOTIZ, it) })
             }
             items(zustand.verlauf, key = { "verlauf-${it.id}" }) { eintrag ->
-                VerlaufZeile(eintrag, onLangerTipp = { dialog = OffenerDialog.VerlaufLoeschen(eintrag) })
+                VerlaufZeile(
+                    eintrag,
+                    onLangerTipp = { dialog = OffenerDialog.VerlaufLoeschen(eintrag) },
+                    onAntworten = if (mailEingerichtet && eintrag.typ == VerlaufTyp.EMAIL_EINGANG) {
+                        { onMailSchreiben("", "", eintrag.uuid) }
+                    } else {
+                        null
+                    },
+                )
             }
         }
     }
@@ -305,7 +326,21 @@ fun DetailScreen(
                     context.waehle(e.telefon(fall), viewModel::melde)
                 },
             )
-            OffenerDialog.EmailVorlage -> VorlagenDialog(
+            OffenerDialog.EmailVorlage -> if (mailEingerichtet) {
+                VorlagenDialog(
+                    titel = "E-Mail schreiben",
+                    fehlt = { e -> if (e != Empfaenger.DRITTE && e.email(fall).isEmpty()) "keine E-Mail-Adresse hinterlegt" else null },
+                    onAbbrechen = { dialog = null },
+                    onOhneVorlage = { e ->
+                        dialog = null
+                        onMailSchreiben("", e.name, "")
+                    },
+                    onAuswahl = { vorlage ->
+                        dialog = null
+                        onMailSchreiben(vorlage.name, "", "")
+                    },
+                )
+            } else VorlagenDialog(
                 titel = "E-Mail vorbereiten",
                 fehlt = { e -> if (e != Empfaenger.DRITTE && e.email(fall).isEmpty()) "keine E-Mail-Adresse hinterlegt" else null },
                 onAbbrechen = { dialog = null },
@@ -710,7 +745,7 @@ private fun VerlaufKopf(onNotiz: (String) -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun VerlaufZeile(eintrag: VerlaufEintrag, onLangerTipp: () -> Unit) {
+private fun VerlaufZeile(eintrag: VerlaufEintrag, onLangerTipp: () -> Unit, onAntworten: (() -> Unit)? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -740,6 +775,9 @@ private fun VerlaufZeile(eintrag: VerlaufEintrag, onLangerTipp: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(eintrag.text, style = MaterialTheme.typography.bodyMedium)
+            if (onAntworten != null) {
+                TextButton(onClick = onAntworten, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("Antworten") }
+            }
         }
     }
 }
@@ -747,7 +785,7 @@ private fun VerlaufZeile(eintrag: VerlaufEintrag, onLangerTipp: () -> Unit) {
 @Composable
 private fun VerlaufTyp.symbol(): Painter = when (this) {
     VerlaufTyp.ANRUF -> rememberVectorPainter(Icons.Filled.Call)
-    VerlaufTyp.EMAIL -> rememberVectorPainter(Icons.Filled.Email)
+    VerlaufTyp.EMAIL, VerlaufTyp.EMAIL_EINGANG, VerlaufTyp.EMAIL_AUSGANG -> rememberVectorPainter(Icons.Filled.Email)
     VerlaufTyp.NACHRICHT -> painterResource(R.drawable.ic_nachricht)
     VerlaufTyp.BRIEF -> painterResource(R.drawable.ic_dokument)
     VerlaufTyp.STATUS -> painterResource(R.drawable.ic_flagge)

@@ -18,7 +18,14 @@ import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
 import de.aysetransport.schaden.data.model.VerlaufTyp
 import kotlinx.coroutines.CancellationException
+import de.aysetransport.schaden.mail.MailPostfach
+import de.aysetransport.schaden.mail.MailZustand
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -48,6 +55,8 @@ class DetailViewModel(
     private val repository: SchadensfallRepository,
     einstellungenSpeicher: EinstellungenSpeicher,
     private val anlagenSpeicher: AnlagenSpeicher,
+    mailZustand: Flow<MailZustand> = flowOf(MailZustand()),
+    private val postfach: MailPostfach? = null,
     private val uhr: Clock = Clock.systemDefaultZone(),
 ) : ViewModel() {
 
@@ -67,6 +76,35 @@ class DetailViewModel(
 
     /** Kurze Rückmeldungen für die Snackbar. */
     val meldungen: Flow<String> = meldungsKanal.receiveAsFlow()
+
+    /** Mit eingerichtetem E-Mail-Konto wird in der App geschrieben, sonst in der Mail-App des Geräts. */
+    val mailEingerichtet: StateFlow<Boolean> = mailZustand.map { it.konfig != null }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    var ruftAb by mutableStateOf(false)
+        private set
+
+    fun postfachAbrufen() {
+        if (ruftAb) return
+        ruftAb = true
+        viewModelScope.launch {
+            try {
+                val neu = postfach?.abrufen().orEmpty()
+                val hier = neu.count { it.fall.id == fallId }
+                meldungsKanal.send(
+                    when {
+                        neu.isEmpty() -> "Keine neuen E-Mails zu Fällen"
+                        hier == neu.size -> if (hier == 1) "1 neue E-Mail zu diesem Fall" else "$hier neue E-Mails zu diesem Fall"
+                        else -> "${neu.size} neue E-Mails, davon $hier zu diesem Fall"
+                    },
+                )
+            } catch (e: java.io.IOException) {
+                meldungsKanal.send(e.message ?: "Postfach nicht erreichbar")
+            } finally {
+                ruftAb = false
+            }
+        }
+    }
 
     fun aktualisiereHeute() {
         heute.value = LocalDate.now(uhr)
@@ -156,7 +194,10 @@ class DetailViewModel(
     companion object {
         fun factory(container: AppContainer, fallId: Long) = viewModelFactory {
             initializer {
-                DetailViewModel(fallId, container.repository, container.einstellungen, container.anlagenSpeicher)
+                DetailViewModel(
+                    fallId, container.repository, container.einstellungen, container.anlagenSpeicher,
+                    container.mailSpeicher.zustand, container.postfach,
+                )
             }
         }
     }

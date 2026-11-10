@@ -15,8 +15,8 @@ android {
         // Bewusst Android 16: Das Laufzeitverhalten dieser Stufe ist getestet. Auf neueren
         // Geräten läuft die App im Kompatibilitätsmodus unverändert weiter.
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
 
         // Vorgabe in den Einstellungen; die PIN wird beim Verbinden abgefragt.
         buildConfigField("String", "CLOUD_URL", "\"https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwhDnWP7p9XeoIz8NisZR7NApIj-Xfgd_lP5j8KjPE11OFbQuA/exec\"")
@@ -33,6 +33,14 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    packaging {
+        resources {
+            // Lizenz- und Indexdateien der Mail-Bibliotheken doppeln sich
+            excludes += setOf("META-INF/LICENSE.md", "META-INF/NOTICE.md", "META-INF/DEPENDENCIES", "META-INF/*.SF")
+            pickFirsts += setOf("META-INF/javamail.providers", "META-INF/javamail.default.providers", "META-INF/mailcap", "META-INF/javamail.charset.map", "META-INF/gfprobe-provider.xml")
+        }
     }
 
     buildFeatures {
@@ -103,6 +111,10 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.serialization.json)
+    // E-Mail: IMAP und SMTP direkt zum Postfach
+    implementation(libs.jakarta.mail.api)
+    implementation(libs.angus.mail)
+    implementation(libs.angus.activation)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -113,6 +125,7 @@ dependencies {
     testImplementation(libs.androidx.test.ext.junit)
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.androidx.room.testing)
+    testImplementation(libs.greenmail)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.compose.ui.test.junit4)
 }

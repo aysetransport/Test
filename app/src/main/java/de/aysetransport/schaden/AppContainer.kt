@@ -5,6 +5,9 @@ import de.aysetransport.schaden.cloud.CloudAbgleich
 import de.aysetransport.schaden.cloud.CloudPlaner
 import de.aysetransport.schaden.cloud.CloudSpeicher
 import de.aysetransport.schaden.data.AnlagenSpeicher
+import de.aysetransport.schaden.mail.MailDienst
+import de.aysetransport.schaden.mail.MailPostfach
+import de.aysetransport.schaden.mail.MailSpeicher
 import de.aysetransport.schaden.data.BackupManager
 import de.aysetransport.schaden.data.EinstellungenSpeicher
 import de.aysetransport.schaden.data.SchadensfallRepository
@@ -38,6 +41,12 @@ open class AppContainer(context: Context) {
     open val cloudSpeicher: CloudSpeicher by lazy { CloudSpeicher(appContext) }
 
     val cloud: CloudAbgleich by lazy { CloudAbgleich(datenbank, anlagenSpeicher, cloudSpeicher) }
+
+    open val mailSpeicher: MailSpeicher by lazy { MailSpeicher(appContext) }
+
+    open val mailDienst: MailDienst by lazy { MailDienst() }
+
+    val postfach: MailPostfach by lazy { MailPostfach(datenbank, repository, mailSpeicher, mailDienst, appContext.cacheDir) }
 
     /** Nach jeder Änderung den Abgleich anstoßen – sofern eine Cloud verbunden ist. */
     protected open fun nachAenderung() {

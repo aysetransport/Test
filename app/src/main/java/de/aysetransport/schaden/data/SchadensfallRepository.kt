@@ -251,6 +251,9 @@ class SchadensfallRepository(
         )
     }
 
+    /** Für Änderungen außerhalb des Repositorys (z. B. E-Mails): Abgleich mit der Cloud anstoßen. */
+    fun angestossen() = nachAenderung()
+
     /** Führt eine Änderung in einer Transaktion aus und stößt danach den Abgleich an. */
     private suspend fun <T> aenderung(block: suspend () -> T): T = db.withTransaction { block() }.also { nachAenderung() }
 

@@ -284,6 +284,8 @@ fun VorlagenDialog(
     /** Hinweis je Empfänger, z. B. „keine E-Mail-Adresse hinterlegt“, oder `null`. */
     fehlt: (Empfaenger) -> String? = { null },
     onAbbrechen: () -> Unit,
+    /** Wenn gesetzt, gibt es je Empfänger zusätzlich „Ohne Vorlage“. */
+    onOhneVorlage: ((Empfaenger) -> Unit)? = null,
     onAuswahl: (Vorlage) -> Unit,
 ) {
     AlertDialog(
@@ -306,6 +308,16 @@ fun VorlagenDialog(
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
                     )
+                    if (onOhneVorlage != null) {
+                        ListItem(
+                            headlineContent = { Text("Ohne Vorlage") },
+                            supportingContent = { Text("Nur Anrede und Grußformel") },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier
+                                .clickable { onOhneVorlage(empfaenger) }
+                                .testTag("ohne-vorlage-${empfaenger.name}"),
+                        )
+                    }
                     Vorlage.entries.filter { it.empfaenger == empfaenger }.forEach { vorlage ->
                         ListItem(
                             headlineContent = { Text(vorlage.titel) },

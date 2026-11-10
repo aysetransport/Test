@@ -9,6 +9,7 @@ import androidx.room.Update
 import de.aysetransport.schaden.data.model.Anlage
 import de.aysetransport.schaden.data.model.AuftraggeberEintrag
 import de.aysetransport.schaden.data.model.Loeschung
+import de.aysetransport.schaden.data.model.MailNachricht
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
 import kotlinx.coroutines.flow.Flow
@@ -195,4 +196,28 @@ interface SchadensfallDao {
 
     @Query("UPDATE auftraggeber SET syncOffen = 1")
     suspend fun alleAuftraggeberOffen()
+
+    // --- E-Mails ---
+
+    @Insert
+    suspend fun einfuegen(mail: MailNachricht): Long
+
+    @Query("SELECT * FROM mail WHERE messageId = :messageId")
+    suspend fun mailPerMessageId(messageId: String): MailNachricht?
+
+    @Query("SELECT * FROM mail WHERE verlaufUuid = :uuid")
+    suspend fun mailZuVerlauf(uuid: String): MailNachricht?
+
+    @Query("SELECT * FROM mail WHERE fallId = :fallId ORDER BY zeitpunkt DESC")
+    fun beobachteMails(fallId: Long): Flow<List<MailNachricht>>
+
+    /** Offene Fälle, bei denen die Adresse als Geschädigter oder Auftraggeber eingetragen ist. */
+    @Query(
+        "SELECT * FROM schadensfall WHERE status NOT IN ('ERLEDIGT', 'ABGELEHNT') AND " +
+            "(lower(trim(kundeEmail)) = lower(:adresse) OR lower(trim(auftraggeberEmail)) = lower(:adresse))",
+    )
+    suspend fun offeneFaellePerEmail(adresse: String): List<Schadensfall>
+
+    @Query("SELECT * FROM schadensfall WHERE fallnummer = :fallnummer")
+    suspend fun fallPerNummer(fallnummer: String): Schadensfall?
 }

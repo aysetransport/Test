@@ -137,18 +137,31 @@ object Textvorlagen {
         return Nachricht(betreff = betreff(vorlage, fall), text = text)
     }
 
-    private fun betreff(vorlage: Vorlage, fall: Schadensfall): String {
-        val was = when (vorlage.empfaenger) {
+    /** Nur Anrede und Grußformel – für eine Mail ohne Vorlage. */
+    fun ohneVorlage(empfaenger: Empfaenger, fall: Schadensfall, absender: Absender): Nachricht {
+        val ansprechpartner = when (empfaenger) {
+            Empfaenger.GESCHAEDIGTER -> fall.kundeName
+            Empfaenger.AUFTRAGGEBER -> fall.auftraggeberKontakt
+            Empfaenger.DRITTE -> ""
+        }
+        val anrede = if (ansprechpartner.isNotBlank()) "Guten Tag ${ansprechpartner.trim()}," else "Sehr geehrte Damen und Herren,"
+        return Nachricht(betreff = betreff(empfaenger, null, fall), text = "$anrede\n\n\n\n${grussformel(absender)}")
+    }
+
+    private fun betreff(vorlage: Vorlage, fall: Schadensfall): String = betreff(vorlage.empfaenger, vorlage, fall)
+
+    private fun betreff(empfaenger: Empfaenger, vorlage: Vorlage?, fall: Schadensfall): String {
+        val was = when (empfaenger) {
             Empfaenger.GESCHAEDIGTER -> "Ihre Schadensmeldung" + ((fall.meldedatum ?: fall.schadensdatum)?.let { " vom ${Datum.format(it)}" } ?: "")
             Empfaenger.AUFTRAGGEBER -> "Schadensfall" + (fall.schadensdatum?.let { " vom ${Datum.format(it)}" } ?: "")
             Empfaenger.DRITTE -> "Sachstandsanfrage Schadensfall" + (fall.schadensdatum?.let { " vom ${Datum.format(it)}" } ?: "")
         }
-        val fremdesZeichen = when (vorlage.empfaenger) {
+        val fremdesZeichen = when (empfaenger) {
             Empfaenger.GESCHAEDIGTER -> fall.kundenAktenzeichen.takeIf { it.isNotBlank() }?.let { "Ihr Zeichen ${it.trim()}" }
             Empfaenger.AUFTRAGGEBER -> fall.auftragsReferenz.takeIf { it.isNotBlank() }?.let { "Ihr Auftrag ${it.trim()}" }
             Empfaenger.DRITTE -> fall.versicherungsNummer.ifBlank { fall.kundenAktenzeichen }.takeIf { it.isNotBlank() }?.let { "Ihr Zeichen ${it.trim()}" }
         }
-        val titel = if (vorlage == Vorlage.SACHSTANDSANFRAGE) null else vorlage.titel
+        val titel = if (vorlage == null || vorlage == Vorlage.SACHSTANDSANFRAGE) null else vorlage.titel
         return listOfNotNull(was, titel, fremdesZeichen, fall.fallnummer.takeIf { it.isNotBlank() }?.let { "unser Vorgang $it" })
             .joinToString(" – ")
     }

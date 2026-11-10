@@ -42,6 +42,8 @@ enum class VerlaufTyp(val label: String) {
     NOTIZ("Notiz"),
     ANRUF("Telefonat"),
     EMAIL("E-Mail"),
+    EMAIL_EINGANG("E-Mail erhalten"),
+    EMAIL_AUSGANG("E-Mail gesendet"),
     NACHRICHT("Nachricht"),
     BRIEF("Schreiben"),
     STATUS("Statusänderung"),

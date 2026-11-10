@@ -159,6 +159,30 @@ data class AuftraggeberEintrag(
     val syncOffen: Boolean = true,
 )
 
+/**
+ * Eine gesendete oder empfangene E-Mail zu einem Fall. Bleibt auf dem Gerät (für „Antworten“ und
+ * damit eine Mail nicht doppelt übernommen wird); lesbar für alle Geräte ist sie über den Verlauf.
+ */
+@Entity(
+    tableName = "mail",
+    foreignKeys = [ForeignKey(entity = Schadensfall::class, parentColumns = ["id"], childColumns = ["fallId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index("fallId"), Index(value = ["messageId"], unique = true)],
+)
+data class MailNachricht(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val fallId: Long,
+    val eingehend: Boolean,
+    /** Message-ID der Mail, ohne spitze Klammern. */
+    val messageId: String,
+    val antwortAuf: String = "",
+    val von: String,
+    val an: String,
+    val betreff: String,
+    val text: String,
+    val zeitpunkt: Instant,
+    val verlaufUuid: String = "",
+)
+
 /** Was gelöscht wurde, merkt sich die App, bis die Löschung in der Cloud angekommen ist. */
 @Entity(tableName = "loeschung")
 data class Loeschung(

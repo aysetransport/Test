@@ -23,12 +23,18 @@ import de.aysetransport.schaden.data.Einstellungen
 import de.aysetransport.schaden.data.EinstellungenSpeicher
 import de.aysetransport.schaden.data.SchadensfallRepository
 import de.aysetransport.schaden.domain.CsvExport
+import de.aysetransport.schaden.mail.MailKonfig
+import de.aysetransport.schaden.mail.MailPlaner
+import de.aysetransport.schaden.mail.MailPostfach
+import de.aysetransport.schaden.mail.MailSpeicher
+import de.aysetransport.schaden.mail.MailZustand
 import de.aysetransport.schaden.erinnerung.ErinnerungsPlaner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -45,7 +51,61 @@ class EinstellungenViewModel(
     private val cloud: CloudAbgleich,
     private val cloudSpeicher: CloudSpeicher,
     offeneAenderungen: Flow<Int>,
+    private val mailSpeicher: MailSpeicher? = null,
+    private val postfach: MailPostfach? = null,
 ) : ViewModel() {
+
+    val mailZustand: StateFlow<MailZustand?> = (mailSpeicher?.zustand ?: flowOf(MailZustand()))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    var mailBeschaeftigt by mutableStateOf(false)
+        private set
+    var mailFehler by mutableStateOf<String?>(null)
+        private set
+
+    /** Prüft die Zugangsdaten am Postfach und speichert das Konto. */
+    fun mailEinrichten(konfig: MailKonfig, passwort: String, danach: () -> Unit) {
+        val p = postfach ?: return
+        if (mailBeschaeftigt) return
+        mailBeschaeftigt = true
+        mailFehler = null
+        viewModelScope.launch {
+            try {
+                p.einrichten(konfig, passwort)
+                MailPlaner.regelmaessig(appContext, true)
+                MailPlaner.jetzt(appContext)
+                meldungsKanal.send("E-Mail-Konto verbunden")
+                danach()
+            } catch (e: IOException) {
+                mailFehler = e.message ?: "Keine Verbindung zum Postfach"
+            } finally {
+                mailBeschaeftigt = false
+            }
+        }
+    }
+
+    fun mailAbrufen() {
+        val p = postfach ?: return
+        if (mailBeschaeftigt) return
+        mailBeschaeftigt = true
+        viewModelScope.launch {
+            try {
+                val neu = p.abrufen()
+                meldungsKanal.send(if (neu.isEmpty()) "Keine neuen E-Mails zu Fällen" else "${neu.size} neue E-Mail(s) den Fällen zugeordnet")
+            } catch (e: IOException) {
+                meldungsKanal.send(e.message ?: "Postfach nicht erreichbar")
+            } finally {
+                mailBeschaeftigt = false
+            }
+        }
+    }
+
+    /** Entfernt Konto und Passwort vom Gerät. Bereits zugeordnete Mails bleiben im Verlauf. */
+    fun mailTrennen() = viewModelScope.launch {
+        mailSpeicher?.trenne()
+        MailPlaner.regelmaessig(appContext, false)
+        meldungsKanal.send("E-Mail-Konto entfernt")
+    }
 
     val cloudZustand: StateFlow<CloudZustand?> = cloudSpeicher.zustand
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -242,6 +302,8 @@ class EinstellungenViewModel(
                     cloud = container.cloud,
                     cloudSpeicher = container.cloudSpeicher,
                     offeneAenderungen = container.datenbank.dao().beobachteOffeneAenderungen(),
+                    mailSpeicher = container.mailSpeicher,
+                    postfach = container.postfach,
                 )
             }
         }

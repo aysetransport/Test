@@ -43,6 +43,27 @@ Die Bilder zeigen erfundene Beispieldaten.
 Die Textvorlagen sind bewusst **haftungsneutral**: Sie erkennen keine Haftung an und lehnen
 sie nicht ab. Ablehnungs- und Vergleichsschreiben entstehen weiterhin außerhalb der App.
 
+## E-Mail in der App
+
+Unter **Einstellungen → E-Mail** wird das Postfach eingerichtet (Vorlagen für IONOS, STRATO, GMX,
+WEB.DE und Telekom, sonst eigene Server-Angaben). Die App spricht direkt per IMAP und SMTP mit
+dem Postfach; das Passwort liegt verschlüsselt im Android-Schlüsselspeicher und verlässt das Gerät nicht.
+
+- **Senden:** Im Fall auf *E-Mail* tippen, Vorlage oder „Ohne Vorlage“ für Geschädigten,
+  Auftraggeber oder Dritte wählen, im Schreibfenster anpassen, Anlagen des Falls anhängen.
+  Der Betreff bekommt die Fallnummer, z. B. `[Fall 2026-001]`. Eine Kopie landet im Ordner
+  „Gesendet“ des Postfachs.
+- **Empfangen:** Alle 15 Minuten, beim App-Start und über *Postfach abrufen* im Fall-Menü. Eine
+  Mail wird einem Fall zugeordnet, wenn ihr Betreff die Fallnummer trägt, wenn sie auf eine Mail
+  des Falls antwortet oder wenn ihr Absender bei genau einem offenen Fall als Geschädigter oder
+  Auftraggeber hinterlegt ist. Alle anderen Mails bleiben unberührt; im Postfach wird nichts
+  verändert oder als gelesen markiert. Beim ersten Abruf werden die letzten 30 Tage durchsucht.
+- Zugeordnete Mails stehen im Verlauf des Falls (mit *Antworten*), Anhänge werden zu Anlagen,
+  die Wiedervorlage rückt auf heute, und eine Benachrichtigung weist darauf hin.
+- Über den Verlauf sind die Mails auch in der Web-App lesbar; senden lässt sich nur aus der
+  Android-App.
+- Ohne eingerichtetes Postfach öffnet *E-Mail* wie bisher die Mail-App des Geräts.
+
 ## Cloud einrichten (einmalig)
 
 Die Fälle liegen dann in Google Drive im Ordner `Schadensfaelle` (`daten.json`, Anlagen und eine
@@ -167,6 +188,9 @@ Bildschirmfotos landen in `app/build/outputs/roborazzi/`.
   verzögern. Manche Hersteller beenden Hintergrundarbeit sehr streng – dann die App in den
   Akku-Einstellungen von der Optimierung ausnehmen. In der Übersicht stehen fällige Fälle
   unabhängig davon immer oben.
+- E-Mail: Manche Anbieter verlangen für IMAP/SMTP ein eigenes App-Passwort oder müssen den
+  Zugriff erst in ihren Einstellungen freischalten. Microsoft-/Outlook-Konten mit
+  Pflicht-Anmeldung über OAuth werden nicht unterstützt.
 - Eine PIN für alle: Es gibt keine einzelnen Benutzerkonten, und im Verlauf steht nicht, wer
   eine Änderung gemacht hat.
 - Ändern zwei Geräte denselben Fall fast gleichzeitig, gewinnt der ganze spätere Stand – Felder

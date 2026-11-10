@@ -64,6 +64,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import de.aysetransport.schaden.BuildConfig
 import de.aysetransport.schaden.data.Einstellungen
+import de.aysetransport.schaden.mail.Sicherheit
+import de.aysetransport.schaden.mail.MailServer
+import de.aysetransport.schaden.mail.MailKonfig
+import de.aysetransport.schaden.mail.Anbieter
 import de.aysetransport.schaden.domain.Datum
 import de.aysetransport.schaden.erinnerung.Benachrichtigungen
 import java.time.Instant
@@ -183,6 +187,8 @@ fun EinstellungenScreen(viewModel: EinstellungenViewModel, onZurueck: () -> Unit
             Bereich("Auftraggeber", "Gespeicherte Auftraggeber lassen sich im Fall-Formular auswählen, statt sie einzutippen.") {
                 OutlinedButton(onClick = onAuftraggeber, modifier = Modifier.fillMaxWidth()) { Text("Auftraggeber verwalten") }
             }
+
+            MailBereich(viewModel)
 
             CloudBereich(viewModel)
 
@@ -438,6 +444,146 @@ private fun PinDialog(
                 onClick = { onBestaetigen(pin, if (abfrage.neu) wiederholung else null) },
                 enabled = pin.isNotEmpty() && !beschaeftigt,
             ) { Text(if (abfrage.neu) "Festlegen" else "Anmelden") }
+        },
+        dismissButton = { TextButton(onClick = onAbbrechen) { Text("Abbrechen") } },
+    )
+}
+
+@Composable
+private fun MailBereich(viewModel: EinstellungenViewModel) {
+    val zustand by viewModel.mailZustand.collectAsStateWithLifecycle()
+    val z = zustand ?: return
+    var einrichten by rememberSaveable { mutableStateOf(false) }
+    val konfig = z.konfig
+    Bereich(
+        "E-Mail",
+        if (konfig == null) {
+            "Mit deinem Postfach schreibst und empfängst du die Mails zu den Fällen direkt in der App. Antworten werden über die Fallnummer im Betreff automatisch dem Fall zugeordnet."
+        } else {
+            "Mails zu den Fällen werden alle 15 Minuten abgerufen und im Verlauf des Falls abgelegt; Anhänge werden zu Anlagen."
+        },
+    ) {
+        if (konfig == null) {
+            Button(onClick = { einrichten = true }) { Text("E-Mail-Konto einrichten") }
+        } else {
+            Text(konfig.adresse, style = MaterialTheme.typography.bodyLarge)
+            val status = when {
+                viewModel.mailBeschaeftigt -> "Wird abgerufen …"
+                z.fehler.isNotEmpty() -> "Letzter Abruf fehlgeschlagen: ${z.fehler}"
+                z.letzterAbruf > 0 -> "Zuletzt abgerufen ${Datum.formatMitUhrzeit(Instant.ofEpochMilli(z.letzterAbruf))}"
+                else -> "Noch nicht abgerufen"
+            }
+            Text(status, style = MaterialTheme.typography.bodySmall, color = if (z.fehler.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = viewModel::mailAbrufen, enabled = !viewModel.mailBeschaeftigt) { Text("Jetzt abrufen") }
+                OutlinedButton(onClick = { einrichten = true }) { Text("Ändern") }
+                OutlinedButton(onClick = { viewModel.mailTrennen() }) { Text("Entfernen") }
+            }
+        }
+    }
+    if (einrichten) {
+        MailKontoDialog(
+            vorher = konfig,
+            absendername = viewModel.einstellungen?.firma.orEmpty(),
+            fehler = viewModel.mailFehler,
+            beschaeftigt = viewModel.mailBeschaeftigt,
+            onAbbrechen = { einrichten = false },
+            onVerbinden = { k, p -> viewModel.mailEinrichten(k, p) { einrichten = false } },
+        )
+    }
+}
+
+@Composable
+private fun MailKontoDialog(
+    vorher: MailKonfig?,
+    absendername: String,
+    fehler: String?,
+    beschaeftigt: Boolean,
+    onAbbrechen: () -> Unit,
+    onVerbinden: (MailKonfig, String) -> Unit,
+) {
+    val start = vorher?.server
+    val vorgabe = Anbieter.entries.firstOrNull { it.server != null && it.server.imapHost == start?.imapHost } ?: if (start != null) Anbieter.EIGENER else Anbieter.IONOS
+    var anbieter by rememberSaveable { mutableStateOf(vorgabe) }
+    var adresse by rememberSaveable { mutableStateOf(vorher?.adresse.orEmpty()) }
+    var benutzer by rememberSaveable { mutableStateOf(vorher?.benutzer.orEmpty()) }
+    var passwort by rememberSaveable { mutableStateOf("") }
+    var imapHost by rememberSaveable { mutableStateOf(start?.imapHost.orEmpty()) }
+    var imapPort by rememberSaveable { mutableStateOf((start?.imapPort ?: 993).toString()) }
+    var smtpHost by rememberSaveable { mutableStateOf(start?.smtpHost.orEmpty()) }
+    var smtpPort by rememberSaveable { mutableStateOf((start?.smtpPort ?: 465).toString()) }
+    var smtpStarttls by rememberSaveable { mutableStateOf(start?.smtpSicherheit == Sicherheit.STARTTLS) }
+
+    val server = anbieter.server ?: MailServer(
+        imapHost = imapHost.trim(),
+        imapPort = imapPort.toIntOrNull() ?: 993,
+        smtpHost = smtpHost.trim(),
+        smtpPort = smtpPort.toIntOrNull() ?: 465,
+        smtpSicherheit = if (smtpStarttls) Sicherheit.STARTTLS else Sicherheit.SSL,
+    )
+    val gueltig = Regex("[^@\\s]+@[^@\\s]+\\.[^@\\s]+").matches(adresse.trim()) && passwort.isNotEmpty() &&
+        server.imapHost.isNotBlank() && server.smtpHost.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onAbbrechen,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.padding(horizontal = 24.dp).widthIn(max = 560.dp).fillMaxWidth(),
+        title = { Text("E-Mail-Konto") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Anbieter.entries.forEach { a ->
+                        FilterChip(selected = anbieter == a, onClick = { anbieter = a }, label = { Text(a.label) })
+                    }
+                }
+                OutlinedTextField(
+                    value = adresse, onValueChange = { adresse = it }, label = { Text("E-Mail-Adresse") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth().testTag("mail-adresse"),
+                )
+                OutlinedTextField(
+                    value = passwort, onValueChange = { passwort = it }, label = { Text("Passwort") }, singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), modifier = Modifier.fillMaxWidth().testTag("mail-passwort"),
+                )
+                OutlinedTextField(
+                    value = benutzer, onValueChange = { benutzer = it }, label = { Text("Benutzername (falls abweichend)") }, singleLine = true,
+                    placeholder = { Text("meist die E-Mail-Adresse") }, modifier = Modifier.fillMaxWidth(),
+                )
+                if (anbieter == Anbieter.EIGENER) {
+                    OutlinedTextField(value = imapHost, onValueChange = { imapHost = it }, label = { Text("IMAP-Server") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = imapPort, onValueChange = { imapPort = it }, label = { Text("IMAP-Port (SSL)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = smtpHost, onValueChange = { smtpHost = it }, label = { Text("SMTP-Server") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = smtpPort, onValueChange = { smtpPort = it }, label = { Text("SMTP-Port") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("SMTP mit STARTTLS (sonst SSL)", modifier = Modifier.weight(1f))
+                        Switch(checked = smtpStarttls, onCheckedChange = { smtpStarttls = it })
+                    }
+                } else {
+                    Text(
+                        "Server: ${server.imapHost} (IMAP) · ${server.smtpHost} (SMTP)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    "Das Passwort wird verschlüsselt nur auf diesem Gerät gespeichert. Die App liest ausschließlich Mails, die zu einem Fall gehören, und verändert im Postfach nichts.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (beschaeftigt) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                if (fehler != null) Text(fehler, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = gueltig && !beschaeftigt,
+                onClick = {
+                    onVerbinden(
+                        MailKonfig(adresse = adresse.trim(), benutzer = benutzer.trim().ifEmpty { adresse.trim() }, server = server, name = absendername),
+                        passwort,
+                    )
+                },
+            ) { Text("Verbinden") }
         },
         dismissButton = { TextButton(onClick = onAbbrechen) { Text("Abbrechen") } },
     )

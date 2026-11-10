@@ -10,12 +10,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import de.aysetransport.schaden.data.model.Anlage
 import de.aysetransport.schaden.data.model.AuftraggeberEintrag
 import de.aysetransport.schaden.data.model.Loeschung
+import de.aysetransport.schaden.data.model.MailNachricht
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
 
 @Database(
-    entities = [Schadensfall::class, VerlaufEintrag::class, Anlage::class, Loeschung::class, AuftraggeberEintrag::class],
-    version = 3,
+    entities = [Schadensfall::class, VerlaufEintrag::class, Anlage::class, Loeschung::class, AuftraggeberEintrag::class, MailNachricht::class],
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Konverter::class)
@@ -28,7 +29,7 @@ abstract class SchadensfallDatenbank : RoomDatabase() {
 
         fun erstelle(context: Context): SchadensfallDatenbank =
             Room.databaseBuilder(context, SchadensfallDatenbank::class.java, DATEINAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
 
         /** Version 3: eigene Kontaktdaten für den Auftraggeber und eine Auftraggeber-Liste zum Auswählen. */
@@ -58,6 +59,20 @@ abstract class SchadensfallDatenbank : RoomDatabase() {
                         )
                     }
                 }
+            }
+        }
+
+        /** Version 4: E-Mails zu den Fällen. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `mail` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `fallId` INTEGER NOT NULL, " +
+                        "`eingehend` INTEGER NOT NULL, `messageId` TEXT NOT NULL, `antwortAuf` TEXT NOT NULL, `von` TEXT NOT NULL, " +
+                        "`an` TEXT NOT NULL, `betreff` TEXT NOT NULL, `text` TEXT NOT NULL, `zeitpunkt` INTEGER NOT NULL, " +
+                        "`verlaufUuid` TEXT NOT NULL, FOREIGN KEY(`fallId`) REFERENCES `schadensfall`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_mail_fallId` ON `mail` (`fallId`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_mail_messageId` ON `mail` (`messageId`)")
             }
         }
 

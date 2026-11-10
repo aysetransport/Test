@@ -16,6 +16,8 @@ import de.aysetransport.schaden.AppContainer
 import de.aysetransport.schaden.domain.FallFilter
 import de.aysetransport.schaden.ui.auftraggeber.AuftraggeberScreen
 import de.aysetransport.schaden.ui.auftraggeber.AuftraggeberViewModel
+import de.aysetransport.schaden.ui.mail.MailSchreibenScreen
+import de.aysetransport.schaden.ui.mail.MailSchreibenViewModel
 import de.aysetransport.schaden.ui.bearbeiten.BearbeitenScreen
 import de.aysetransport.schaden.ui.bearbeiten.BearbeitenViewModel
 import de.aysetransport.schaden.ui.detail.DetailScreen
@@ -41,6 +43,9 @@ data object EinstellungenZiel
 
 @Serializable
 data object AuftraggeberZiel
+
+@Serializable
+data class MailZiel(val fallId: Long, val vorlage: String = "", val empfaenger: String = "", val antwortAuf: String = "")
 
 /** Wohin die App springen soll, wenn sie über eine Benachrichtigung geöffnet wurde. */
 sealed interface Startauftrag {
@@ -97,6 +102,20 @@ fun SchadensfallNavigation(
                 viewModel = viewModel,
                 onZurueck = { nav.popBackStack<DetailZiel>(inclusive = true) },
                 onBearbeiten = { nav.navigate(BearbeitenZiel(ziel.fallId)) { launchSingleTop = true } },
+                onMailSchreiben = { vorlage, empfaenger, antwortAuf ->
+                    nav.navigate(MailZiel(ziel.fallId, vorlage, empfaenger, antwortAuf)) { launchSingleTop = true }
+                },
+            )
+        }
+        composable<MailZiel> { eintrag ->
+            val ziel = eintrag.toRoute<MailZiel>()
+            val viewModel: MailSchreibenViewModel = viewModel(
+                factory = MailSchreibenViewModel.factory(container, ziel.fallId, ziel.vorlage, ziel.empfaenger, ziel.antwortAuf),
+            )
+            MailSchreibenScreen(
+                viewModel = viewModel,
+                onSchliessen = { nav.popBackStack<MailZiel>(inclusive = true) },
+                onGesendet = { nav.popBackStack<MailZiel>(inclusive = true) },
             )
         }
         composable<BearbeitenZiel> { eintrag ->
