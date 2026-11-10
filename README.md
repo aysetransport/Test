@@ -77,10 +77,12 @@ Die Web-App ([`web/`](web/)) bietet dieselben Funktionen wie die Android-App, im
 Tablet oder Handy. Sie lässt sich wie eine App installieren („Zum Startbildschirm hinzufügen“)
 und funktioniert auch ohne Netz.
 
-**Veröffentlichung:** Der Workflow *Web-App* stellt `web/` bei jedem Stand auf dem Hauptzweig auf
-GitHub Pages bereit. Einmalig nötig: unter *Settings → Pages* als Quelle **GitHub Actions** wählen.
-Für ein privates Repository setzt GitHub Pages einen kostenpflichtigen GitHub-Tarif voraus –
-alternativ den Inhalt von `web/` in ein öffentliches Repository legen, wie bei Tagesdispo.
+**Veröffentlichung:** Die Web-App läuft über GitHub Pages aus dem öffentlichen Repository
+[`aysetransport/schaden`](https://github.com/aysetransport/schaden) unter
+https://aysetransport.github.io/schaden/. Nach Änderungen an `web/` die Dateien `index.html`,
+`sw.js`, `manifest.webmanifest` und die Symbole dorthin übernehmen. Bei Änderungen an `sw.js`
+oder an den zwischengespeicherten Dateien die Versionsnummer in `SPEICHER` erhöhen, damit
+installierte Web-Apps sie neu laden.
 
 Damit nicht jedes Gerät die Cloud-Adresse eintragen muss, kann sie in `web/index.html` bei
 `window.API_URL` fest hinterlegt werden.
