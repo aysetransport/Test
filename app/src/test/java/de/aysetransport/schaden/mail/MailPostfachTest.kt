@@ -101,6 +101,25 @@ class MailPostfachTest {
     }
 
     @Test
+    fun `Auftraggeber in BCC bekommt die Mail, der Geschaedigte sieht ihn nicht`() = runBlocking {
+        val id = neuerFall(Schadensfall(kundeName = "Anna Becker", kundeEmail = "anna@kunde.example", auftraggeberEmail = "dispo@moebel.example"))
+        postfach.senden(id, MailEntwurf("anna@kunde.example", "Ihre Schadensmeldung", "Guten Tag", bcc = "dispo@moebel.example"))
+
+        val beimKunden = postfachServer.server.getReceivedMessagesForDomain("kunde.example").first()
+        assertNull("keine Bcc-Kopfzeile beim Empfänger", beimKunden.getHeader("Bcc"))
+        assertEquals("anna@kunde.example", beimKunden.getRecipients(jakarta.mail.Message.RecipientType.TO).single().toString())
+        // Je Empfänger eine Zustellung – die an den Auftraggeber ist dieselbe Mail ohne sichtbaren Hinweis auf ihn.
+        val alle = postfachServer.server.receivedMessages
+        assertEquals(2, alle.size)
+        assertTrue(alle.all { it.messageID == beimKunden.messageID && it.getHeader("Bcc") == null })
+        val agPostfach = postfachServer.server.userManager.getUserByEmail("dispo@moebel.example")
+        assertTrue("Auftraggeber hat die Mail im Postfach", agPostfach != null)
+
+        val eintrag = verlauf(id).first { it.typ == VerlaufTyp.EMAIL_AUSGANG }
+        assertTrue(eintrag.text, eintrag.text.startsWith("An: anna@kunde.example\nBcc: dispo@moebel.example\nBetreff:"))
+    }
+
+    @Test
     fun `Antwort mit Fallnummer wird zugeordnet, Anhang wird Anlage, Wiedervorlage rueckt auf heute`() = runBlocking {
         val id = neuerFall(Schadensfall(kundeName = "Anna Becker", kundeEmail = "anna@kunde.example", status = FallStatus.WARTET_AUF_RUECKMELDUNG, wiedervorlageAm = heute.plusDays(9)))
         postfachServer.empfange("Anna Becker <anna@kunde.example>", "Re: Ihre Schadensmeldung [Fall ${heute.year}-001]", "Hier die Fotos.", anhang = "Armlehne.jpg" to ByteArray(5000) { 3 })

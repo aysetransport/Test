@@ -1,14 +1,19 @@
 package de.aysetransport.schaden.ui.mail
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
@@ -23,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -40,16 +46,21 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import de.aysetransport.schaden.AppContainer
 import de.aysetransport.schaden.data.AnlagenSpeicher
+import de.aysetransport.schaden.data.DateiZuGrossException
 import de.aysetransport.schaden.data.EinstellungenSpeicher
 import de.aysetransport.schaden.data.SchadensfallRepository
 import de.aysetransport.schaden.data.db.SchadensfallDao
 import de.aysetransport.schaden.data.model.Anlage
+import de.aysetransport.schaden.data.model.Schadensfall
+import de.aysetransport.schaden.data.model.VerlaufEintrag
+import de.aysetransport.schaden.domain.Bearbeitungsschritte
 import de.aysetransport.schaden.domain.Datum
 import de.aysetransport.schaden.domain.Empfaenger
 import de.aysetransport.schaden.domain.Textvorlagen
@@ -88,17 +99,32 @@ class MailSchreibenViewModel(
     var sendet by mutableStateOf(false); private set
     var fehler by mutableStateOf<String?>(null); private set
     var fallnummer by mutableStateOf(""); private set
+    var fall by mutableStateOf<Schadensfall?>(null); private set
+    /** Verlaufseinträge, die sich dem Auftraggeber mitteilen lassen (neueste zuerst). */
+    var schritte by mutableStateOf<List<VerlaufEintrag>>(emptyList()); private set
+    var schritteVorauswahl by mutableStateOf<Set<String>>(emptySet()); private set
+    var bccAuftraggeber by mutableStateOf(false); private set
+    var laedtDateien by mutableStateOf(false); private set
     private var antwortAufId = ""
     private var ausgangsstand = Triple("", "", "")
 
     val hatAenderungen: Boolean get() = !laedt && Triple(an, betreff, text) != ausgangsstand
 
+    /** Adresse des Auftraggebers, wenn er in BCC genommen werden kann (er ist nicht ohnehin Empfänger). */
+    val auftraggeberFuerBcc: String?
+        get() = fall?.auftraggeberEmail?.trim()?.takeIf { it.isNotEmpty() && !an.contains(it, ignoreCase = true) }
+
     init {
         viewModelScope.launch {
             val fall = repository.ladeFall(fallId) ?: return@launch
+            this@MailSchreibenViewModel.fall = fall
             fallnummer = fall.fallnummer
             val absender = einstellungen.aktuell().absender
             anlagen = repository.beobachteAnlagen(fallId).first().filter { it.istLokalVorhanden }
+            val verlauf = repository.beobachteVerlauf(fallId).first()
+            schritte = Bearbeitungsschritte.auswaehlbar(verlauf)
+            schritteVorauswahl = Bearbeitungsschritte.vorauswahl(fall, verlauf)
+            var empfaengerArt = Empfaenger.GESCHAEDIGTER
             val antwort = antwortAufVerlauf.takeIf { it.isNotEmpty() }?.let { dao.mailZuVerlauf(it) }
             when {
                 antwort != null -> {
@@ -108,6 +134,7 @@ class MailSchreibenViewModel(
                     val zitat = antwort.text.lines().joinToString("\n") { "> $it" }
                     // Anrede passend zum Absender, wenn er als Geschädigter oder Auftraggeber eingetragen ist
                     val e = listOf(Empfaenger.GESCHAEDIGTER, Empfaenger.AUFTRAGGEBER).firstOrNull { it.email(fall).equals(antwort.von, ignoreCase = true) }
+                    empfaengerArt = e ?: Empfaenger.DRITTE
                     text = Textvorlagen.ohneVorlage(e ?: Empfaenger.DRITTE, fall, absender).text +
                         "\n\nAm ${Datum.formatMitUhrzeit(antwort.zeitpunkt)} schrieb ${antwort.von}:\n$zitat"
                 }
@@ -115,13 +142,19 @@ class MailSchreibenViewModel(
                     val v = Vorlage.valueOf(vorlage)
                     val n = Textvorlagen.erstelle(v, fall, absender, LocalDate.now())
                     an = v.empfaenger.email(fall); betreff = n.betreff; text = n.text
+                    empfaengerArt = v.empfaenger
+                    // Beim Sachstand gleich mitteilen, was seit der letzten Mail an den Auftraggeber passiert ist.
+                    val neu = schritte.filter { it.uuid in schritteVorauswahl }
+                    if (v == Vorlage.SACHSTAND_AUFTRAGGEBER && neu.isNotEmpty()) text = Bearbeitungsschritte.einfuegen(text, Bearbeitungsschritte.alsText(neu, fall))
                 }
                 else -> {
                     val e = Empfaenger.entries.firstOrNull { it.name == empfaenger } ?: Empfaenger.GESCHAEDIGTER
                     val n = Textvorlagen.ohneVorlage(e, fall, absender)
                     an = e.email(fall); betreff = n.betreff; text = n.text
+                    empfaengerArt = e
                 }
             }
+            betreff = Textvorlagen.mitZeichen(betreff, empfaengerArt, fall)
             // „[Fall …]“ ersetzt beim Versand aus der App den Zusatz „unser Vorgang …“.
             betreff = MailPostfach.mitFallnummer(betreff.replace(" – unser Vorgang ${fall.fallnummer}", ""), fall.fallnummer)
             ausgangsstand = Triple(an, betreff, text)
@@ -133,6 +166,35 @@ class MailSchreibenViewModel(
     fun setzeBetreff(wert: String) { betreff = wert }
     fun setzeText(wert: String) { text = wert }
     fun umschalten(anlage: Anlage) { gewaehlt = if (anlage.id in gewaehlt) gewaehlt - anlage.id else gewaehlt + anlage.id }
+    fun setzeBccAuftraggeber(wert: Boolean) { bccAuftraggeber = wert }
+
+    /** Fügt die gewählten Bearbeitungsschritte als Absatz in die Nachricht ein. */
+    fun schritteEinfuegen(auswahl: Set<String>) {
+        val f = fall ?: return
+        val eintraege = schritte.filter { it.uuid in auswahl }
+        if (eintraege.isNotEmpty()) text = Bearbeitungsschritte.einfuegen(text, Bearbeitungsschritte.alsText(eintraege, f))
+    }
+
+    /** Nimmt Dateien vom Gerät zum Fall und hängt sie gleich an die Mail. */
+    fun dateienAnhaengen(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        laedtDateien = true
+        viewModelScope.launch {
+            val neu = mutableListOf<Long>()
+            for (uri in uris) {
+                try {
+                    neu += repository.anlageHinzufuegen(fallId, uri).id
+                } catch (e: DateiZuGrossException) {
+                    fehler = "„${e.anzeigename}“ ist zu groß."
+                } catch (e: IOException) {
+                    fehler = "Eine Datei konnte nicht gelesen werden."
+                }
+            }
+            anlagen = repository.beobachteAnlagen(fallId).first().filter { it.istLokalVorhanden }
+            gewaehlt = gewaehlt + neu
+            laedtDateien = false
+        }
+    }
 
     fun senden(danach: () -> Unit) {
         if (sendet) return
@@ -153,7 +215,8 @@ class MailSchreibenViewModel(
                 val anhaenge = withContext(Dispatchers.IO) {
                     auswahl.map { MailAnhang(it.anzeigename, it.mimeType, anlagenSpeicher.datei(it).readBytes()) }
                 }
-                postfach.senden(fallId, MailEntwurf(adressen.joinToString(", "), betreff, text, antwortAufId, anhaenge))
+                val bcc = auftraggeberFuerBcc?.takeIf { bccAuftraggeber }.orEmpty()
+                postfach.senden(fallId, MailEntwurf(adressen.joinToString(", "), betreff, text, antwortAufId, anhaenge, bcc))
                 ausgangsstand = Triple(an, betreff, text)
                 danach()
             } catch (e: IOException) {
@@ -181,6 +244,8 @@ fun MailSchreibenScreen(viewModel: MailSchreibenViewModel, onSchliessen: () -> U
     var verwerfenFragen by remember { mutableStateOf(false) }
     val schliessen = { if (viewModel.hatAenderungen) verwerfenFragen = true else onSchliessen() }
     BackHandler(enabled = viewModel.hatAenderungen && !viewModel.sendet) { verwerfenFragen = true }
+    var schritteWaehlen by remember { mutableStateOf(false) }
+    val dateiAuswahl = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> viewModel.dateienAnhaengen(uris) }
 
     Scaffold(
         topBar = {
@@ -220,19 +285,50 @@ fun MailSchreibenScreen(viewModel: MailSchreibenViewModel, onSchliessen: () -> U
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.fillMaxWidth().testTag("mail-text"),
             )
-            if (viewModel.anlagen.isNotEmpty()) {
-                Text("Anlagen des Falls mitschicken", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                viewModel.anlagen.forEach { a ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().toggleable(value = a.id in viewModel.gewaehlt, role = Role.Checkbox, onValueChange = { viewModel.umschalten(a) }),
-                    ) {
-                        Checkbox(checked = a.id in viewModel.gewaehlt, onCheckedChange = null, modifier = Modifier.padding(8.dp))
-                        Text(a.anzeigename, style = MaterialTheme.typography.bodyMedium)
+            if (viewModel.schritte.isNotEmpty()) {
+                OutlinedButton(onClick = { schritteWaehlen = true }, modifier = Modifier.fillMaxWidth().testTag("mail-schritte")) {
+                    Text("Bearbeitungsschritte einfügen")
+                }
+            }
+            viewModel.auftraggeberFuerBcc?.let { adresse ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().testTag("mail-bcc")
+                        .toggleable(value = viewModel.bccAuftraggeber, role = Role.Checkbox, onValueChange = viewModel::setzeBccAuftraggeber),
+                ) {
+                    Checkbox(checked = viewModel.bccAuftraggeber, onCheckedChange = null, modifier = Modifier.padding(8.dp))
+                    Column {
+                        Text("Auftraggeber in BCC", style = MaterialTheme.typography.bodyLarge)
+                        Text(adresse, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
+            Text("Anhänge", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            viewModel.anlagen.forEach { a ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().toggleable(value = a.id in viewModel.gewaehlt, role = Role.Checkbox, onValueChange = { viewModel.umschalten(a) }),
+                ) {
+                    Checkbox(checked = a.id in viewModel.gewaehlt, onCheckedChange = null, modifier = Modifier.padding(8.dp))
+                    Text(a.anzeigename, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            OutlinedButton(
+                onClick = { dateiAuswahl.launch(arrayOf("*/*")) },
+                enabled = !viewModel.laedtDateien,
+                modifier = Modifier.fillMaxWidth().testTag("mail-datei"),
+            ) { Text(if (viewModel.laedtDateien) "Datei wird übernommen …" else "Datei vom Gerät anhängen") }
+            Text(
+                "Neue Dateien werden auch beim Fall abgelegt.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+    }
+    if (schritteWaehlen) {
+        SchritteDialog(viewModel, onFertig = { auswahl ->
+            schritteWaehlen = false
+            auswahl?.let(viewModel::schritteEinfuegen)
+        })
     }
     if (verwerfenFragen) {
         AlertDialog(
@@ -243,4 +339,43 @@ fun MailSchreibenScreen(viewModel: MailSchreibenViewModel, onSchliessen: () -> U
             dismissButton = { TextButton(onClick = { verwerfenFragen = false }) { Text("Weiter schreiben") } },
         )
     }
+}
+
+
+/** Auswahl der Verlaufseinträge, die dem Empfänger mitgeteilt werden. `null` = abgebrochen. */
+@Composable
+private fun SchritteDialog(viewModel: MailSchreibenViewModel, onFertig: (Set<String>?) -> Unit) {
+    var auswahl by remember { mutableStateOf(viewModel.schritteVorauswahl) }
+    val f = viewModel.fall ?: return
+    AlertDialog(
+        onDismissRequest = { onFertig(null) },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.padding(horizontal = 24.dp).widthIn(max = 560.dp).fillMaxWidth(),
+        title = { Text("Bearbeitungsschritte einfügen") },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()).testTag("schritte-liste")) {
+                Text(
+                    "Vorausgewählt ist alles seit der letzten Mail an den Auftraggeber. Adressen und Wiedervorlagen werden nicht übernommen.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                viewModel.schritte.forEach { e ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().toggleable(
+                            value = e.uuid in auswahl, role = Role.Checkbox,
+                            onValueChange = { auswahl = if (e.uuid in auswahl) auswahl - e.uuid else auswahl + e.uuid },
+                        ),
+                    ) {
+                        Checkbox(checked = e.uuid in auswahl, onCheckedChange = null, modifier = Modifier.padding(8.dp))
+                        Column {
+                            Text(Datum.formatMitUhrzeit(e.zeitpunkt), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(Bearbeitungsschritte.beschreibe(e, f), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onFertig(auswahl) }, enabled = auswahl.isNotEmpty()) { Text("Einfügen") } },
+        dismissButton = { TextButton(onClick = { onFertig(null) }) { Text("Abbrechen") } },
+    )
 }

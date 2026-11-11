@@ -92,6 +92,7 @@ import de.aysetransport.schaden.domain.Datum
 import de.aysetransport.schaden.domain.Empfaenger
 import de.aysetransport.schaden.domain.Geld
 import de.aysetransport.schaden.domain.Textvorlagen
+import de.aysetransport.schaden.domain.Vorlage
 import de.aysetransport.schaden.domain.Zusammenfassung
 import de.aysetransport.schaden.domain.beifahrerText
 import de.aysetransport.schaden.domain.faelligkeit
@@ -273,7 +274,15 @@ fun DetailScreen(
                 )
             }
             item(key = "verlauf-kopf") {
-                VerlaufKopf(onNotiz = { viewModel.verlaufHinzufuegen(VerlaufTyp.NOTIZ, it) })
+                VerlaufKopf(
+                    onNotiz = { viewModel.verlaufHinzufuegen(VerlaufTyp.NOTIZ, it) },
+                    // Den Auftraggeber per Mail über die Bearbeitungsschritte informieren
+                    onAnAuftraggeber = if (mailEingerichtet && fall.auftraggeberEmail.isNotBlank() && zustand.verlauf.isNotEmpty()) {
+                        { onMailSchreiben(Vorlage.SACHSTAND_AUFTRAGGEBER.name, "", "") }
+                    } else {
+                        null
+                    },
+                )
             }
             items(zustand.verlauf, key = { "verlauf-${it.id}" }) { eintrag ->
                 VerlaufZeile(
@@ -554,6 +563,7 @@ private fun DatenKarte(fall: Schadensfall) {
                     "Ansprechpartner" to fall.auftraggeberKontakt,
                     "Telefon" to fall.auftraggeberTelefon,
                     "E-Mail" to fall.auftraggeberEmail,
+                    "Zeichen" to fall.auftraggeberZeichen,
                     "Auftrags-Nr." to fall.auftragsReferenz,
                 ),
                 leerText = "Kein Auftraggeber erfasst.",
@@ -718,10 +728,15 @@ private fun AnlagenKarte(
 }
 
 @Composable
-private fun VerlaufKopf(onNotiz: (String) -> Unit) {
+private fun VerlaufKopf(onNotiz: (String) -> Unit, onAnAuftraggeber: (() -> Unit)? = null) {
     var notiz by rememberSaveable { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-        Text("Verlauf", style = MaterialTheme.typography.titleMedium)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("Verlauf", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            if (onAnAuftraggeber != null) {
+                TextButton(onClick = onAnAuftraggeber, modifier = Modifier.testTag("verlauf-an-auftraggeber")) { Text("An Auftraggeber melden") }
+            }
+        }
         OutlinedTextField(
             value = notiz,
             onValueChange = { notiz = it },

@@ -1,6 +1,8 @@
 package de.aysetransport.schaden.mail
 
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -119,5 +121,52 @@ class MailOberflaecheTest {
         val eingang = runBlocking { app.container.datenbank.dao().beobachteMails(id).first() }.first { it.eingehend }
         assertEquals("<${eingang.messageId}>", antwort.getHeader("In-Reply-To").single())
         assertTrue(antwort.subject, antwort.subject.startsWith("Re: ") && antwort.subject.endsWith("[Fall $jahr-001]"))
+    }
+
+    @Test
+    fun `Bearbeitungsschritte an den Auftraggeber melden und ihn bei der Kundin in BCC nehmen`() {
+        val id = runBlocking {
+            val r = app.container.repository
+            val id = r.anlegen(
+                Schadensfall(
+                    kundeName = "Anna Becker", kundeEmail = "anna@kunde.example", auftraggeber = "Möbelhaus Nordpark",
+                    auftraggeberEmail = "dispo@moebel.example", auftraggeberZeichen = "RK-2291", schadensdatum = LocalDate.of(jahr, 11, 3),
+                ),
+            )
+            r.nachhakenErfassen(id, VerlaufTyp.ANRUF, "Kundin erreicht, Fotos kommen", null, null, "")
+            id
+        }
+        warteAufText("Anna Becker")
+        rule.onNodeWithText("Anna Becker").performClick()
+        warteAufText("Fall $jahr-001")
+        rule.onNodeWithTag("falldetails").performScrollToNode(hasTestTag("verlauf-an-auftraggeber"))
+        rule.onNodeWithTag("verlauf-an-auftraggeber").performClick()
+
+        warteAufText("E-Mail · Fall $jahr-001")
+        warteAufText("Ihr Zeichen RK-2291")
+        rule.onNodeWithText("dispo@moebel.example").assertExists()
+        rule.onNodeWithTag("mail-text").assert(hasText("Telefonat: Kundin erreicht, Fotos kommen", substring = true))
+        foto("16_mail_bearbeitungsschritte")
+        rule.onNodeWithContentDescription("Senden").performClick()
+        warteBis { verlauf(id, VerlaufTyp.EMAIL_AUSGANG).isNotEmpty() }
+        val anAg = server.server.getReceivedMessagesForDomain("moebel.example").single()
+        assertTrue(anAg.subject, "Ihr Zeichen RK-2291" in anAg.subject)
+        assertTrue(anAg.content as String, "Bisherige Bearbeitung:" in (anAg.content as String))
+        warteAufText("Fall $jahr-001")
+
+        // An die Kundin, mit dem Auftraggeber in BCC
+        rule.onNode(hasText("E-Mail") and hasClickAction()).performClick()
+        warteAufText("E-Mail schreiben")
+        rule.onNodeWithTag("vorlage-ZWISCHENBESCHEID").performScrollTo().performClick()
+        warteAufText("Bezug RK-2291")
+        rule.onNodeWithTag("mail-bcc").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("Senden").performClick()
+        warteBis { verlauf(id, VerlaufTyp.EMAIL_AUSGANG).size == 2 }
+        // Die Blindkopie trägt keine Bcc-Zeile, also zählt nur die Gesamtzahl: 1× Sachstand, 2× Zwischenbescheid
+        assertEquals(3, server.server.receivedMessages.size)
+        val zwischenbescheid = server.server.receivedMessages.filter { "Zwischenbescheid" in it.subject }
+        assertEquals("Kundin und Auftraggeber bekommen dieselbe Mail", 1, zwischenbescheid.map { it.messageID }.distinct().size)
+        assertTrue(zwischenbescheid.all { it.getHeader("Bcc") == null && "RK-2291" in it.subject })
+        assertTrue(verlauf(id, VerlaufTyp.EMAIL_AUSGANG).any { "Bcc: dispo@moebel.example" in it.text })
     }
 }

@@ -206,6 +206,7 @@ class CloudAbgleich(
             auftraggeberKontakt = json.text("auftraggeberKontakt"),
             auftraggeberTelefon = json.text("auftraggeberTelefon"),
             auftraggeberEmail = json.text("auftraggeberEmail"),
+            auftraggeberZeichen = json.text("auftraggeberZeichen"),
             auftragsReferenz = json.text("auftragsReferenz"),
             tour = json.text("tour"),
             fahrzeug = json.text("fahrzeug"),
@@ -357,6 +358,7 @@ class CloudAbgleich(
         put("auftraggeberKontakt", auftraggeberKontakt)
         put("auftraggeberTelefon", auftraggeberTelefon)
         put("auftraggeberEmail", auftraggeberEmail)
+        put("auftraggeberZeichen", auftraggeberZeichen)
         put("auftragsReferenz", auftragsReferenz)
         put("tour", tour)
         put("fahrzeug", fahrzeug)
@@ -432,7 +434,7 @@ class CloudAbgleich(
 
     companion object {
         private const val MAX_DURCHLAEUFE = 3
-        const val MIN_API = 2L
+        const val MIN_API = 3L
         const val VERALTET = "Das Cloud-Skript ist veraltet – bitte die neue Code.gs bereitstellen."
     }
 }

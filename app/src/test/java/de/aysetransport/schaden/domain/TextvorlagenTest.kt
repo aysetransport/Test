@@ -120,4 +120,28 @@ class TextvorlagenTest {
             }
         }
     }
+
+    @Test
+    fun `Zeichen des Auftraggebers steht in jedem Betreff`() {
+        val mitZeichen = mitAuftraggeber.copy(auftraggeberZeichen = "RK-2291")
+        for (vorlage in Vorlage.entries) {
+            val betreff = Textvorlagen.erstelle(vorlage, mitZeichen, absender, heute).betreff
+            val erwartet = if (vorlage.empfaenger == Empfaenger.AUFTRAGGEBER) "Ihr Zeichen RK-2291" else "Bezug RK-2291"
+            assertTrue("${vorlage.name}: $betreff", erwartet in betreff)
+        }
+        for (e in Empfaenger.entries) assertTrue(e.name, "RK-2291" in Textvorlagen.ohneVorlage(e, mitZeichen, absender).betreff)
+        assertEquals(
+            "Schadensfall vom 03.11.2026 – Abschluss mitteilen – Ihr Zeichen RK-2291 – Ihr Auftrag LS-48213 – unser Vorgang 2026-007",
+            Textvorlagen.erstelle(Vorlage.ABSCHLUSS_AUFTRAGGEBER, mitZeichen, absender, heute).betreff,
+        )
+    }
+
+    @Test
+    fun `Zeichen wird in Antworten vor der Fallnummer ergaenzt, aber nie doppelt`() {
+        val f = fall.copy(auftraggeberZeichen = "RK-2291")
+        assertEquals("Re: Fotos – Bezug RK-2291 [Fall 2026-007]", Textvorlagen.mitZeichen("Re: Fotos [Fall 2026-007]", Empfaenger.GESCHAEDIGTER, f))
+        assertEquals("Re: Frage – Ihr Zeichen RK-2291", Textvorlagen.mitZeichen("Re: Frage", Empfaenger.AUFTRAGGEBER, f))
+        assertEquals("Re: RK-2291 [Fall 2026-007]", Textvorlagen.mitZeichen("Re: RK-2291 [Fall 2026-007]", Empfaenger.AUFTRAGGEBER, f))
+        assertEquals("Re: Frage", Textvorlagen.mitZeichen("Re: Frage", Empfaenger.AUFTRAGGEBER, fall))
+    }
 }

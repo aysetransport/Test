@@ -122,3 +122,68 @@ test('Windows-App: Cloud, Fall, E-Mail senden, Antwort abrufen und beantworten, 
   if (konto.verschluesselt) assert.ok(!fs.readFileSync(path.join(daten, 'mailkonto.json'), 'utf8').includes(gm.passwort));
   await app.close();
 });
+
+/** Liest ein Postfach des Testservers (automatisch angelegte Konten: Passwort = Adresse). */
+async function postfach(adresse) {
+  const { ImapFlow } = require('imapflow');
+  const c = new ImapFlow({ host: '127.0.0.1', port: gm.imapPort, secure: false, auth: { user: adresse, pass: adresse }, logger: false });
+  await c.connect();
+  const mails = [];
+  const sperre = await c.getMailboxLock('INBOX');
+  try { for await (const m of c.fetch('1:*', { source: true })) mails.push(m.source.toString()); } catch { /* leer */ } finally { sperre.release(); }
+  await c.logout();
+  return mails;
+}
+
+test('Windows-App: Zeichen des Auftraggebers, Bearbeitungsschritte, Dateianhang und Auftraggeber in BCC', async t => {
+  const { app, s } = await starte();
+  t.after(() => app.close().catch(() => {}));
+  await s.locator('#liste').getByText('Anna Becker').click();
+  await s.locator('#wiedervorlage').waitFor();
+
+  // Auftraggeber mit Zeichen nachtragen.
+  await s.getByRole('button', { name: 'Bearbeiten' }).click();
+  await s.locator('[name=auftraggeber]').fill('Möbelhaus Nordpark');
+  await s.locator('[name=auftraggeberEmail]').fill('dispo@moebel.example');
+  await s.locator('[name=auftraggeberZeichen]').fill('RK-2291');
+  await s.locator('#fall-form button.voll').click();
+  await s.locator('#wiedervorlage').waitFor();
+
+  // „An Auftraggeber melden“: Sachstand mit den bisherigen Schritten, Zeichen im Betreff.
+  await s.locator('#an-auftraggeber').click();
+  assert.equal(await s.locator('#mail-form [name=an]').inputValue(), 'dispo@moebel.example');
+  assert.match(await s.locator('#mail-form [name=betreff]').inputValue(), /– Ihr Zeichen RK-2291 \[Fall \d{4}-001]$/);
+  const text = await s.locator('#mail-form [name=text]').inputValue();
+  // (Reihenfolge nach Zeitpunkt; der Date-Kopf der Antwort hat nur Sekunden, deshalb hier nicht geprüft)
+  assert.match(text, /Stand der Bearbeitung: Neu\.\n\nBisherige Bearbeitung:\n– \d\d\.\d\d\.\d{4}: /);
+  assert.equal((text.match(/: E-Mail an den Geschädigten gesendet\n/g) || []).length, 2);
+  assert.match(text, /E-Mail des Geschädigten erhalten \(mit Anlagen\)/);
+  assert.ok(!text.includes('anna@kunde.example'), 'keine Adressen der Kundin');
+  assert.equal(await s.locator('#mail-bcc').count(), 0, 'keine BCC-Option, wenn der Auftraggeber Empfänger ist');
+
+  // Eine Datei vom Rechner anhängen – sie landet auch beim Fall.
+  const datei = path.join(daten, 'Lieferschein.pdf');
+  fs.writeFileSync(datei, '%PDF-1.4 Test');
+  await s.locator('#mail-datei').setInputFiles(datei);
+  await s.locator('#mail-anlagen input[type=checkbox]:checked').first().waitFor();
+  await s.locator('#mail-senden').click();
+  await s.waitForFunction(() => Object.values(S.verlauf).filter(v => v.typ === 'EMAIL_AUSGANG').length === 3, null, { timeout: 30000 });
+  const anAg = await postfach('dispo@moebel.example');
+  assert.equal(anAg.length, 1);
+  assert.match(anAg[0], /Lieferschein\.pdf/);
+  assert.ok(await s.evaluate(() => Object.values(S.anlagen).some(a => a.anzeigename === 'Lieferschein.pdf' && !a.geloescht)));
+
+  // An die Kundin, Auftraggeber in BCC; Bezug steht im Betreff.
+  await s.getByRole('button', { name: '✉ E-Mail' }).click();
+  await s.locator('[data-vorlage=ZWISCHENBESCHEID]').click();
+  assert.match(await s.locator('#mail-form [name=betreff]').inputValue(), /– Bezug RK-2291 \[Fall/);
+  await s.locator('#mail-bcc').check();
+  await s.locator('#mail-senden').click();
+  await s.waitForFunction(() => Object.values(S.verlauf).some(v => v.typ === 'EMAIL_AUSGANG' && v.text.includes('\nBcc: dispo@moebel.example\n')), null, { timeout: 30000 });
+  const beiAg = await postfach('dispo@moebel.example');
+  assert.equal(beiAg.length, 2, 'Blindkopie beim Auftraggeber');
+  const beiKundin = (await postfach('anna@kunde.example')).filter(m => m.includes('Zwischenbescheid'));
+  assert.equal(beiKundin.length, 1);
+  assert.ok(!/^bcc:/im.test(beiKundin[0]) && !beiKundin[0].includes('dispo@moebel.example'), 'die Kundin sieht den Auftraggeber nicht');
+  await app.close();
+});

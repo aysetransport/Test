@@ -46,6 +46,8 @@ data class Schadensfall(
     @ColumnInfo(defaultValue = "''") val auftraggeberKontakt: String = "",
     @ColumnInfo(defaultValue = "''") val auftraggeberTelefon: String = "",
     @ColumnInfo(defaultValue = "''") val auftraggeberEmail: String = "",
+    /** Zeichen bzw. Vorgangsnummer des Auftraggebers – steht in jedem Mailbetreff. */
+    @ColumnInfo(defaultValue = "''") val auftraggeberZeichen: String = "",
 
     // Transportauftrag
     val auftragsReferenz: String = "",

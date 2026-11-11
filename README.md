@@ -74,6 +74,18 @@ dem Postfach; das Passwort liegt verschlüsselt im Android-Schlüsselspeicher un
   Auftraggeber oder Dritte wählen, im Schreibfenster anpassen, Anlagen des Falls anhängen.
   Der Betreff bekommt die Fallnummer, z. B. `[Fall 2026-001]`. Eine Kopie landet im Ordner
   „Gesendet“ des Postfachs.
+- **Zeichen des Auftraggebers:** Steht im Fall unter *Auftraggeber* ein Zeichen (z. B. dessen
+  Reklamations- oder Vorgangsnummer), kommt es in jeden Betreff – beim Auftraggeber als
+  „Ihr Zeichen …“, bei allen anderen als „Bezug …“, auch in Antworten.
+- **Anhänge:** Anlagen des Falls ankreuzen oder *Datei vom Gerät anhängen* (Windows: *vom Rechner*).
+  Neue Dateien werden dabei auch beim Fall abgelegt.
+- **Auftraggeber in BCC:** Bei Mails an den Geschädigten (oder Dritte) lässt sich der Auftraggeber
+  per Häkchen in Blindkopie nehmen. Der Empfänger sieht das nicht; im Verlauf steht `Bcc: …`.
+- **Bearbeitungsschritte an den Auftraggeber:** *An Auftraggeber melden* im Verlauf (oder die
+  Vorlage *Sachstand mitteilen*) fügt automatisch alles ein, was seit der letzten Mail an den
+  Auftraggeber passiert ist („E-Mail an den Geschädigten gesendet“, „Telefonat: …“, Statuswechsel).
+  Über *Bearbeitungsschritte einfügen* lässt sich die Auswahl in jeder Mail ändern. Adressen,
+  Telefonnummern und Wiedervorlagen werden nicht übernommen; der Text bleibt frei bearbeitbar.
 - **Empfangen:** Alle 15 Minuten, beim App-Start und über *Postfach abrufen* im Fall-Menü. Eine
   Mail wird einem Fall zugeordnet, wenn ihr Betreff die Fallnummer trägt, wenn sie auf eine Mail
   des Falls antwortet oder wenn ihr Absender bei genau einem offenen Fall als Geschädigter oder

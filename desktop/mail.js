@@ -75,7 +75,7 @@ async function gesendetOrdner(client) {
 
 /**
  * Sendet die Mail und legt eine Kopie im Ordner „Gesendet“ ab.
- * entwurf: { an, betreff, text, antwortAuf, anhaenge: [{ name, mimeType, base64 }] }
+ * entwurf: { an, bcc, betreff, text, antwortAuf, anhaenge: [{ name, mimeType, base64 }] }
  * @returns Message-ID ohne spitze Klammern
  */
 async function sende(k, passwort, entwurf) {
@@ -90,11 +90,14 @@ async function sende(k, passwort, entwurf) {
     date: new Date(),
     attachments: (entwurf.anhaenge || []).map(a => ({ filename: a.name, contentType: a.mimeType, content: Buffer.from(a.base64, 'base64') })),
   };
+  if (entwurf.bcc) nachricht.bcc = entwurf.bcc; // Blindkopie, z. B. an den Auftraggeber
   if (entwurf.antwortAuf) { nachricht.inReplyTo = `<${entwurf.antwortAuf}>`; nachricht.references = [`<${entwurf.antwortAuf}>`]; }
   try { await smtp(k, passwort).sendMail(nachricht); } catch (e) { throw uebersetze(e); }
   // Viele Anbieter legen per SMTP Gesendetes nicht selbst ab – dann hier nachholen.
   try {
-    const roh = await new MailComposer(nachricht).compile().build();
+    const kopie = new MailComposer(nachricht).compile();
+    kopie.keepBcc = true; // in der eigenen Ablage soll sichtbar bleiben, wer in BCC war
+    const roh = await kopie.build();
     await mitImap(k, passwort, async client => {
       const ordner = await gesendetOrdner(client);
       if (ordner) await client.append(ordner, roh, ['\\Seen']);

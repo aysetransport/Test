@@ -29,7 +29,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 2; // 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste
+var API_VERSION = 3; // 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers
 
 // ============================== Einstieg ==============================
 
@@ -348,7 +348,7 @@ function ohneInterna_(anlage) {
 // Es wird nur übernommen, was die Apps kennen – unbekannte Felder und übergroße Texte fallen weg.
 
 var FALL_TEXTE = ['fallnummer', 'kundeName', 'kundeFirma', 'kundeTelefon', 'kundeEmail', 'kundeAnschrift',
-  'kundenAktenzeichen', 'auftraggeber', 'auftraggeberKontakt', 'auftraggeberTelefon', 'auftraggeberEmail', 'auftragsReferenz', 'tour', 'fahrzeug', 'fahrer', 'beifahrer1', 'beifahrer2', 'schadensort',
+  'kundenAktenzeichen', 'auftraggeber', 'auftraggeberKontakt', 'auftraggeberTelefon', 'auftraggeberEmail', 'auftraggeberZeichen', 'auftragsReferenz', 'tour', 'fahrzeug', 'fahrer', 'beifahrer1', 'beifahrer2', 'schadensort',
   'beschreibung', 'wiedervorlageNotiz', 'versicherungsNummer'];
 var FALL_DATEN = ['schadensdatum', 'meldedatum', 'wiedervorlageAm', 'zahlungsfrist'];
 

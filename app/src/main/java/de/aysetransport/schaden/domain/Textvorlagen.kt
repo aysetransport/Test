@@ -162,8 +162,25 @@ object Textvorlagen {
             Empfaenger.DRITTE -> fall.versicherungsNummer.ifBlank { fall.kundenAktenzeichen }.takeIf { it.isNotBlank() }?.let { "Ihr Zeichen ${it.trim()}" }
         }
         val titel = if (vorlage == null || vorlage == Vorlage.SACHSTANDSANFRAGE) null else vorlage.titel
-        return listOfNotNull(was, titel, fremdesZeichen, fall.fallnummer.takeIf { it.isNotBlank() }?.let { "unser Vorgang $it" })
-            .joinToString(" – ")
+        return listOfNotNull(
+            was, titel, zeichenDesAuftraggebers(empfaenger, fall), fremdesZeichen,
+            fall.fallnummer.takeIf { it.isNotBlank() }?.let { "unser Vorgang $it" },
+        ).joinToString(" – ")
+    }
+
+    /**
+     * Das Zeichen des Auftraggebers – es steht in jedem Betreff. Der Auftraggeber liest es als „Ihr Zeichen“,
+     * alle anderen als neutralen „Bezug“.
+     */
+    fun zeichenDesAuftraggebers(empfaenger: Empfaenger, fall: Schadensfall): String? =
+        fall.auftraggeberZeichen.trim().takeIf { it.isNotEmpty() }?.let { if (empfaenger == Empfaenger.AUFTRAGGEBER) "Ihr Zeichen $it" else "Bezug $it" }
+
+    /** Ergänzt das Zeichen des Auftraggebers, falls es (etwa in einer Antwort) noch fehlt – vor der Fallnummer. */
+    fun mitZeichen(betreff: String, empfaenger: Empfaenger, fall: Schadensfall): String {
+        val zusatz = zeichenDesAuftraggebers(empfaenger, fall) ?: return betreff
+        if (betreff.contains(fall.auftraggeberZeichen.trim())) return betreff
+        val stelle = betreff.indexOf(" [Fall ")
+        return if (stelle < 0) "${betreff.trimEnd()} – $zusatz" else "${betreff.substring(0, stelle)} – $zusatz${betreff.substring(stelle)}"
     }
 
     /** Was der Auftraggeber zum Fall erfährt: Auftrag, Lieferung, Geschädigter (nur Name) und Art des Schadens. */

@@ -38,6 +38,7 @@ object Zusammenfassung {
             if (auftrag.isNotBlank()) appendLine("Auftraggeber/Auftrag: $auftrag")
             val agKontakt = listOf(fall.auftraggeberKontakt, fall.auftraggeberTelefon, fall.auftraggeberEmail).filter { it.isNotBlank() }.joinToString(" · ")
             if (agKontakt.isNotEmpty()) appendLine("Kontakt Auftraggeber: $agKontakt")
+            if (fall.auftraggeberZeichen.isNotBlank()) appendLine("Zeichen des Auftraggebers: ${fall.auftraggeberZeichen.trim()}")
             if (fall.schadensort.isNotBlank()) appendLine("Schadensort: ${fall.schadensort.trim()}")
             appendLine("Schaden: ${fall.schadensart.label} – ${fall.beschreibung.trim().oderUnbekannt()}")
             appendLine("Schadenshöhe: ${fall.forderungCent?.let(Geld::format) ?: UNBEKANNT}")

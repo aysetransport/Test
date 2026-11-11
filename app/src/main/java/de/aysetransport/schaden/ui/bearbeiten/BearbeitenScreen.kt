@@ -159,6 +159,7 @@ fun BearbeitenScreen(
                     fehler = fehler[Formularfeld.AUFTRAGGEBER_EMAIL],
                     tag = "feld-auftraggeber-email",
                 )
+                Textfeld("Zeichen des Auftraggebers (steht im Mailbetreff)", f.auftraggeberZeichen, { viewModel.aendere { copy(auftraggeberZeichen = it) } }, tag = "feld-auftraggeber-zeichen")
                 Textfeld("Auftrags- / Lieferschein-Nr.", f.auftragsReferenz, { viewModel.aendere { copy(auftragsReferenz = it) } })
             }
 

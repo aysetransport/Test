@@ -52,13 +52,14 @@ class MailPostfach(
         val mitKennung = entwurf.copy(betreff = mitFallnummer(entwurf.betreff, fall.fallnummer))
         val messageId = dienst.sende(konfig, passwort, mitKennung)
         val anhangText = if (entwurf.anhaenge.isEmpty()) "" else "\nAnhänge: " + entwurf.anhaenge.joinToString(", ") { it.name }
+        val bccText = if (entwurf.bcc.isBlank()) "" else "\nBcc: ${entwurf.bcc}"
         vermerke(
             fall,
             MailNachricht(
                 fallId = fall.id, eingehend = false, messageId = messageId, antwortAuf = entwurf.antwortAuf, von = konfig.adresse,
                 an = entwurf.an, betreff = mitKennung.betreff, text = entwurf.text, zeitpunkt = uhr.instant(),
             ),
-            verlaufText = "An: ${entwurf.an}\nBetreff: ${mitKennung.betreff}$anhangText\n\n${entwurf.text}",
+            verlaufText = "An: ${entwurf.an}$bccText\nBetreff: ${mitKennung.betreff}$anhangText\n\n${entwurf.text}",
         )
     }
 

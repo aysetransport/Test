@@ -16,7 +16,7 @@ import de.aysetransport.schaden.data.model.VerlaufEintrag
 
 @Database(
     entities = [Schadensfall::class, VerlaufEintrag::class, Anlage::class, Loeschung::class, AuftraggeberEintrag::class, MailNachricht::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Konverter::class)
@@ -29,7 +29,7 @@ abstract class SchadensfallDatenbank : RoomDatabase() {
 
         fun erstelle(context: Context): SchadensfallDatenbank =
             Room.databaseBuilder(context, SchadensfallDatenbank::class.java, DATEINAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
 
         /** Version 3: eigene Kontaktdaten für den Auftraggeber und eine Auftraggeber-Liste zum Auswählen. */
@@ -73,6 +73,13 @@ abstract class SchadensfallDatenbank : RoomDatabase() {
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_mail_fallId` ON `mail` (`fallId`)")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_mail_messageId` ON `mail` (`messageId`)")
+            }
+        }
+
+        /** Version 5: Zeichen des Auftraggebers. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `schadensfall` ADD COLUMN `auftraggeberZeichen` TEXT NOT NULL DEFAULT ''")
             }
         }
 

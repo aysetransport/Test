@@ -86,8 +86,9 @@ class MigrationTest {
     fun `Version 1 laesst sich in einem Zug auf den neuesten Stand bringen`() {
         helfer.createDatabase("migration14.db", 1).close()
         helfer.runMigrationsAndValidate(
-            "migration14.db", 4, true,
+            "migration14.db", 5, true,
             SchadensfallDatenbank.MIGRATION_1_2, SchadensfallDatenbank.MIGRATION_2_3, SchadensfallDatenbank.MIGRATION_3_4,
+            SchadensfallDatenbank.MIGRATION_4_5,
         ).close()
     }
 }

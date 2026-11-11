@@ -324,11 +324,11 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   const cloud = await starteCloud();
   const s = await geraet(cloud.url);
   await melde(s, PIN, true); await aktuell(s);
-  cloud.umgebung.kontext.API_VERSION = 1; // wie das bisher bereitgestellte Skript
+  cloud.umgebung.kontext.API_VERSION = 2; // ein älteres Skript ohne das Zeichen des Auftraggebers
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 2;
+  cloud.umgebung.kontext.API_VERSION = 3;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();

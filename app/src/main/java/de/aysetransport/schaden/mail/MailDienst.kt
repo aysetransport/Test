@@ -36,6 +36,8 @@ data class MailEntwurf(
     /** Message-ID der Mail, auf die geantwortet wird (für die Zuordnung im Postfach des Empfängers). */
     val antwortAuf: String = "",
     val anhaenge: List<MailAnhang> = emptyList(),
+    /** Blindkopie (z. B. an den Auftraggeber) – der Empfänger sieht sie nicht. */
+    val bcc: String = "",
 )
 
 data class EmpfangeneMail(
@@ -111,6 +113,7 @@ open class MailDienst {
             val nachricht = MimeMessage(session).apply {
                 setFrom(InternetAddress(k.adresse, k.name.ifBlank { null }, "UTF-8"))
                 setRecipients(Message.RecipientType.TO, InternetAddress.parse(e.an, false))
+                if (e.bcc.isNotBlank()) setRecipients(Message.RecipientType.BCC, InternetAddress.parse(e.bcc, false))
                 setSubject(e.betreff, "UTF-8")
                 sentDate = Date()
                 if (e.antwortAuf.isNotEmpty()) {
