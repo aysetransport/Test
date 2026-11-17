@@ -15,8 +15,8 @@ android {
         // Bewusst Android 16: Das Laufzeitverhalten dieser Stufe ist getestet. Auf neueren
         // Geräten läuft die App im Kompatibilitätsmodus unverändert weiter.
         targetSdk = 36
-        versionCode = 6
-        versionName = "2.0.0"
+        versionCode = 7
+        versionName = "2.0.1"
 
         // Vorgabe in den Einstellungen; die PIN wird beim Verbinden abgefragt.
         buildConfigField("String", "CLOUD_URL", "\"https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwhDnWP7p9XeoIz8NisZR7NApIj-Xfgd_lP5j8KjPE11OFbQuA/exec\"")
