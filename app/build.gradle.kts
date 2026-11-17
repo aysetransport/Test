@@ -15,8 +15,8 @@ android {
         // Bewusst Android 16: Das Laufzeitverhalten dieser Stufe ist getestet. Auf neueren
         // Geräten läuft die App im Kompatibilitätsmodus unverändert weiter.
         targetSdk = 36
-        versionCode = 8
-        versionName = "2.1.0"
+        versionCode = 9
+        versionName = "2.1.1"
 
         // Vorgabe in den Einstellungen; die PIN wird beim Verbinden abgefragt.
         buildConfigField("String", "CLOUD_URL", "\"https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwhDnWP7p9XeoIz8NisZR7NApIj-Xfgd_lP5j8KjPE11OFbQuA/exec\"")
@@ -43,8 +43,10 @@ android {
             // Optimierte, schnelle Fassung zum Installieren. Ohne festen Schlüssel mit dem Testschlüssel
             // des Rechners signiert, damit sie sich trotzdem installieren lässt.
             signingConfig = festeSignatur ?: signingConfigs.getByName("debug")
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Ohne R8-Verkleinerung: die verkleinerte Fassung stürzte auf dem Gerät beim Start ab. Auch so ist der
+            // Release-Build deutlich schneller als der Debug-Build (nicht debugfähig, Compose ohne Prüfungen).
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
