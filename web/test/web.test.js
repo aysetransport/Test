@@ -529,7 +529,7 @@ test('Finanzen: Rechnung aus der Preisliste, Summen, Zahlung, Überfällig, Ange
   await a.locator('[data-crm-neu=belege]').click();
   await a.locator('#beleg-form').waitFor();
   const jahr = new Date().getFullYear();
-  assert.match(await a.locator('#detail h2').innerText(), new RegExp(`Rechnung RE-${jahr}-0001`));
+  assert.match(await a.locator('#detail h2').innerText(), new RegExp(`Rechnung R${jahr}-0001`));
   const preisId = await a.evaluate(() => alle('preise')[0].id);
   await a.locator('#aus-preisliste').selectOption(preisId);
   await a.locator('[data-pos="0"] [name=menge]').waitFor();
@@ -561,18 +561,25 @@ test('Finanzen: Rechnung aus der Preisliste, Summen, Zahlung, Überfällig, Ange
   });
   await a.locator('[data-bereich=finanzen]').click();
   await a.locator('[data-beleg-filter=UEBERFAELLIG]').first().click();
-  await a.locator('#belege').getByText(`RE-${jahr}-0002`).waitFor();
+  await a.locator('#belege').getByText(`R${jahr}-0002`).waitFor();
   await a.locator('[data-beleg-filter=ANGEBOTE]').last().click();
-  await a.locator('#belege').getByText(`AN-${jahr}-0001`).click();
+  await a.locator('#belege').getByText(`A${jahr}-0001`).click();
   await a.locator('[data-beleg-akt=zurechnung]').click();
-  await a.locator('#detail h2', { hasText: `Rechnung RE-${jahr}-0003` }).waitFor();
+  await a.locator('#detail h2', { hasText: `Rechnung R${jahr}-0003` }).waitFor();
   assert.equal(await a.evaluate(() => alle('belege').find(b => b.art === 'ANGEBOT').status), 'ANGENOMMEN');
+
+  // Startnummer: an einen bisherigen Nummernkreis anschließen
+  const nummern = await a.evaluate(() => {
+    S.einstellungen.rechnung = { ...rechnungsDaten(), startRechnung: 1001 };
+    const r = naechsteBelegNummer('RECHNUNG'); S.einstellungen.rechnung.startRechnung = 2; return [r, naechsteBelegNummer('RECHNUNG'), naechsteBelegNummer('ANGEBOT')];
+  });
+  assert.deepEqual(nummern, [`R${jahr}-1001`, `R${jahr}-0004`, `A${jahr}-0002`], 'Startnummer ist Untergrenze, belegte Nummern zählen weiter');
 
   // Übersicht
   await a.locator('[data-bereich=uebersicht]').click();
   await a.locator('#liste').getByText('Überfällig (1)').waitFor();
   const csv = await a.evaluate(() => belegeCsv());
-  assert.ok(csv.startsWith('﻿Nummer;Art;Firma') && csv.includes(`RE-${jahr}-0001;Rechnung;Seats and Sofas`) && csv.includes(';Bezahlt;379,00;72,01;451,01;451,01;'), csv);
+  assert.ok(csv.startsWith('﻿Nummer;Art;Firma') && csv.includes(`R${jahr}-0001;Rechnung;Seats and Sofas`) && csv.includes(';Bezahlt;379,00;72,01;451,01;451,01;'), csv);
   const ics = await a.evaluate(() => termineIcs());
   assert.ok(ics.startsWith('BEGIN:VCALENDAR') && ics.includes('END:VCALENDAR'));
 

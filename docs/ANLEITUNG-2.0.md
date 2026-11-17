@@ -155,7 +155,7 @@ Für 2.1 braucht es wieder die **aktuelle `Code.gs`** (Version 5) – wie in Sch
 
 - **Übersicht** als erster Reiter: Termine, nicht zugeordnete Mails, offene und überfällige Rechnungen,
   Umsatz Monat/Jahr, offene Chancen und Angebote, offene Schadensfälle, Firmen lange ohne Kontakt
-- **Angebote und Rechnungen**: fortlaufende Nummern (AN-/RE-Jahr-Nummer), Positionen frei oder aus der
+- **Angebote und Rechnungen**: fortlaufende Nummern (R2026-0001, A2026-0001; Startnummer unter ⚙ einstellbar), Positionen frei oder aus der
   Preisliste, Netto/MwSt./Brutto, Einleitung und Schlusstext, **PDF speichern**, Drucken,
   **per E-Mail mit PDF-Anhang** (an den Ansprechpartner für Abrechnung), Angebot → Rechnung, Stornieren
 - **Zahlstatus**: Entwurf, offen, teilbezahlt, bezahlt, überfällig; Zahlungen (auch Teilzahlungen)

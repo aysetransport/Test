@@ -262,12 +262,12 @@ test('Windows-App: Rechnung als PDF speichern und per E-Mail mit PDF-Anhang send
     assert.ok(Buffer.from(pdf, 'base64').subarray(0, 5).toString() === '%PDF-', 'echtes PDF');
     await s.locator('[data-beleg-akt=pdf]').click();
     await s.getByText('Gespeichert:').waitFor({ timeout: 30000 });
-    assert.ok(fs.readdirSync(daten).some(n => n.startsWith('Rechnung_RE-') && n.endsWith('.pdf')));
+    assert.ok(fs.readdirSync(daten).some(n => n.startsWith('Rechnung_R') && n.endsWith('.pdf')));
 
     // Per Mail: an die Abrechnung, mit PDF, danach gilt die Rechnung als versendet
     await s.locator('[data-beleg-akt=mail]').click();
     assert.equal(await s.locator('#mail-form [name=an]').inputValue(), 'buchhaltung@seats-sofas.example');
-    assert.match(await s.locator('#mail-form [name=betreff]').inputValue(), /^Rechnung RE-\d{4}-\d{4}$/);
+    assert.match(await s.locator('#mail-form [name=betreff]').inputValue(), /^Rechnung R\d{4}-\d{4}$/);
     await s.locator('#mail-senden').click();
     await s.getByText('E-Mail gesendet').first().waitFor({ timeout: 30000 });
     const angekommen = await postfach('buchhaltung@seats-sofas.example');

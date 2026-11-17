@@ -1139,7 +1139,8 @@ function zeichneEinstellungen() {
     ${window.desktop ? mailEinstellungen() : ''}
     <div class="karte block"><h3>Eigene Firmendaten für Angebote und Rechnungen</h3>
       ${[['name', 'Firmenname'], ['strasse', 'Straße und Hausnummer'], ['plzOrt', 'PLZ und Ort'], ['telefon', 'Telefon'], ['email', 'E-Mail'], ['steuer', 'Steuernummer'], ['ustId', 'USt-IdNr.'],
-        ['bank', 'Bank'], ['iban', 'IBAN'], ['bic', 'BIC'], ['zahlungsziel', 'Zahlungsziel (Tage)'], ['mwst', 'MwSt.-Satz (%)'], ['fuss', 'Zusatz in der Fußzeile']]
+        ['bank', 'Bank'], ['iban', 'IBAN'], ['bic', 'BIC'], ['zahlungsziel', 'Zahlungsziel (Tage)'], ['mwst', 'MwSt.-Satz (%)'], ['fuss', 'Zusatz in der Fußzeile'],
+        ['startRechnung', 'Startnummer Rechnungen (z. B. 1001 → R' + new Date().getFullYear() + '-1001)'], ['startAngebot', 'Startnummer Angebote (z. B. 1 → A' + new Date().getFullYear() + '-0001)']]
         .map(([k, l]) => `<label class="feld">${l}<input data-rechnung="${k}" value="${esc(rechnungsDaten()[k])}"></label>`).join('')}</div>
     <div class="karte block"><h3>CRM</h3><p class="leise" style="margin-bottom:8px">Die Sicherung des bisherigen Browser-CRM (JSON) einlesen. Firmen mit gleichem Namen werden zusammengeführt, nichts wird doppelt angelegt.</p>
       <div class="zeile"><label class="knopf" id="crm-import-knopf">Sicherung des Browser-CRM importieren<input type="file" id="crm-import" accept=".json,application/json" hidden></label>
@@ -1540,14 +1541,14 @@ $('#detail').addEventListener('click', e => {
 
 // ============================== Angebote, Rechnungen, Zahlstatus ==============================
 // Belege (Tabelle „belege“): art ANGEBOT oder RECHNUNG, Positionen als JSON-Text, Beträge in Cent.
-const BELEG_ART = { ANGEBOT: ['Angebot', 'AN'], RECHNUNG: ['Rechnung', 'RE'] };
+const BELEG_ART = { ANGEBOT: ['Angebot', 'A'], RECHNUNG: ['Rechnung', 'R'] };
 const BELEG_STATUS = {
   ENTWURF: ['Entwurf', 'grau'], OFFEN: ['Offen', 'blau'], TEILBEZAHLT: ['Teilbezahlt', 'gelb'], BEZAHLT: ['Bezahlt', 'gruen'], STORNIERT: ['Storniert', 'grau'],
   ANGENOMMEN: ['Angenommen', 'gruen'], ABGELEHNT: ['Abgelehnt', 'rot'],
 };
 const MAHNSTUFEN = ['Zahlungserinnerung', '1. Mahnung', '2. Mahnung', 'Letzte Mahnung'];
 const rechnungsDaten = () => Object.assign({ name: '', strasse: '', plzOrt: '', telefon: '', email: '', steuer: '', ustId: '', iban: '', bic: '', bank: '',
-  zahlungsziel: 14, mwst: 19, fuss: '' }, S.einstellungen.rechnung || {});
+  zahlungsziel: 14, mwst: 19, fuss: '', startRechnung: 1, startAngebot: 1 }, S.einstellungen.rechnung || {});
 
 const positionen = b => { try { const p = JSON.parse(b.positionen || '[]'); return Array.isArray(p) ? p : []; } catch { return []; } };
 function belegSummen(b) {
@@ -1562,11 +1563,15 @@ function belegMarke(b) {
   if (istUeberfaellig(b)) return ['Überfällig' + (b.mahnstufe ? ' · ' + MAHNSTUFEN[Math.min(b.mahnstufe, 4) - 1] : ''), 'rot'];
   return BELEG_STATUS[b.status] || BELEG_STATUS.OFFEN;
 }
-/** Nächste freie Nummer, z. B. RE-2026-0007. */
+/**
+ * Nächste freie Nummer, z. B. R2026-0007 (Rechnung) oder A2026-0003 (Angebot). Die Startnummer aus den
+ * Einstellungen gilt als Untergrenze – so lässt sich an einen bisherigen Nummernkreis anschließen.
+ */
 function naechsteBelegNummer(art, jahr = new Date().getFullYear()) {
-  const praefix = `${BELEG_ART[art][1]}-${jahr}-`;
+  const praefix = `${BELEG_ART[art][1]}${jahr}-`;
+  const start = Math.max(1, Math.floor(Number(rechnungsDaten()[art === 'RECHNUNG' ? 'startRechnung' : 'startAngebot']) || 1));
   const hoechste = alle('belege').filter(b => b.art === art && String(b.nummer || '').startsWith(praefix))
-    .reduce((n, b) => Math.max(n, Number(String(b.nummer).slice(praefix.length)) || 0), 0);
+    .reduce((n, b) => Math.max(n, Number(String(b.nummer).slice(praefix.length)) || 0), start - 1);
   return praefix + String(hoechste + 1).padStart(4, '0');
 }
 const zahlungsziel = firma => Number((firma && firma.zahlungszielTage) || rechnungsDaten().zahlungsziel) || 14;
