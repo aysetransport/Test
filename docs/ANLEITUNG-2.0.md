@@ -184,6 +184,18 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Android-App 3.0 – neu aufgebaut
+
+Die Android-App ist ab 3.0 neu gebaut: Sie zeigt dieselbe Oberfläche wie die Web- und die Windows-App und hat damit **alle Funktionen** – Firmen, Schäden, Termine, Finanzen (Angebote, Rechnungen, Zahlungen, Mahnungen), Fuhrpark (mit Import), Übersicht und Postfach mit zwei Mail-Konten. Der Android-Teil ergänzt, was nur die App kann: E-Mail direkt per IMAP/SMTP, Fotos mit der Kamera, Dateien öffnen und im Ordner *Download/Ayse CRM* speichern, PDF für Rechnungen, Drucken über Android und Benachrichtigungen bei neuen Mails.
+
+**Umstieg von 2.x:**
+1. Die neue `Code.gs` muss bereitgestellt sein (siehe oben).
+2. Die alte App deinstallieren (die neue ist anders signiert und lässt sich sonst nicht installieren).
+3. Die neue APK installieren (GitHub → Actions → *Android* → Paket *Ayse-CRM-apk*), öffnen, Cloud-PIN eingeben – alle Daten kommen aus der Cloud.
+4. Unter ⚙ → E-Mail die beiden Postfächer neu einrichten (Passwörter werden aus Sicherheitsgründen nicht übernommen).
+
+Die Zurück-Taste schließt erst offene Fenster, geht dann eine Ansicht zurück und verlässt zuletzt die App.
+
 ## Bekannte Grenzen
 
 - Mails ohne Fall liegen nur auf dem Gerät, das sie abgerufen hat. Mails zu Firmen erscheinen über

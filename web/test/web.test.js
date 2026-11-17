@@ -696,3 +696,73 @@ test('Fuhrpark: Fahrzeug mit Fahrzeugschein und Fristen, Tanken, Dokument, Termi
   assert.deepEqual(imp, [['KR-AT 123', 'Mercedes-Benz', 'Weiß', 1], ['RS-FK 4204', 'Mercedes-Benz', '', 1]]);
   await cloud.schliessen();
 });
+
+test('Android-App: Brücke (android.js) – Postfach, Speichern, Drucken, PDF und Zurück-Taste', async () => {
+  const fs = require('node:fs');
+  const bruecke = fs.readFileSync(path.join(__dirname, '../../app/src/main/assets/android.js'), 'utf8');
+  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 412, height: 900 } });
+  await kontext.route('https://script.google.com/**', route => route.abort());
+  // Nachbildung des Kotlin-Teils: beantwortet die Aufrufe wie MainActivity/Bruecke.kt
+  await kontext.addInitScript(() => {
+    localStorage.setItem('schadensfaelle-v1', JSON.stringify({ nurLokal: true }));
+    localStorage.setItem('crm-bereich', 'firmen');
+    window.__aufrufe = [];
+    const konten = {};
+    window.AndroidBruecke = {
+      aufruf(id, name, args) {
+        const a = JSON.parse(args); window.__aufrufe.push([name, a]);
+        const ok = {
+          'mail:anbieter': { IONOS: { label: 'IONOS (1&1)', imapHost: 'imap.ionos.de', imapPort: 993, imapSicherheit: 'SSL', smtpHost: 'smtp.ionos.de', smtpPort: 465, smtpSicherheit: 'SSL' } },
+          'mail:konto': konten[a[0]] || null,
+          'mail:hole': { mails: [], letzteUid: 0, uidValidity: 1 },
+          'datei:speichern': 'Download/Ayse CRM/' + a[0],
+          'pdf:erzeugen': btoa('%PDF-1.4'),
+        }[name];
+        if (name === 'mail:einrichten') konten[a[2]] = a[0];
+        setTimeout(() => window.__androidAntwort(id, { ok: ok === undefined ? true : ok }), 10);
+      },
+    };
+  });
+  await kontext.addInitScript(bruecke);
+  const s = await kontext.newPage();
+  s.on('pageerror', fehler => { throw fehler; });
+  await s.goto(seite.url);
+  await s.waitForFunction(() => window.__appBereit);
+  assert.equal(await s.evaluate(() => window.desktop.plattform), 'android');
+
+  // Postfach einrichten (wie in der Windows-App) → Reiter „Postfach“ erscheint
+  await s.evaluate(() => mailKontoDialog('SCHADEN'));
+  await s.locator('#konto-form').getByText('Das Passwort wird verschlüsselt und nur auf diesem Gerät gespeichert.').waitFor();
+  await s.locator('#konto-form [name=adresse]').fill('schaden@ayse.example');
+  await s.locator('#konto-form [name=passwort]').fill('geheim');
+  await s.locator('#konto-form button.voll').click();
+  await s.locator('[data-bereich=postfach]').waitFor();
+  assert.ok(await s.evaluate(() => window.__aufrufe.some(([n, a]) => n === 'mail:einrichten' && a[1] === 'geheim' && a[2] === 'SCHADEN')));
+
+  // CSV-Download landet über die Brücke im Download-Ordner
+  await s.locator('[data-bereich=fuhrpark]').click();
+  await s.evaluate(() => FuhrparkAktionen.speichern({ kennzeichen: 'RS-FK 4204' }));
+  await s.locator('[data-fuhrpark-csv]').click();
+  await s.locator('#toast', { hasText: 'Gespeichert: Download/Ayse CRM/Fahrze' }).waitFor();
+  const csv = await s.evaluate(() => window.__aufrufe.find(([n]) => n === 'datei:speichern')[1]);
+  assert.match(csv[0], /^Fahrzeuge_\d{4}-\d{2}-\d{2}\.csv$/);
+  assert.ok(Buffer.from(csv[1], 'base64').toString('utf8').includes('RS-FK 4204'));
+
+  // Drucken und PDF gehen an Android
+  await s.evaluate(() => druckeHtml('<p>Beleg</p>'));
+  await s.waitForFunction(() => window.__aufrufe.some(([n, a]) => n === 'drucken' && a[0] === '<p>Beleg</p>'));
+  assert.equal(await s.locator('#druckrahmen').count(), 0);
+  assert.equal(await s.evaluate(() => window.desktop.pdf('<p>x</p>')), Buffer.from('%PDF-1.4').toString('base64'));
+
+  // Zurück-Taste: Dialog zu → eine Ansicht zurück → am Anfang: App verlassen (false)
+  await s.evaluate(() => { location.hash = '#/fahrzeug/' + alle('fahrzeuge')[0].id; });
+  await s.locator('#detail h2', { hasText: 'RS-FK 4204' }).waitFor();
+  await s.evaluate(() => dialog('<p>Test</p>'));
+  assert.equal(await s.evaluate(() => window.__androidZurueck()), true);
+  assert.equal(await s.evaluate(() => $('#dialog').open), false);
+  assert.equal(await s.evaluate(() => window.__androidZurueck()), true);
+  await s.waitForFunction(() => !location.hash.startsWith('#/fahrzeug'));
+  await s.evaluate(() => { history.replaceState(null, '', location.pathname); });
+  assert.equal(await s.evaluate(() => window.__androidZurueck()), false);
+  await kontext.close();
+});

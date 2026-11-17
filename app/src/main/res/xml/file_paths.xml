@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- Anlagen (Fotos, Belege) der Schadensfälle -->
-    <files-path name="anlagen" path="anlagen/" />
-    <!-- Anhänge von E-Mails ohne Fall -->
-    <files-path name="mailanhaenge" path="mail-anhaenge/" />
-    <!-- Zwischenablage für Kameraaufnahmen -->
+    <!-- Dateien, die mit einer anderen App geöffnet werden (Anlagen, Dokumente) -->
+    <cache-path name="oeffnen" path="oeffnen/" />
+    <!-- Kameraaufnahmen für Anlagen -->
     <cache-path name="kamera" path="kamera/" />
-    <!-- Exportdateien (CSV), die geteilt werden -->
-    <cache-path name="export" path="export/" />
 </paths>
