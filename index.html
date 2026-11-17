@@ -120,6 +120,10 @@ dialog h3{font-size:13px;color:var(--primaer);margin:14px 0 8px}
 .termin{display:flex;align-items:center;gap:6px}
 .termin input{width:20px;height:20px;flex:none}
 .termin-symbol{width:20px;text-align:center;flex:none}
+.positionen{width:100%;border-collapse:collapse;margin:6px 0}.positionen th{text-align:left;font-size:12px;color:var(--leise);padding:2px 4px}
+.positionen td{padding:2px 4px}.positionen input{width:100%;padding:6px;border:1px solid var(--rand);border-radius:6px;background:transparent;color:inherit}
+.positionen td:nth-child(3){width:70px}.positionen td:nth-child(4){width:110px}.positionen td:nth-child(5){width:36px}
+.reiter{overflow-x:auto}.reiter-knopf{flex:1 0 auto;padding:10px 8px}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -405,8 +409,8 @@ function csvErstellen(faelle, anlagenJeFall) {
 
 // ============================== Daten im Browser ==============================
 const SPEICHER = 'schadensfaelle-v1', PIN_SPEICHER = 'schadensfaelle-pin';
-const CRM_TABELLEN = ['adressen', 'ansprechpartner', 'preise', 'aktivitaeten', 'aufgaben', 'dokumente', 'chancen'];
-const LEER = () => ({ faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {}, adressen: {}, ansprechpartner: {}, preise: {}, aktivitaeten: {}, aufgaben: {}, dokumente: {}, chancen: {}, seit: 0, kennung: '', apiUrl: '', nurLokal: false,
+const CRM_TABELLEN = ['adressen', 'ansprechpartner', 'preise', 'aktivitaeten', 'aufgaben', 'dokumente', 'chancen', 'belege'];
+const LEER = () => ({ faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {}, adressen: {}, ansprechpartner: {}, preise: {}, aktivitaeten: {}, aufgaben: {}, dokumente: {}, chancen: {}, belege: {}, seit: 0, kennung: '', apiUrl: '', nurLokal: false,
   einstellungen: { firma: '', bearbeiter: '', funktion: '', wiedervorlageTage: 7 } });
 let S = LEER();
 try { S = Object.assign(LEER(), JSON.parse(localStorage.getItem(SPEICHER) || '{}')); } catch { /* beschädigter Stand: neu beginnen, die Cloud liefert nach */ }
@@ -754,7 +758,7 @@ async function anmeldung(falsch = false) {
 
 // ============================== Oberfläche ==============================
 const ANSICHT = { filter: 'OFFEN', suche: '', notiz: '', bereich: 'firmen', firmenSuche: '', firmenStatus: '', firmaFuerNeuenFall: '' };
-try { const b = localStorage.getItem('crm-bereich'); if (b && ['firmen', 'faelle', 'termine', 'postfach'].includes(b)) ANSICHT.bereich = b; } catch {}
+try { const b = localStorage.getItem('crm-bereich'); if (b && ['uebersicht', 'firmen', 'faelle', 'termine', 'finanzen', 'postfach'].includes(b)) ANSICHT.bereich = b; } catch {}
 function route() {
   const [, art = '', id = ''] = location.hash.split('/');
   return { art, id };
@@ -785,7 +789,8 @@ function zeichneListe(r = route()) {
   if (ANSICHT.bereich !== 'faelle') {
     const el = $('#liste'), fokus = document.activeElement && document.activeElement.id === 'firmen-suche';
     if (ANSICHT.bereich === 'postfach' && !MAIL.konto) ANSICHT.bereich = 'firmen';
-    el.innerHTML = bereichsReiter() + (ANSICHT.bereich === 'termine' ? zeichneTermine() : ANSICHT.bereich === 'postfach' ? zeichnePostfach(r) : zeichneFirmenliste(r));
+    const inhalt = { termine: () => zeichneTermine(), postfach: () => zeichnePostfach(r), finanzen: () => zeichneFinanzen(r), uebersicht: () => zeichneUebersicht() }[ANSICHT.bereich];
+    el.innerHTML = bereichsReiter() + (inhalt ? inhalt() : zeichneFirmenliste(r));
     if (fokus) { const s = $('#firmen-suche'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
     return;
   }
@@ -840,6 +845,12 @@ function zeichneDetail(r = route()) {
   if (r.art === 'einstellungen') { zeichneEinstellungen(); return; }
   if (r.art === 'firma') { zeichneFirma(r.id); return; }
   if (r.art === 'mail') { zeichneMail(decodeURIComponent(r.id)); return; }
+  if (r.art === 'beleg') {
+    // Nicht neu zeichnen, während im Formular getippt wird (z. B. bei einem Abgleich im Hintergrund).
+    const tippt = el.dataset.id === 'beleg' + r.id && document.activeElement && document.activeElement.closest('#beleg-form') && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+    if (!tippt) zeichneBeleg(r.id);
+    return;
+  }
   const f = r.art === 'fall' ? S.faelle[r.id] : null;
   if (!f || f.geloescht) {
     if (r.art === 'fall') { gehe('#/'); return; } // Fall wurde gelöscht (hier oder auf einem anderen Gerät)
@@ -1126,13 +1137,20 @@ function zeichneEinstellungen() {
         <label class="feld">Cloud-Adresse (…/exec)<input id="cloud-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(apiUrl())}"></label>
         <button class="knopf voll" id="verbinden">Verbinden</button>`}</div>
     ${window.desktop ? mailEinstellungen() : ''}
+    <div class="karte block"><h3>Eigene Firmendaten für Angebote und Rechnungen</h3>
+      ${[['name', 'Firmenname'], ['strasse', 'Straße und Hausnummer'], ['plzOrt', 'PLZ und Ort'], ['telefon', 'Telefon'], ['email', 'E-Mail'], ['steuer', 'Steuernummer'], ['ustId', 'USt-IdNr.'],
+        ['bank', 'Bank'], ['iban', 'IBAN'], ['bic', 'BIC'], ['zahlungsziel', 'Zahlungsziel (Tage)'], ['mwst', 'MwSt.-Satz (%)'], ['fuss', 'Zusatz in der Fußzeile']]
+        .map(([k, l]) => `<label class="feld">${l}<input data-rechnung="${k}" value="${esc(rechnungsDaten()[k])}"></label>`).join('')}</div>
     <div class="karte block"><h3>CRM</h3><p class="leise" style="margin-bottom:8px">Die Sicherung des bisherigen Browser-CRM (JSON) einlesen. Firmen mit gleichem Namen werden zusammengeführt, nichts wird doppelt angelegt.</p>
       <div class="zeile"><label class="knopf" id="crm-import-knopf">Sicherung des Browser-CRM importieren<input type="file" id="crm-import" accept=".json,application/json" hidden></label>
       <button class="knopf" id="crm-csv">CRM für Excel exportieren (6 CSV-Dateien)</button></div></div>
     <div class="karte block"><h3>Daten</h3><button class="knopf" id="csv">Fallliste für Excel exportieren (CSV)</button></div>
     <p class="leise">Erinnerungen per Benachrichtigung gibt es in der Android-App. Hier stehen fällige Fälle immer oben.</p>`;
 }
-$('#detail').addEventListener('input', e => { const k = e.target.dataset.einst; if (k) { S.einstellungen[k] = e.target.value; speichere(); } });
+$('#detail').addEventListener('input', e => {
+  const k = e.target.dataset.einst; if (k) { S.einstellungen[k] = e.target.value; speichere(); }
+  const r = e.target.dataset.rechnung; if (r) { S.einstellungen.rechnung = { ...rechnungsDaten(), [r]: e.target.value }; speichere(); }
+});
 $('#detail').addEventListener('change', async e => {
   if (e.target.id !== 'crm-import' || !e.target.files.length) return;
   try {
@@ -1227,7 +1245,7 @@ function firmaTreffer(e, such) {
   return null;
 }
 
-const BEREICHE = { firmen: 'Firmen', faelle: 'Schäden', termine: 'Termine', postfach: 'Postfach' };
+const BEREICHE = { uebersicht: 'Übersicht', firmen: 'Firmen', faelle: 'Schäden', termine: 'Termine', finanzen: 'Finanzen', postfach: 'Postfach' };
 function bereichsReiter() {
   const w = wiedervorlagen(), faellig = w.ueberfaellig.length + w.heute.length;
   const offen = Object.values(mails()).filter(m => !istZugeordnet(m)).length;
@@ -1278,7 +1296,7 @@ function zeichneTermine() {
   const gruppe = (titel, liste, farbe) => (liste.length ? `<h3 class="abschnitt" style="${farbe}">${titel} (${liste.length})</h3>${liste.map(eintrag).join('')}` : '');
   const ohne = w.ohneDatum.length ? `<h3 class="abschnitt">Ohne Datum</h3>${w.ohneDatum.map(a => eintrag({ art: 'aufgabe', datum: '', titel: a.text, zusatz: S.auftraggeber[a.firmaId]?.name || '', a })).join('')}` : '';
   const inhalt = gruppe('Überfällig', w.ueberfaellig, 'color:var(--rot-t)') + gruppe('Heute', w.heute, '') + gruppe('Demnächst', w.demnaechst, 'color:var(--leise)') + ohne;
-  return `<div id="termine">${inhalt || '<div class="leer">⏱<b>Nichts zu tun</b>Hier erscheinen Wiedervorlagen bei Firmen und die Wiedervorlagen der Schadensfälle.</div>'}</div>`;
+  return `<div class="zeile" style="margin-bottom:8px"><button class="knopf" data-ics>Termine als Kalenderdatei (.ics)</button></div><div id="termine">${inhalt || '<div class="leer">⏱<b>Nichts zu tun</b>Hier erscheinen Wiedervorlagen bei Firmen und die Wiedervorlagen der Schadensfälle.</div>'}</div>`;
 }
 
 /** Kontakthistorie: festgehaltene Kontakte und Mails aus den Fällen der Firma. */
@@ -1345,13 +1363,15 @@ function zeichneFirma(id) {
     ${bereich('Wiedervorlagen', 'aufgaben', offen.map(aufgabeZeile).join('') + (erledigt.length ? `<details><summary class="leise" style="cursor:pointer;margin:6px 0">${erledigt.length} erledigt</summary>${erledigt.map(aufgabeZeile).join('')}</details>` : ''))}
     ${bereich('Kontakthistorie', 'aktivitaeten', historie, 'Kontakt festhalten')}
     ${bereich('Dokumente', 'dokumente', dokumente)}
+    ${bereich('Angebote und Rechnungen', 'belege', vonFirma('belege', id).sort((x, y) => String(y.datum).localeCompare(String(x.datum))).map(x => belegKarte(x)).join(''), 'Rechnung')}
     ${bereich('Schadensfälle', 'faelle', faelleDerFirma, 'Neuer Fall')}`;
 }
 
 // ---------- Dialoge für Firmen und Einträge ----------
 const CRM_FELDER = {
   auftraggeber: ['Firma', [['name', 'Firma', 'pflicht'], ['rechtsform', 'Rechtsform (z. B. GmbH)'], ['status', 'Status', Object.fromEntries(Object.entries(FIRMEN_STATUS).map(([k, [l]]) => [k, l]))],
-    ['telefon', 'Telefon', 'tel'], ['email', 'E-Mail', 'email'], ['website', 'Website'], ['schlagworte', 'Schlagworte, durch Komma getrennt (z. B. Möbel, Elektro, Küchen)'], ['notizen', 'Notizen', 'lang']]],
+    ['telefon', 'Telefon', 'tel'], ['email', 'E-Mail', 'email'], ['website', 'Website'], ['schlagworte', 'Schlagworte, durch Komma getrennt (z. B. Möbel, Elektro, Küchen)'],
+    ['kundennummer', 'Kundennummer'], ['ustId', 'USt-IdNr. der Firma'], ['zahlungszielTage', 'Zahlungsziel in Tagen (leer = Standard)'], ['notizen', 'Notizen', 'lang']]],
   ansprechpartner: ['Ansprechpartner', [['name', 'Name', 'pflicht'], ['thema', 'Zuständig für (Disposition, Abrechnung, Schäden, Geschäftsführung …)'], ['telefon', 'Telefon', 'tel'], ['email', 'E-Mail', 'email'], ['notiz', 'Notiz', 'lang']]],
   adressen: ['Adresse', [['art', 'Art', ADRESS_ART], ['strasse', 'Straße und Hausnummer'], ['plz', 'PLZ'], ['ort', 'Ort', 'pflicht'], ['notiz', 'Notiz (z. B. Rampe, Öffnungszeiten)', 'lang']]],
   preise: ['Preis', [['bezeichnung', 'Bezeichnung (Tourpauschale, Montage, Extra-km, Etage, Maut …)', 'pflicht'], ['betrag', 'Betrag in Euro', 'geld'], ['einheit', 'Einheit (pro Tour, pro km …)'], ['gueltigAb', 'Gültig ab', 'date'], ['notiz', 'Notiz', 'lang']]],
@@ -1500,7 +1520,14 @@ $('#detail').addEventListener('click', e => {
   const neu = e.target.closest('[data-crm-neu]'), x = e.target.closest('[data-crm]'), erl = e.target.closest('[data-erledigt]'), oeffnen = e.target.closest('[data-oeffne]'), fall = e.target.closest('[data-fall]');
   if (e.target.closest('[data-firma-bearbeiten]')) { crmDialog('auftraggeber', firma, null); return; }
   if (e.target.closest('[data-preise-teilen]')) { teile('Preise ' + firma.name, preislisteText(firma)); return; }
-  if (neu) { if (neu.dataset.crmNeu === 'faelle') { ANSICHT.firmaFuerNeuenFall = firma.id; gehe('#/neu'); } else crmDialog(neu.dataset.crmNeu, null, firma.id); return; }
+  if (neu) {
+    if (neu.dataset.crmNeu === 'faelle') { ANSICHT.firmaFuerNeuenFall = firma.id; gehe('#/neu'); }
+    else if (neu.dataset.crmNeu === 'belege') gehe('#/beleg/' + BelegAktionen.neu('RECHNUNG', firma.id));
+    else crmDialog(neu.dataset.crmNeu, null, firma.id);
+    return;
+  }
+  const beleg = e.target.closest('[data-beleg]');
+  if (beleg) { gehe('#/beleg/' + beleg.dataset.beleg); return; }
   if (erl) { const a = S.aufgaben[erl.dataset.erledigt]; if (a) Aktionen.crmSpeichern('aufgaben', { ...a, erledigt: erl.checked }); return; }
   if (oeffnen) {
     const ziel = oeffnen.dataset.oeffne;
@@ -1510,6 +1537,336 @@ $('#detail').addEventListener('click', e => {
   if (x) { crmDialog(x.dataset.crm, S[x.dataset.crm][x.dataset.crmId], firma.id); return; }
   if (fall) gehe('#/fall/' + fall.dataset.fall);
 });
+
+// ============================== Angebote, Rechnungen, Zahlstatus ==============================
+// Belege (Tabelle „belege“): art ANGEBOT oder RECHNUNG, Positionen als JSON-Text, Beträge in Cent.
+const BELEG_ART = { ANGEBOT: ['Angebot', 'AN'], RECHNUNG: ['Rechnung', 'RE'] };
+const BELEG_STATUS = {
+  ENTWURF: ['Entwurf', 'grau'], OFFEN: ['Offen', 'blau'], TEILBEZAHLT: ['Teilbezahlt', 'gelb'], BEZAHLT: ['Bezahlt', 'gruen'], STORNIERT: ['Storniert', 'grau'],
+  ANGENOMMEN: ['Angenommen', 'gruen'], ABGELEHNT: ['Abgelehnt', 'rot'],
+};
+const MAHNSTUFEN = ['Zahlungserinnerung', '1. Mahnung', '2. Mahnung', 'Letzte Mahnung'];
+const rechnungsDaten = () => Object.assign({ name: '', strasse: '', plzOrt: '', telefon: '', email: '', steuer: '', ustId: '', iban: '', bic: '', bank: '',
+  zahlungsziel: 14, mwst: 19, fuss: '' }, S.einstellungen.rechnung || {});
+
+const positionen = b => { try { const p = JSON.parse(b.positionen || '[]'); return Array.isArray(p) ? p : []; } catch { return []; } };
+function belegSummen(b) {
+  const netto = positionen(b).reduce((n, p) => n + Math.round((Number(p.menge) || 0) * (Number(p.einzelCent) || 0)), 0);
+  const mwst = Math.round(netto * (Number(b.mwstProzent ?? 19) || 0) / 100);
+  return { netto, mwst, brutto: netto + mwst };
+}
+const offenCent = b => Math.max(0, belegSummen(b).brutto - (b.bezahltCent || 0));
+const istRechnungOffen = b => b.art === 'RECHNUNG' && ['OFFEN', 'TEILBEZAHLT'].includes(b.status);
+const istUeberfaellig = b => istRechnungOffen(b) && b.faelligAm && b.faelligAm < heute();
+function belegMarke(b) {
+  if (istUeberfaellig(b)) return ['Überfällig' + (b.mahnstufe ? ' · ' + MAHNSTUFEN[Math.min(b.mahnstufe, 4) - 1] : ''), 'rot'];
+  return BELEG_STATUS[b.status] || BELEG_STATUS.OFFEN;
+}
+/** Nächste freie Nummer, z. B. RE-2026-0007. */
+function naechsteBelegNummer(art, jahr = new Date().getFullYear()) {
+  const praefix = `${BELEG_ART[art][1]}-${jahr}-`;
+  const hoechste = alle('belege').filter(b => b.art === art && String(b.nummer || '').startsWith(praefix))
+    .reduce((n, b) => Math.max(n, Number(String(b.nummer).slice(praefix.length)) || 0), 0);
+  return praefix + String(hoechste + 1).padStart(4, '0');
+}
+const zahlungsziel = firma => Number((firma && firma.zahlungszielTage) || rechnungsDaten().zahlungsziel) || 14;
+function rechnungsAdresse(firmaId) {
+  const l = vonFirma('adressen', firmaId);
+  return l.find(a => a.art === 'RECHNUNG') || l.find(a => a.art === 'HAUPTSITZ') || l[0] || null;
+}
+
+const BelegAktionen = {
+  neu(art, firmaId, extra = {}) {
+    const firma = S.auftraggeber[firmaId], rd = rechnungsDaten();
+    const b = merke('belege', { id: uuid(), firmaId, art, nummer: naechsteBelegNummer(art), datum: heute(),
+      faelligAm: art === 'RECHNUNG' ? plusTage(heute(), zahlungsziel(firma)) : plusTage(heute(), 30), status: 'ENTWURF', positionen: '[]',
+      mwstProzent: Number(rd.mwst) || 19, bezahltCent: 0, bezahltAm: null, mahnstufe: 0, bezug: '', notiz: '', fallId: '',
+      einleitung: art === 'RECHNUNG' ? 'für unsere Leistungen erlauben wir uns, wie folgt zu berechnen:' : 'vielen Dank für Ihre Anfrage. Gern bieten wir Ihnen an:',
+      schluss: art === 'RECHNUNG' ? `Bitte überweisen Sie den Betrag bis zum {FAELLIG} ohne Abzug.` : 'Das Angebot gilt 30 Tage. Wir freuen uns auf Ihren Auftrag.',
+      geaendertAm: jetztIso(), ...extra });
+    nachAenderung(); return b.id;
+  },
+  speichern(b) { merke('belege', { ...b, geaendertAm: jetztIso() }); nachAenderung(); },
+  zahlung(b, cent, am) {
+    const bezahlt = (b.bezahltCent || 0) + cent, voll = bezahlt >= belegSummen(b).brutto;
+    this.speichern({ ...b, bezahltCent: bezahlt, bezahltAm: am, status: voll ? 'BEZAHLT' : 'TEILBEZAHLT' });
+    Aktionen.crmSpeichern('aktivitaeten', { firmaId: b.firmaId, datum: am, art: 'SONSTIGES', kontakt: '', text: `Zahlung ${geld(cent)} zu ${b.nummer} erhalten${voll ? ' – vollständig bezahlt' : ''}` });
+  },
+  zuRechnung(angebot) {
+    const id = this.neu('RECHNUNG', angebot.firmaId, { positionen: angebot.positionen, mwstProzent: angebot.mwstProzent, bezug: angebot.id, fallId: angebot.fallId || '' });
+    this.speichern({ ...angebot, status: 'ANGENOMMEN' });
+    return id;
+  },
+  loeschen(b) { entferne('belege', b, { firmaId: b.firmaId, geaendertAm: jetztIso() }); nachAenderung(); },
+};
+
+/** A4-Seite für Druck und PDF (DIN-5008-ähnlich). */
+function belegHtml(b) {
+  const rd = rechnungsDaten(), firma = S.auftraggeber[b.firmaId] || { name: '' }, adr = rechnungsAdresse(b.firmaId), s = belegSummen(b);
+  const k = kontakteVon(b.firmaId).find(x => /abrechn|buchhalt|rechnung/i.test(x.thema || ''));
+  const ersetze = t => esc(String(t || '').replace('{FAELLIG}', datumText(b.faelligAm))).replace(/\n/g, '<br>');
+  const zeilen = positionen(b).map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.bez)}${p.einheit ? `<br><small>${esc(p.einheit)}</small>` : ''}</td>
+    <td class="r">${String(p.menge).replace('.', ',')}</td><td class="r">${geld(Number(p.einzelCent) || 0)}</td><td class="r">${geld(Math.round((Number(p.menge) || 0) * (Number(p.einzelCent) || 0)))}</td></tr>`).join('');
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>${esc(BELEG_ART[b.art][0])} ${esc(b.nummer)}</title><style>
+    @page{size:A4;margin:0}body{font:10.5pt/1.45 Arial,Helvetica,sans-serif;color:#111;margin:0}.seite{padding:20mm 20mm 30mm 25mm;position:relative;min-height:247mm}
+    .absender{font-size:7.5pt;border-bottom:1px solid #999;display:inline-block;margin-top:27mm}.empf{margin-top:3mm;height:30mm}
+    .info{position:absolute;top:50mm;right:20mm;font-size:9.5pt}.info td{padding:0 0 0 8px}h1{font-size:14pt;margin:18mm 0 6mm}
+    table.pos{width:100%;border-collapse:collapse;margin:6mm 0}table.pos th{text-align:left;border-bottom:1.5px solid #111;padding:4px}table.pos td{border-bottom:1px solid #ddd;padding:4px;vertical-align:top}
+    .r{text-align:right}.summe td{padding:2px 4px}.summe .b{font-weight:bold;border-top:1.5px solid #111}
+    .fuss{position:absolute;bottom:10mm;left:25mm;right:20mm;font-size:7.5pt;color:#444;border-top:1px solid #999;padding-top:2mm;display:flex;gap:10mm}
+    .kopf{position:absolute;top:12mm;right:20mm;text-align:right;font-weight:bold;font-size:13pt}</style></head><body><div class="seite">
+    <div class="kopf">${esc(rd.name || S.einstellungen.firma || '')}</div>
+    <div class="absender">${esc([rd.name || S.einstellungen.firma, rd.strasse, rd.plzOrt].filter(Boolean).join(' · '))}</div>
+    <div class="empf">${esc(firmaName(firma))}<br>${k ? 'z. Hd. ' + esc(k.name) + '<br>' : ''}${adr ? esc(adr.strasse) + '<br>' + esc([adr.plz, adr.ort].filter(Boolean).join(' ')) : ''}</div>
+    <table class="info"><tr><td>${esc(BELEG_ART[b.art][0])}-Nr.:</td><td>${esc(b.nummer)}</td></tr><tr><td>Datum:</td><td>${datumText(b.datum)}</td></tr>
+      ${firma.kundennummer ? `<tr><td>Kunden-Nr.:</td><td>${esc(firma.kundennummer)}</td></tr>` : ''}${firma.ustId ? `<tr><td>Ihre USt-IdNr.:</td><td>${esc(firma.ustId)}</td></tr>` : ''}
+      ${b.art === 'RECHNUNG' ? `<tr><td>Fällig am:</td><td>${datumText(b.faelligAm)}</td></tr>` : `<tr><td>Gültig bis:</td><td>${datumText(b.faelligAm)}</td></tr>`}</table>
+    <h1>${b.status === 'STORNIERT' ? 'Storno – ' : ''}${esc(BELEG_ART[b.art][0])} ${esc(b.nummer)}</h1>
+    <p>${k ? `Guten Tag ${esc(k.name)},` : 'Sehr geehrte Damen und Herren,'}</p><p>${ersetze(b.einleitung)}</p>
+    <table class="pos"><tr><th>Pos.</th><th>Leistung</th><th class="r">Menge</th><th class="r">Einzelpreis</th><th class="r">Gesamt</th></tr>${zeilen}</table>
+    <table class="summe" style="margin-left:auto"><tr><td>Summe netto</td><td class="r">${geld(s.netto)}</td></tr><tr><td>zzgl. ${b.mwstProzent ?? 19} % MwSt.</td><td class="r">${geld(s.mwst)}</td></tr>
+      <tr class="b"><td class="b">Gesamtbetrag</td><td class="r b">${geld(s.brutto)}</td></tr>${b.bezahltCent ? `<tr><td>bereits bezahlt</td><td class="r">${geld(b.bezahltCent)}</td></tr><tr class="b"><td class="b">offen</td><td class="r b">${geld(offenCent(b))}</td></tr>` : ''}</table>
+    <p>${ersetze(b.schluss)}</p><p>Mit freundlichen Grüßen<br>${esc(S.einstellungen.bearbeiter || '')}${S.einstellungen.bearbeiter ? '<br>' : ''}${esc(rd.name || S.einstellungen.firma || '')}</p>
+    <div class="fuss"><div>${esc(rd.name || '')}<br>${esc(rd.strasse)}<br>${esc(rd.plzOrt)}</div><div>${rd.telefon ? 'Tel. ' + esc(rd.telefon) + '<br>' : ''}${esc(rd.email)}</div>
+      <div>${rd.steuer ? 'St.-Nr. ' + esc(rd.steuer) + '<br>' : ''}${rd.ustId ? 'USt-IdNr. ' + esc(rd.ustId) : ''}</div><div>${esc(rd.bank)}<br>${rd.iban ? 'IBAN ' + esc(rd.iban) : ''}<br>${rd.bic ? 'BIC ' + esc(rd.bic) : ''}</div>
+      ${rd.fuss ? `<div>${esc(rd.fuss)}</div>` : ''}</div></div></body></html>`;
+}
+const belegDateiname = b => `${BELEG_ART[b.art][0]}_${b.nummer}_${(S.auftraggeber[b.firmaId] || {}).name || ''}.pdf`.replace(/\s+/g, '_');
+async function belegPdf(b) {
+  if (!window.desktop || !window.desktop.pdf) throw new Error('PDF gibt es in der Windows-App. Im Browser bitte „Drucken“ → „Als PDF speichern“ nutzen.');
+  return window.desktop.pdf(belegHtml(b));
+}
+function belegDrucken(b) {
+  const f = window.open('', '_blank');
+  if (!f) { toast('Das Druckfenster wurde blockiert.'); return; }
+  f.document.write(belegHtml(b)); f.document.close(); f.focus(); setTimeout(() => f.print(), 300);
+}
+
+// ---------- Übersicht und Finanzen (Liste) ----------
+function finanzKennzahlen() {
+  const b = alle('belege'), rechnungen = b.filter(x => x.art === 'RECHNUNG' && x.status !== 'STORNIERT' && x.status !== 'ENTWURF');
+  const monat = heute().slice(0, 7), jahr = heute().slice(0, 4);
+  const umsatz = l => l.reduce((n, x) => n + belegSummen(x).netto, 0);
+  const proFirma = {};
+  for (const r of rechnungen.filter(x => String(x.datum).startsWith(jahr))) proFirma[r.firmaId] = (proFirma[r.firmaId] || 0) + belegSummen(r).netto;
+  return {
+    offen: rechnungen.filter(istRechnungOffen).reduce((n, x) => n + offenCent(x), 0),
+    offenAnzahl: rechnungen.filter(istRechnungOffen).length,
+    ueberfaellig: rechnungen.filter(istUeberfaellig).reduce((n, x) => n + offenCent(x), 0),
+    ueberfaelligAnzahl: rechnungen.filter(istUeberfaellig).length,
+    monat: umsatz(rechnungen.filter(x => String(x.datum).startsWith(monat))),
+    jahr: umsatz(rechnungen.filter(x => String(x.datum).startsWith(jahr))),
+    angebote: b.filter(x => x.art === 'ANGEBOT' && x.status === 'OFFEN').reduce((n, x) => n + belegSummen(x).netto, 0),
+    topFirmen: Object.entries(proFirma).sort((x, y) => y[1] - x[1]).slice(0, 5),
+  };
+}
+const BELEG_FILTER = { OFFEN: 'Offen', UEBERFAELLIG: 'Überfällig', BEZAHLT: 'Bezahlt', ANGEBOTE: 'Angebote', ENTWURF: 'Entwürfe', ALLE: 'Alle' };
+function belegKarte(b, r) {
+  const m = belegMarke(b), s = belegSummen(b);
+  return `<button class="karte klickbar ${r && r.art === 'beleg' && r.id === b.id ? 'gewaehlt' : ''}" data-beleg="${b.id}">
+    <div class="zeile eng"><span class="titel fuell">${esc(b.nummer)} · ${esc((S.auftraggeber[b.firmaId] || {}).name || '')}</span><span class="marke ${m[1]}">${esc(m[0])}</span></div>
+    <div class="zeile eng"><span class="leise fuell">${esc(BELEG_ART[b.art][0])} vom ${datumText(b.datum)}${istRechnungOffen(b) ? ' · fällig ' + datumText(b.faelligAm) : ''}</span>
+      <b>${geld(s.brutto)}</b></div>${istRechnungOffen(b) && b.bezahltCent ? `<div class="leise">offen ${geld(offenCent(b))}</div>` : ''}</button>`;
+}
+function zeichneFinanzen(r) {
+  const k = finanzKennzahlen(), f = ANSICHT.belegFilter || 'OFFEN', such = String(ANSICHT.belegSuche || '').trim().toLowerCase();
+  const liste = alle('belege').filter(b => {
+    if (such) return [b.nummer, (S.auftraggeber[b.firmaId] || {}).name, b.notiz, positionen(b).map(p => p.bez).join(' ')].join(' ').toLowerCase().includes(such);
+    return f === 'ALLE' ? true : f === 'ANGEBOTE' ? b.art === 'ANGEBOT' : f === 'ENTWURF' ? b.status === 'ENTWURF'
+      : f === 'BEZAHLT' ? b.status === 'BEZAHLT' : f === 'UEBERFAELLIG' ? istUeberfaellig(b) : istRechnungOffen(b);
+  }).sort((a, b) => String(b.datum).localeCompare(String(a.datum)) || String(b.nummer).localeCompare(String(a.nummer)));
+  return `<div class="kennzahlen" style="grid-template-columns:1fr 1fr">
+      <button class="kennzahl" data-beleg-filter="OFFEN"><b>${geld(k.offen)}</b><span>Offen (${k.offenAnzahl} Rechnungen)</span></button>
+      <button class="kennzahl ${k.ueberfaelligAnzahl ? 'rot' : ''}" data-beleg-filter="UEBERFAELLIG"><b>${geld(k.ueberfaellig)}</b><span>Überfällig (${k.ueberfaelligAnzahl})</span></button>
+      <div class="kennzahl"><b>${geld(k.monat)}</b><span>Umsatz diesen Monat (netto)</span></div><div class="kennzahl"><b>${geld(k.jahr)}</b><span>Umsatz ${heute().slice(0, 4)} (netto)</span></div></div>
+    ${k.topFirmen.length ? `<div class="karte block"><h3>Umsatz je Firma ${heute().slice(0, 4)}</h3><dl>${k.topFirmen.map(([id, c]) => `<dt>${esc((S.auftraggeber[id] || {}).name || '–')}</dt><dd>${geld(c)}</dd>`).join('')}</dl></div>` : ''}
+    <div class="zeile" style="margin-bottom:8px"><button class="knopf voll" data-neuer-beleg="RECHNUNG">＋ Rechnung</button><button class="knopf" data-neuer-beleg="ANGEBOT">＋ Angebot</button>
+      <button class="knopf" data-belege-csv>CSV</button></div>
+    <input class="suche" id="beleg-suche" type="search" placeholder="Nummer, Firma, Leistung …" value="${esc(ANSICHT.belegSuche || '')}">
+    <div class="chips">${Object.entries(BELEG_FILTER).map(([x, l]) => `<button class="chip" data-beleg-filter="${x}" aria-pressed="${f === x && !such}">${l}</button>`).join('')}</div>
+    <div id="belege">${liste.map(b => belegKarte(b, r)).join('') || '<div class="leer"><b>Keine Belege in dieser Ansicht</b>Rechnungen und Angebote lassen sich hier oder in der Firma anlegen.</div>'}</div>`;
+}
+function zeichneUebersicht() {
+  const k = finanzKennzahlen(), w = wiedervorlagen(), kz = kennzahlen(faelle());
+  const chancen = alle('chancen').filter(c => (CHANCEN_PHASE[c.phase] || CHANCEN_PHASE.ANFRAGE)[1]);
+  const pause = auftraggeberListe().filter(langeKeinKontakt);
+  const kachel = (wert, label, ziel, rot) => `<button class="kennzahl ${rot ? 'rot' : ''}" data-gehe-bereich="${ziel}"><b>${wert}</b><span>${label}</span></button>`;
+  return `<div class="kennzahlen" style="grid-template-columns:1fr 1fr">
+    ${kachel(w.ueberfaellig.length + w.heute.length, 'Termine heute / überfällig', 'termine', w.ueberfaellig.length)}
+    ${kachel(Object.values(mails()).filter(m => !istZugeordnet(m)).length, 'Mails nicht zugeordnet', MAIL.konto ? 'postfach' : 'uebersicht')}
+    ${kachel(geld(k.offen), `Offene Rechnungen (${k.offenAnzahl})`, 'finanzen')}
+    ${kachel(geld(k.ueberfaellig), `Überfällig (${k.ueberfaelligAnzahl})`, 'finanzen', k.ueberfaelligAnzahl)}
+    ${kachel(geld(k.monat), 'Umsatz diesen Monat', 'finanzen')}
+    ${kachel(geld(k.jahr), 'Umsatz dieses Jahr', 'finanzen')}
+    ${kachel(`${chancen.length} · ${geld(chancen.reduce((n, c) => n + (c.wertCent || 0), 0))}`, 'Offene Verkaufschancen', 'firmen')}
+    ${kachel(geld(k.angebote), 'Offene Angebote (netto)', 'finanzen')}
+    ${kachel(kz.offen, 'Offene Schadensfälle', 'faelle', kz.faellig)}
+    ${kachel(pause.length, 'Firmen lange ohne Kontakt', 'firmen')}</div>
+    ${w.ueberfaellig.length + w.heute.length ? `<h3 class="abschnitt">Heute zu tun</h3>${[...w.ueberfaellig, ...w.heute].slice(0, 8).map(x =>
+      `<button class="vorlage" ${x.a ? `data-firma="${x.a.firmaId}"` : `data-fall="${x.f.id}"`}><b>${esc(x.titel)}</b><br><span class="leise">${esc([datumText(x.datum), x.zusatz].filter(Boolean).join(' · '))}</span></button>`).join('')}` : ''}
+    ${k.ueberfaelligAnzahl ? `<h3 class="abschnitt">Überfällige Rechnungen</h3>${alle('belege').filter(istUeberfaellig).map(b => belegKarte(b)).join('')}` : ''}`;
+}
+
+// ---------- Beleg bearbeiten (Detail) ----------
+function zeichneBeleg(id) {
+  const b = S.belege[id], el = $('#detail');
+  if (!b || b.geloescht) { gehe('#/'); return; }
+  const firma = S.auftraggeber[b.firmaId] || { name: '(Firma gelöscht)' }, s = belegSummen(b), m = belegMarke(b), pos = positionen(b);
+  const preise = vonFirma('preise', b.firmaId);
+  const rechnung = b.art === 'RECHNUNG', gesperrt = ['BEZAHLT', 'STORNIERT'].includes(b.status);
+  el.dataset.id = 'beleg' + id;
+  el.innerHTML = `<div class="karte"><div class="zeile eng"><h2 class="gross fuell">${esc(BELEG_ART[b.art][0])} ${esc(b.nummer)}</h2><span class="marke ${m[1]}">${esc(m[0])}</span></div>
+      <p class="leise"><a href="#/firma/${b.firmaId}">${esc(firmaName(firma))}</a>${b.bezug && S.belege[b.bezug] ? ` · aus <a href="#/beleg/${b.bezug}">${esc(S.belege[b.bezug].nummer)}</a>` : ''}</p>
+      <div class="zeile" style="margin-top:8px">
+        <button class="knopf voll" data-beleg-akt="pdf">PDF speichern</button><button class="knopf" data-beleg-akt="drucken">Drucken</button>
+        ${MAIL.konto ? '<button class="knopf" data-beleg-akt="mail">Per E-Mail senden</button>' : ''}
+        ${rechnung && istRechnungOffen(b) ? '<button class="knopf" data-beleg-akt="zahlung">Zahlung erfassen</button>' : ''}
+        ${rechnung && istUeberfaellig(b) && MAIL.konto ? `<button class="knopf" data-beleg-akt="mahnung">${esc(MAHNSTUFEN[Math.min(b.mahnstufe || 0, 3)])} senden</button>` : ''}
+        ${!rechnung && !['ANGENOMMEN', 'ABGELEHNT'].includes(b.status) ? '<button class="knopf" data-beleg-akt="zurechnung">In Rechnung umwandeln</button><button class="knopf" data-beleg-akt="abgelehnt">Abgelehnt</button>' : ''}
+        ${b.status === 'ENTWURF' ? '<button class="knopf" data-beleg-akt="festschreiben">Als versendet markieren</button>' : ''}
+        ${rechnung && b.status !== 'STORNIERT' ? '<button class="knopf text gefahr" data-beleg-akt="storno">Stornieren</button>' : ''}
+        ${b.status === 'ENTWURF' ? '<button class="knopf text gefahr" data-beleg-akt="loeschen">Löschen</button>' : ''}</div></div>
+    <form id="beleg-form" class="karte block">
+      <div class="zeile"><label class="feld fuell">Datum<input type="date" name="datum" value="${esc(b.datum || '')}" ${gesperrt ? 'disabled' : ''}></label>
+        <label class="feld fuell">${rechnung ? 'Fällig am' : 'Gültig bis'}<input type="date" name="faelligAm" value="${esc(b.faelligAm || '')}" ${gesperrt ? 'disabled' : ''}></label>
+        <label class="feld" style="width:90px">MwSt. %<input name="mwstProzent" inputmode="numeric" value="${esc(b.mwstProzent ?? 19)}" ${gesperrt ? 'disabled' : ''}></label></div>
+      <label class="feld">Einleitung<textarea name="einleitung" ${gesperrt ? 'disabled' : ''}>${esc(b.einleitung || '')}</textarea></label>
+      <h3>Positionen</h3>
+      <table class="positionen"><tr><th>Leistung</th><th>Einheit</th><th>Menge</th><th>Einzelpreis €</th><th></th></tr>
+        ${pos.map((p, i) => `<tr data-pos="${i}"><td><input name="bez" value="${esc(p.bez)}" ${gesperrt ? 'disabled' : ''}></td><td><input name="einheit" value="${esc(p.einheit || '')}" ${gesperrt ? 'disabled' : ''}></td>
+          <td><input name="menge" inputmode="decimal" value="${esc(String(p.menge).replace('.', ','))}" ${gesperrt ? 'disabled' : ''}></td>
+          <td><input name="einzel" inputmode="decimal" value="${esc(geldOhneSymbol(Number(p.einzelCent) || 0))}" ${gesperrt ? 'disabled' : ''}></td>
+          <td>${gesperrt ? '' : `<button type="button" class="symbol" data-pos-weg="${i}" aria-label="Position entfernen">✕</button>`}</td></tr>`).join('')}</table>
+      ${gesperrt ? '' : `<div class="zeile"><button type="button" class="knopf" data-pos-neu>＋ Position</button>
+        ${preise.length ? `<select id="aus-preisliste"><option value="">＋ aus Preisliste …</option>${preise.map(p => `<option value="${p.id}">${esc(p.bezeichnung)} (${p.betragCent != null ? geld(p.betragCent) : '–'})</option>`).join('')}</select>` : ''}</div>`}
+      <dl style="margin-top:10px"><dt>Summe netto</dt><dd>${geld(s.netto)}</dd><dt>MwSt.</dt><dd>${geld(s.mwst)}</dd><dt><b>Gesamt</b></dt><dd><b>${geld(s.brutto)}</b></dd>
+        ${b.bezahltCent ? `<dt>Bezahlt${b.bezahltAm ? ' am ' + datumText(b.bezahltAm) : ''}</dt><dd>${geld(b.bezahltCent)}</dd><dt>Offen</dt><dd>${geld(offenCent(b))}</dd>` : ''}</dl>
+      <label class="feld">Schlusstext (${'{FAELLIG}'} = Fälligkeitsdatum)<textarea name="schluss" ${gesperrt ? 'disabled' : ''}>${esc(b.schluss || '')}</textarea></label>
+      <label class="feld">Interne Notiz<input name="notiz" value="${esc(b.notiz || '')}"></label>
+      ${gesperrt ? '' : '<div class="zeile"><button class="knopf voll" id="beleg-speichern">Speichern</button></div>'}</form>`;
+}
+/** Liest das Formular in den Beleg zurück. */
+function belegAusFormular(b) {
+  const form = $('#beleg-form'); if (!form) return b;
+  const w = Object.fromEntries(new FormData(form));
+  const pos = [...form.querySelectorAll('[data-pos]')].map(z => {
+    const v = n => z.querySelector(`[name=${n}]`).value;
+    return { bez: v('bez').trim(), einheit: v('einheit').trim(), menge: Number(String(v('menge')).replace(',', '.')) || 0, einzelCent: geldLesen(v('einzel')) ?? 0 };
+  });
+  return { ...b, datum: w.datum || b.datum, faelligAm: w.faelligAm || b.faelligAm, mwstProzent: Number(w.mwstProzent) || 0, einleitung: w.einleitung ?? b.einleitung,
+    schluss: w.schluss ?? b.schluss, notiz: w.notiz ?? b.notiz, positionen: JSON.stringify(pos) };
+}
+
+async function belegMail(b, art = 'beleg') {
+  if (!MAIL.konto) { toast('Kein E-Mail-Konto eingerichtet'); return; }
+  try {
+    const pdf = await belegPdf(b), firma = S.auftraggeber[b.firmaId] || {};
+    const k = kontakteVon(b.firmaId).find(x => /abrechn|buchhalt|rechnung/i.test(x.thema || '') && x.email);
+    const s = belegSummen(b);
+    const texte = art === 'mahnung'
+      ? [`${MAHNSTUFEN[Math.min(b.mahnstufe || 0, 3)]}: ${BELEG_ART[b.art][0]} ${b.nummer}`, `unsere Rechnung ${b.nummer} vom ${datumText(b.datum)} über ${geld(s.brutto)} war am ${datumText(b.faelligAm)} fällig. Offen sind noch ${geld(offenCent(b))}.\n\nSicher ist die Zahlung nur übersehen worden. Bitte überweisen Sie den offenen Betrag innerhalb von 7 Tagen. Sollte sich die Zahlung mit diesem Schreiben überschnitten haben, betrachten Sie es bitte als gegenstandslos.\n\nDie Rechnung finden Sie noch einmal im Anhang.`]
+      : [`${BELEG_ART[b.art][0]} ${b.nummer}`, `anbei erhalten Sie unser${b.art === 'RECHNUNG' ? 'e Rechnung' : ' Angebot'} ${b.nummer} über ${geld(s.brutto)}${b.art === 'RECHNUNG' ? `, zahlbar bis ${datumText(b.faelligAm)}` : ''}.`];
+    mailAnFirma({ firmaId: b.firmaId, an: (k && k.email) || firma.email || '', betreff: texte[0], inhalt: texte[1],
+      anhaenge: [{ name: belegDateiname(b), mimeType: 'application/pdf', base64: pdf }],
+      nachSenden: () => {
+        const neu = { ...S.belege[b.id] };
+        if (art === 'mahnung') neu.mahnstufe = (neu.mahnstufe || 0) + 1; else if (neu.status === 'ENTWURF') neu.status = 'OFFEN';
+        BelegAktionen.speichern(neu);
+      } });
+  } catch (e) { toast(e.message, 6000); }
+}
+
+function belegNeuDialog(art) {
+  const liste = auftraggeberListe();
+  if (!liste.length) { toast('Bitte zuerst eine Firma anlegen.'); return; }
+  dialog(`<form method="dialog" id="beleg-neu"><h2>Neue${art === 'RECHNUNG' ? ' Rechnung' : 's Angebot'}</h2>
+    <label class="feld">Firma<select name="firma">${liste.map(e => `<option value="${e.id}">${esc(firmaName(e))}</option>`).join('')}</select></label>
+    <div class="dialog-knoepfe"><button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll">Anlegen</button></div></form>`);
+  $('#beleg-neu').onsubmit = ev => { ev.preventDefault(); const id = BelegAktionen.neu(art, new FormData(ev.target).get('firma')); $('#dialog').close(); gehe('#/beleg/' + id); };
+}
+function zahlungDialog(b) {
+  dialog(`<form method="dialog" id="zahlung-form"><h2>Zahlung zu ${esc(b.nummer)}</h2><p class="leise">Offen: ${geld(offenCent(b))}</p>
+    <label class="feld">Betrag (€)<input name="betrag" inputmode="decimal" value="${esc(geldOhneSymbol(offenCent(b)))}"><span class="fehlertext" id="zahlung-fehler" hidden>Bitte einen Betrag wie 89,50 eingeben.</span></label>
+    <label class="feld">Eingegangen am<input type="date" name="am" value="${heute()}"></label>
+    <div class="dialog-knoepfe"><button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll">Erfassen</button></div></form>`);
+  $('#zahlung-form').onsubmit = ev => {
+    ev.preventDefault();
+    const w = Object.fromEntries(new FormData(ev.target)), c = geldLesen(w.betrag);
+    if (!c) { $('#zahlung-fehler').hidden = false; return; }
+    $('#dialog').close(); BelegAktionen.zahlung(b, c, w.am || heute()); toast('Zahlung erfasst');
+  };
+}
+
+$('#detail').addEventListener('click', async e => {
+  const r = route(); if (r.art !== 'beleg') return;
+  const b = S.belege[r.id]; if (!b) return;
+  const akt = e.target.closest('[data-beleg-akt]'), weg = e.target.closest('[data-pos-weg]');
+  if (e.target.closest('[data-pos-neu]')) { const n = belegAusFormular(b); const p = positionen(n); p.push({ bez: '', einheit: '', menge: 1, einzelCent: 0 }); BelegAktionen.speichern({ ...n, positionen: JSON.stringify(p) }); return; }
+  if (weg) { const n = belegAusFormular(b); const p = positionen(n); p.splice(Number(weg.dataset.posWeg), 1); BelegAktionen.speichern({ ...n, positionen: JSON.stringify(p) }); return; }
+  if (!akt) return;
+  const aktuell = ['BEZAHLT', 'STORNIERT'].includes(b.status) ? b : belegAusFormular(b);
+  if (aktuell !== b) BelegAktionen.speichern(aktuell);
+  switch (akt.dataset.belegAkt) {
+    case 'pdf': try { const pfad = await window.desktop.speichere(belegDateiname(aktuell), await belegPdf(aktuell)); if (pfad) toast('Gespeichert: ' + pfad); }
+      catch (fehler) { if (!window.desktop) belegDrucken(aktuell); else toast(fehler.message); } break;
+    case 'drucken': belegDrucken(aktuell); break;
+    case 'mail': belegMail(aktuell); break;
+    case 'mahnung': belegMail(aktuell, 'mahnung'); break;
+    case 'zahlung': zahlungDialog(aktuell); break;
+    case 'zurechnung': gehe('#/beleg/' + BelegAktionen.zuRechnung(aktuell)); break;
+    case 'abgelehnt': BelegAktionen.speichern({ ...aktuell, status: 'ABGELEHNT' }); break;
+    case 'festschreiben': BelegAktionen.speichern({ ...aktuell, status: 'OFFEN' }); break;
+    case 'storno': bestaetige(`${aktuell.nummer} stornieren?`, 'Die Rechnung bleibt erhalten, zählt aber nicht mehr zum Umsatz und zu den offenen Posten.', 'Stornieren', () => BelegAktionen.speichern({ ...aktuell, status: 'STORNIERT' })); break;
+    case 'loeschen': bestaetige(`${aktuell.nummer} löschen?`, 'Der Entwurf wird gelöscht.', 'Löschen', () => { BelegAktionen.loeschen(aktuell); gehe('#/firma/' + aktuell.firmaId); }); break;
+  }
+});
+$('#detail').addEventListener('change', e => {
+  if (route().art !== 'beleg' || e.target.id !== 'aus-preisliste' || !e.target.value) return;
+  const b = belegAusFormular(S.belege[route().id]), p = S.preise[e.target.value];
+  const liste = positionen(b); liste.push({ bez: p.bezeichnung, einheit: p.einheit || '', menge: 1, einzelCent: p.betragCent || 0 });
+  BelegAktionen.speichern({ ...b, positionen: JSON.stringify(liste) });
+});
+$('#detail').addEventListener('submit', e => {
+  if (e.target.id !== 'beleg-form') return;
+  e.preventDefault(); BelegAktionen.speichern(belegAusFormular(S.belege[route().id])); toast('Gespeichert');
+});
+$('#liste').addEventListener('click', e => {
+  const bf = e.target.closest('[data-beleg-filter]'), b = e.target.closest('[data-beleg]'), neu = e.target.closest('[data-neuer-beleg]'), gb = e.target.closest('[data-gehe-bereich]');
+  if (bf) { ANSICHT.belegFilter = bf.dataset.belegFilter; ANSICHT.belegSuche = ''; zeichneListe(); return; }
+  if (neu) { belegNeuDialog(neu.dataset.neuerBeleg); return; }
+  if (gb) { ANSICHT.bereich = gb.dataset.geheBereich; zeichneListe(); return; }
+  if (e.target.closest('[data-belege-csv]')) { ladeHerunter(`Belege_${heute()}.csv`, belegeCsv()); return; }
+  if (e.target.closest('[data-ics]')) { ladeHerunter(`Termine_${heute()}.ics`, termineIcs(), 'text/calendar'); return; }
+  if (b && formularSchliessen()) gehe('#/beleg/' + b.dataset.beleg);
+});
+$('#liste').addEventListener('input', e => {
+  if (e.target.id === 'beleg-suche') { ANSICHT.belegSuche = e.target.value; zeichneListe(); const f = $('#beleg-suche'); f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+});
+
+function ladeHerunter(name, inhalt, typ = 'text/csv;charset=utf-8') {
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([inhalt], { type: typ })), download: name });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function belegeCsv() {
+  const z = alle('belege').sort((a, b) => String(a.nummer).localeCompare(String(b.nummer))).map(b => {
+    const s = belegSummen(b);
+    return [b.nummer, BELEG_ART[b.art][0], (S.auftraggeber[b.firmaId] || {}).name || '', datumText(b.datum), datumText(b.faelligAm), belegMarke(b)[0],
+      geldOhneSymbol(s.netto), geldOhneSymbol(s.mwst), geldOhneSymbol(s.brutto), geldOhneSymbol(b.bezahltCent || 0), datumText(b.bezahltAm), b.mahnstufe || 0];
+  });
+  return '﻿' + [['Nummer', 'Art', 'Firma', 'Datum', 'Fällig/gültig bis', 'Status', 'Netto', 'MwSt', 'Brutto', 'Bezahlt', 'Bezahlt am', 'Mahnstufe'], ...z]
+    .map(x => x.map(csvZelle).join(';')).join('\r\n') + '\r\n';
+}
+/** Alle offenen Termine (CRM und Fälle) als Kalenderdatei (ganztägig). */
+function termineIcs() {
+  const w = wiedervorlagen(), stempel = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+  const t = s => String(s || '').replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
+  const ereignisse = [...w.ueberfaellig, ...w.heute, ...w.demnaechst].map((x, i) => {
+    const tag = x.datum.replace(/-/g, ''), folgetag = plusTage(x.datum, 1).replace(/-/g, '');
+    return ['BEGIN:VEVENT', `UID:${x.a ? x.a.id : 'fall-' + x.f.id}@ayse-crm`, `DTSTAMP:${stempel}`, `DTSTART;VALUE=DATE:${tag}`, `DTEND;VALUE=DATE:${folgetag}`,
+      `SUMMARY:${t(x.titel)}`, `DESCRIPTION:${t(x.zusatz)}`, 'END:VEVENT'].join('\r\n');
+  });
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Ayse Transport//CRM//DE', 'CALSCALE:GREGORIAN', ...ereignisse, 'END:VCALENDAR'].join('\r\n') + '\r\n';
+}
 
 // ============================== E-Mail (nur Windows-App) ==============================
 // Die Windows-App spricht über ihren Hauptprozess direkt per IMAP/SMTP mit den Postfächern – mit
@@ -1733,7 +2090,7 @@ const FIRMEN_VORLAGEN = {
 };
 
 /** Schreibfenster ohne Fall: an eine Firma, einen Ansprechpartner oder als Antwort auf eine Mail aus dem Postfach. */
-function mailAnFirma({ firmaId = '', an = '', antwortAuf = '' } = {}) {
+function mailAnFirma({ firmaId = '', an = '', antwortAuf = '', betreff: betreffVorgabe = '', inhalt = '', anhaenge: feste = [], nachSenden = null } = {}) {
   const alt = antwortAuf && mails()[antwortAuf];
   const firma = S.auftraggeber[firmaId || (alt && alt.firmaId) || ''];
   const art = kontoFuer(alt ? alt.konto || 'SCHADEN' : 'ALLGEMEIN');
@@ -1741,9 +2098,9 @@ function mailAnFirma({ firmaId = '', an = '', antwortAuf = '' } = {}) {
   const gruss = (() => { const t = vorlageText('SACHSTANDSANFRAGE', {}, S.einstellungen).text; return t.slice(t.lastIndexOf('Mit freundlichen Grüßen')); })();
   const empfaenger = alt ? (alt.eingehend ? alt.von : alt.an) : an || (firma && firma.email) || '';
   const name = firma ? kontaktZuAdressen(firma.id, empfaenger) : '';
-  let text = `${name ? `Guten Tag ${name},` : 'Sehr geehrte Damen und Herren,'}\n\n\n\n${gruss}`;
+  let text = `${name ? `Guten Tag ${name},` : 'Sehr geehrte Damen und Herren,'}\n\n${inhalt ? inhalt + '\n\n' : '\n\n'}${gruss}`;
   if (alt) text += `\n\nAm ${zeitText(alt.zeitpunkt)} schrieb ${alt.von}:\n` + String(alt.text || '').split('\n').map(z => '> ' + z).join('\n');
-  const betreff = alt ? (/^(re|aw):/i.test(alt.betreff) ? alt.betreff : 'Re: ' + alt.betreff) : '';
+  const betreff = alt ? (/^(re|aw):/i.test(alt.betreff) ? alt.betreff : 'Re: ' + alt.betreff) : betreffVorgabe;
   const konten = Object.keys(MAIL.konten).filter(a => MAIL.konten[a]);
   dialog(`<form method="dialog" id="mail-form"><h2>E-Mail${firma ? ' · ' + esc(firma.name) : ''}</h2>
     <p class="fehlertext" id="mail-fehler" hidden></p>
@@ -1753,6 +2110,7 @@ function mailAnFirma({ firmaId = '', an = '', antwortAuf = '' } = {}) {
     <label class="feld">An<input name="an" value="${esc(empfaenger)}"></label>
     <label class="feld">Betreff<input name="betreff" value="${esc(betreff)}"></label>
     <label class="feld">Nachricht<textarea name="text" style="min-height:260px">${esc(text)}</textarea></label>
+    ${feste.length ? `<p class="leise">Anhang: ${feste.map(a => esc(a.name)).join(', ')}</p>` : ''}
     <label class="knopf" style="margin-top:6px">📎 Datei vom Rechner anhängen<input type="file" id="mail-datei" multiple hidden></label><div id="mail-dateien" class="leise"></div>
     <div class="dialog-knoepfe"><button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll" id="mail-senden">Senden</button></div></form>`);
   $('#mail-form').addEventListener('click', ev => {
@@ -1774,14 +2132,14 @@ function mailAnFirma({ firmaId = '', an = '', antwortAuf = '' } = {}) {
     if (dateien.reduce((n, d) => n + d.size, 0) > 20 * 1024 * 1024) { zeige('Die Anhänge sind zusammen größer als 20 MB.'); return; }
     const konto = String(w.get('konto') || art), knopf = $('#mail-senden'); knopf.disabled = true; knopf.textContent = 'Sendet …';
     try {
-      const anhaenge = [];
+      const anhaenge = [...feste];
       for (const d of dateien) anhaenge.push({ name: d.name, mimeType: d.type || 'application/octet-stream', base64: await alsBase64(d) });
       const entwurf = { an: adressen.join(', '), bcc: '', betreff: String(w.get('betreff')), text: String(w.get('text')), antwortAuf: antwortAuf || '', anhaenge };
       const messageId = await window.desktop.mail.sende(entwurf, konto);
       const m = { firmaId: firma ? firma.id : '', kundeRef: alt ? alt.kundeRef || '' : '', konto, eingehend: false, von: MAIL.konten[konto].adresse, an: entwurf.an,
         betreff: entwurf.betreff, text: entwurf.text, zeitpunkt: jetztIso(), anhaenge: anhaenge.map(a => a.name) };
       ablegen(messageId, m, mailText(m));
-      $('#dialog').close(); nachAenderung(); toast('E-Mail gesendet');
+      $('#dialog').close(); if (nachSenden) nachSenden(); nachAenderung(); toast('E-Mail gesendet');
     } catch (e) { zeige(e.message || 'Die E-Mail konnte nicht gesendet werden.'); knopf.disabled = false; knopf.textContent = 'Senden'; }
   };
 }
