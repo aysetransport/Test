@@ -11,11 +11,12 @@ contextBridge.exposeInMainWorld('desktop', {
   plattform: process.platform,
   mail: {
     anbieter: () => aufruf('mail:anbieter'),
-    konto: () => aufruf('mail:konto'),
-    einrichten: (konfig, passwort) => aufruf('mail:einrichten', konfig, passwort),
-    trennen: () => aufruf('mail:trennen'),
-    sende: entwurf => aufruf('mail:sende', entwurf),
-    hole: stand => aufruf('mail:hole', stand),
+    // art: 'SCHADEN' (Vorgabe) oder 'ALLGEMEIN'
+    konto: art => aufruf('mail:konto', art),
+    einrichten: (konfig, passwort, art) => aufruf('mail:einrichten', konfig, passwort, art),
+    trennen: art => aufruf('mail:trennen', art),
+    sende: (entwurf, art) => aufruf('mail:sende', entwurf, art),
+    hole: (stand, art) => aufruf('mail:hole', stand, art),
   },
   benachrichtige: (titel, text, ziel) => aufruf('benachrichtige', titel, text, ziel),
   oeffneDatei: (name, bytes) => aufruf('datei:oeffnen', name, bytes),

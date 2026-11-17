@@ -11,3 +11,6 @@
 -dontwarn javax.naming.**
 -dontwarn org.eclipse.angus.mail.**
 -dontwarn jakarta.activation.**
+
+# GraalVM-Native-Image-Hilfen von Angus Activation werden auf Android nie geladen.
+-dontwarn org.graalvm.nativeimage.**

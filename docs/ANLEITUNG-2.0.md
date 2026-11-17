@@ -41,7 +41,7 @@ Die Daten in Google Drive (`Schadensfaelle/daten.json`) bleiben erhalten. Die PI
 ## 3. App 2.0 installieren
 
 1. Die neue APK herunterladen:
-   - direkt die Datei `Ayse-CRM-2.0.0.apk` (wird mitgeschickt), **oder**
+   - direkt die Datei `Ayse-CRM-2.0.0.apk` (wird mitgeschickt – die optimierte, schnelle Fassung), **oder**
    - in GitHub unter **Actions → Android** den neuesten grünen Lauf auf dem Branch
      `claude/android-schadensfall-app-krncja` öffnen und unter *Artifacts* `Ayse-CRM-apk` laden
      (ZIP mit der APK).
@@ -123,9 +123,15 @@ Web-Apps die neue Fassung laden.
   Auftraggeber (CRM)) und wie bisher die Fallliste.
 - **Backup** enthält jetzt auch das ganze CRM und die Mails.
 
+## Windows-App
+
+Die Windows-App hat dieselbe Mehrpostfach-Funktion wie Android: unter ⚙ zwei Konten (Schäden und
+Allgemein), Reiter **Postfach** mit „Nicht zugeordnet“, Zuordnen/Umhängen, Antworten und Mails an
+Firmen und Ansprechpartner (✉ in der Firma). Installer: GitHub → Actions → *Windows-App* → neuester
+grüner Lauf → *Artifacts* `Schadensfaelle-Windows-Setup` → `Schadensfaelle-Setup-2.0.0.exe` ausführen
+(installiert über die bisherige Version, Daten und Konto bleiben).
+
 ## Bekannte Grenzen
 
-- Die **Windows-App** nutzt weiter nur ein Postfach und ordnet Mails nur Fällen zu. Firmen, Termine
-  und Import kann sie wie die Web-App.
 - Mails ohne Fall liegen nur auf dem Gerät, das sie abgerufen hat. Mails zu Firmen erscheinen über
   die Kontakthistorie aber auf allen Geräten.

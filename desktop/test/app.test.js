@@ -52,7 +52,7 @@ test('Windows-App: Cloud, Fall, E-Mail senden, Antwort abrufen und beantworten, 
 
   // Ohne Konto erscheint in den Einstellungen die Einrichtung; ein unerreichbarer Server wird gemeldet.
   await s.locator('#einstellungen-knopf').click();
-  await s.locator('#mail-einrichten').click();
+  await s.locator('#mail-einrichten-SCHADEN').click();
   await s.getByRole('button', { name: 'Eigener Server' }).click();
   await s.locator('#konto-form [name=adresse]').fill(gm.adresse);
   await s.locator('#konto-form [name=passwort]').fill(gm.passwort);
@@ -64,8 +64,8 @@ test('Windows-App: Cloud, Fall, E-Mail senden, Antwort abrufen und beantworten, 
   await s.getByRole('button', { name: 'Abbrechen' }).click();
 
   // Konto mit dem unverschlüsselten Testserver einrichten (in der Oberfläche nur SSL/STARTTLS wählbar).
-  await s.evaluate(async k => { MAIL.konto = await window.desktop.mail.einrichten(k.konfig, k.passwort); zeichne(); }, { konfig: gm.konfig, passwort: gm.passwort });
-  await s.locator('#mail-abrufen').waitFor();
+  await s.evaluate(async k => { mailKontoGesetzt('SCHADEN', await window.desktop.mail.einrichten(k.konfig, k.passwort, 'SCHADEN')); }, { konfig: gm.konfig, passwort: gm.passwort });
+  await s.locator('#mail-abrufen-SCHADEN').waitFor();
 
   // Fall anlegen.
   await s.locator('[data-neu]').first().click();
@@ -186,4 +186,61 @@ test('Windows-App: Zeichen des Auftraggebers, Bearbeitungsschritte, Dateianhang 
   assert.equal(beiKundin.length, 1);
   assert.ok(!/^bcc:/im.test(beiKundin[0]) && !beiKundin[0].includes('dispo@moebel.example'), 'die Kundin sieht den Auftraggeber nicht');
   await app.close();
+});
+
+test('Windows-App: zweites Postfach, Zuordnung zur Firma, Eingang „Nicht zugeordnet“, Umhängen und Mail an die Firma', async () => {
+  const { app, s } = await starte();
+  try {
+    await s.locator('#liste').getByText('Anna Becker').waitFor();
+    const info = 'info@firma.example';
+    const senden = (von, betreff, text, extra = {}) => nodemailer.createTransport({ host: '127.0.0.1', port: gm.smtpPort, secure: false, ignoreTLS: true })
+      .sendMail({ from: von, to: info, subject: betreff, text, ...extra });
+    // GreenMail legt das Postfach beim ersten Empfang an (Passwort = Adresse).
+    await senden('einkauf@seats-sofas.example', 'Touren nächste Woche', 'Bitte drei Touren einplanen.');
+    await senden('fremd@gmail.com', 'Anfrage Umzug', 'Was kostet ein Umzug?', { attachments: [{ filename: 'Grundriss.pdf', content: Buffer.from('%PDF-1.4'), contentType: 'application/pdf' }] });
+
+    await s.evaluate(() => {
+      const id = Aktionen.firmaSpeichern({ name: 'Seats and Sofas', status: 'AKTIV', website: 'https://www.seats-sofas.example' });
+      Aktionen.crmSpeichern('ansprechpartner', { firmaId: id, name: 'Jana Krüger', thema: 'Disposition', email: 'jana@seats-sofas.example' });
+    });
+    await s.evaluate(async k => { mailKontoGesetzt('ALLGEMEIN', await window.desktop.mail.einrichten(k, k.benutzer, 'ALLGEMEIN')); },
+      { ...gm.konfig, adresse: info, benutzer: info });
+    await s.evaluate(() => postfachAbrufen(true));
+
+    const ergebnis = await s.evaluate(() => {
+      const firma = auftraggeberListe().find(e => e.name === 'Seats and Sofas');
+      const liste = mailListe().filter(m => m.konto === 'ALLGEMEIN');
+      return { firmaId: firma.id, liste: liste.map(m => [m.betreff, m.firmaId || '', istZugeordnet(m)]),
+        historie: alle('aktivitaeten').filter(a => a.firmaId === firma.id).map(a => a.art) };
+    });
+    assert.deepEqual(ergebnis.liste.sort(), [['Anfrage Umzug', '', false], ['Touren nächste Woche', ergebnis.firmaId, true]]);
+    assert.deepEqual(ergebnis.historie, ['EMAIL'], 'die Mail steht in der Kontakthistorie der Firma');
+
+    // Postfach: „Nicht zugeordnet“ und von Hand dem Fall zuordnen – der Anhang wird Anlage des Falls.
+    await s.locator('[data-bereich=postfach]').click();
+    await s.locator('[data-postfach-filter=OFFEN]', { hasText: 'Nicht zugeordnet (1)' }).waitFor();
+    await s.locator('#postfach').getByText('Anfrage Umzug').click();
+    await s.locator('[data-mail-zuordnen]').click();
+    await s.locator('#zuordnen-form [name=fallId]').selectOption({ index: 1 });
+    await s.locator('#zuordnen-form [name=kundeRef]').fill('Familie Weber');
+    await s.locator('#zuordnen-form button.voll').click();
+    await s.locator('#mail-zuordnung', { hasText: 'Kunde: Familie Weber' }).waitFor();
+    await s.waitForFunction(() => Object.values(S.anlagen).some(a => a.anzeigename === 'Grundriss.pdf' && !a.geloescht));
+    assert.ok(await s.evaluate(() => Object.values(S.verlauf).some(v => v.typ === 'EMAIL_EINGANG' && v.text.includes('Was kostet ein Umzug?'))));
+
+    // Mail an die Firma geht über das allgemeine Postfach und landet in der Kontakthistorie.
+    await s.evaluate(id => gehe('#/firma/' + id), ergebnis.firmaId);
+    await s.locator('[data-oeffne="mailto:jana@seats-sofas.example"]').click();
+    assert.equal(await s.locator('#mail-form [name=konto]').inputValue(), 'ALLGEMEIN');
+    assert.equal(await s.locator('#mail-form [name=an]').inputValue(), 'jana@seats-sofas.example');
+    assert.match(await s.locator('#mail-form [name=text]').inputValue(), /^Guten Tag Jana Krüger,/);
+    await s.locator('#mail-form [name=betreff]').fill('Angebot 2027');
+    await s.locator('#mail-senden').click();
+    await s.getByText('E-Mail gesendet').first().waitFor({ timeout: 30000 });
+    const angekommen = (await postfach('jana@seats-sofas.example')).find(m => m.includes('Angebot 2027'));
+    assert.match(angekommen, /^From: .*info@firma\.example/m);
+    assert.equal(await s.evaluate(id => alle('aktivitaeten').filter(a => a.firmaId === id && a.kontakt === 'Jana Krüger').length, ergebnis.firmaId), 1);
+  } finally {
+    await app.close();
+  }
 });

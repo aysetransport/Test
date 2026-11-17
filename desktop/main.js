@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Schadensfälle für Windows. Die Oberfläche ist die Web-App (app/index.html); dieser Hauptprozess
+ * Ayse CRM (vormals Schadensfälle) für Windows. Die Oberfläche ist die Web-App (app/index.html); dieser Hauptprozess
  * ergänzt, was ein Browser nicht kann: E-Mail direkt per IMAP/SMTP, Windows-Benachrichtigungen,
  * Öffnen von Anlagen mit den Programmen des Rechners und ein über Windows verschlüsseltes Passwort.
  */
@@ -19,10 +19,14 @@ if (!app.requestSingleInstanceLock()) app.quit();
 
 let fenster = null;
 
-// ------------------------------ E-Mail-Konto ------------------------------
-const kontoDatei = () => path.join(app.getPath('userData'), 'mailkonto.json');
-function ladeKonto() {
-  try { return JSON.parse(fs.readFileSync(kontoDatei(), 'utf8')); } catch { return null; }
+// ------------------------------ E-Mail-Konten ------------------------------
+// Zwei Postfächer wie in der Android-App: SCHADEN (Schadensfälle, bisherige Datei mailkonto.json)
+// und ALLGEMEIN (alles andere, mailkonto-allgemein.json).
+const ARTEN = ['SCHADEN', 'ALLGEMEIN'];
+const art = a => (ARTEN.includes(a) ? a : 'SCHADEN');
+const kontoDatei = a => path.join(app.getPath('userData'), art(a) === 'SCHADEN' ? 'mailkonto.json' : 'mailkonto-allgemein.json');
+function ladeKonto(a) {
+  try { return JSON.parse(fs.readFileSync(kontoDatei(a), 'utf8')); } catch { return null; }
 }
 function passwort(konto) {
   if (!konto || !konto.passwort) throw new mail.MailFehler('Kein E-Mail-Konto eingerichtet');
@@ -38,19 +42,19 @@ function behandle(kanal, arbeit) {
 }
 
 behandle('mail:anbieter', () => mail.ANBIETER);
-behandle('mail:konto', () => ohnePasswort(ladeKonto()));
-behandle('mail:einrichten', async (konfig, pw) => {
+behandle('mail:konto', a => ohnePasswort(ladeKonto(a)));
+behandle('mail:einrichten', async (konfig, pw, a) => {
   await mail.pruefe(konfig, pw);
   // Unter Windows verschlüsselt DPAPI das Passwort mit dem Windows-Konto des Benutzers.
   const verschluesselt = safeStorage.isEncryptionAvailable();
   const gespeichert = verschluesselt ? safeStorage.encryptString(pw) : Buffer.from(pw, 'utf8');
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
-  fs.writeFileSync(kontoDatei(), JSON.stringify({ ...konfig, passwort: gespeichert.toString('base64'), verschluesselt }), { mode: 0o600 });
+  fs.writeFileSync(kontoDatei(a), JSON.stringify({ ...konfig, passwort: gespeichert.toString('base64'), verschluesselt }), { mode: 0o600 });
   return ohnePasswort(konfig);
 });
-behandle('mail:trennen', () => { fs.rmSync(kontoDatei(), { force: true }); return true; });
-behandle('mail:sende', entwurf => { const k = ladeKonto(); return mail.sende(k, passwort(k), entwurf); });
-behandle('mail:hole', stand => { const k = ladeKonto(); return mail.hole(k, passwort(k), stand || {}); });
+behandle('mail:trennen', a => { fs.rmSync(kontoDatei(a), { force: true }); return true; });
+behandle('mail:sende', (entwurf, a) => { const k = ladeKonto(a); return mail.sende(k, passwort(k), entwurf); });
+behandle('mail:hole', (stand, a) => { const k = ladeKonto(a); return mail.hole(k, passwort(k), stand || {}); });
 
 // ------------------------------ Rechner-Funktionen ------------------------------
 behandle('benachrichtige', (titel, text, ziel) => {
@@ -78,7 +82,7 @@ behandle('extern:oeffnen', adresse => {
 function erstelleFenster() {
   fenster = new BrowserWindow({
     width: 1280, height: 860, minWidth: 380, minHeight: 500,
-    title: 'Schadensfälle', icon: path.join(ORDNER, 'icon-512.png'), backgroundColor: '#F8F9FF', show: false,
+    title: 'Ayse CRM', icon: path.join(ORDNER, 'icon-512.png'), backgroundColor: '#F8F9FF', show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   // Links nach außen (Mail, Telefon, Webseiten) öffnen die Programme des Rechners, nicht ein zweites Fenster.

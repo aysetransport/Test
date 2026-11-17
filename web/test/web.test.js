@@ -45,6 +45,8 @@ async function legeFallAn(s, felder) {
   for (const [name, wert] of Object.entries(felder)) await s.locator(`#fall-form [name="${name}"]`).fill(wert);
   await s.locator('#fall-form button.voll').click();
   await s.locator('#wiedervorlage').waitFor();
+  // Nach dem Speichern wird die Ansicht des Falls einmal neu gezeichnet – erst danach weiterarbeiten.
+  await s.waitForFunction(() => location.hash.startsWith('#/fall/'));
 }
 const cloudDaten = cloud => JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString('utf8'));
 const jahr = new Date().getFullYear();
@@ -195,6 +197,7 @@ test('Anlage: hochladen, auf dem zweiten Gerät ansehen, dort löschen', async (
   const a = await geraet(cloud.url);
   await melde(a, PIN, true); await aktuell(a);
   await legeFallAn(a, { kundeName: 'Emil Frank' });
+  await aktuell(a); // der Abgleich nach dem Anlegen zeichnet den Fall neu – erst danach die Datei wählen
   await a.locator('#datei').setInputFiles({ name: 'Sofa Armlehne.png', mimeType: 'image/png', buffer: png });
   await a.locator('.anlage img').waitFor();
   await aktuell(a);

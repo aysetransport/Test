@@ -40,7 +40,9 @@ android {
             if (festeSignatur != null) signingConfig = festeSignatur
         }
         release {
-            if (festeSignatur != null) signingConfig = festeSignatur
+            // Optimierte, schnelle Fassung zum Installieren. Ohne festen Schlüssel mit dem Testschlüssel
+            // des Rechners signiert, damit sie sich trotzdem installieren lässt.
+            signingConfig = festeSignatur ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
