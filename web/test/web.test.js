@@ -585,5 +585,15 @@ test('Finanzen: Rechnung aus der Preisliste, Summen, Zahlung, Überfällig, Ange
 
   await aktuell(a);
   assert.equal(Object.values(cloudDaten(cloud).belege).length, 4, 'Belege landen in der Cloud');
+
+  // Nach Tests aufräumen: alles löschen, die Nummern beginnen wieder vorn
+  await a.locator('#einstellungen-knopf').click();
+  await a.locator('#belege-leeren').click();
+  await a.locator('#ja').click();
+  await a.getByText('4 Angebote und Rechnungen gelöscht').waitFor();
+  assert.equal(await a.evaluate(() => alle('belege').length + alle('aktivitaeten').filter(x => x.text.startsWith('Zahlung')).length), 0);
+  assert.equal(await a.evaluate(() => { S.einstellungen.rechnung = { ...rechnungsDaten(), startRechnung: 1 }; return naechsteBelegNummer('RECHNUNG'); }), `R${jahr}-0001`);
+  await aktuell(a);
+  assert.ok(Object.values(cloudDaten(cloud).belege).every(b => b.geloescht), 'auch in der Cloud gelöscht');
   await cloud.schliessen();
 });

@@ -1145,7 +1145,9 @@ function zeichneEinstellungen() {
     <div class="karte block"><h3>CRM</h3><p class="leise" style="margin-bottom:8px">Die Sicherung des bisherigen Browser-CRM (JSON) einlesen. Firmen mit gleichem Namen werden zusammengeführt, nichts wird doppelt angelegt.</p>
       <div class="zeile"><label class="knopf" id="crm-import-knopf">Sicherung des Browser-CRM importieren<input type="file" id="crm-import" accept=".json,application/json" hidden></label>
       <button class="knopf" id="crm-csv">CRM für Excel exportieren (6 CSV-Dateien)</button></div></div>
-    <div class="karte block"><h3>Daten</h3><button class="knopf" id="csv">Fallliste für Excel exportieren (CSV)</button></div>
+    <div class="karte block"><h3>Daten</h3><button class="knopf" id="csv">Fallliste für Excel exportieren (CSV)</button>
+      <p class="leise" style="margin:10px 0 6px">Nach Tests: alle Angebote und Rechnungen samt erfasster Zahlungen entfernen – auf allen Geräten. Die Nummern beginnen danach wieder bei der Startnummer.</p>
+      <button class="knopf text gefahr" id="belege-leeren">Alle Angebote und Rechnungen löschen</button></div>
     <p class="leise">Erinnerungen per Benachrichtigung gibt es in der Android-App. Hier stehen fällige Fälle immer oben.</p>`;
 }
 $('#detail').addEventListener('input', e => {
@@ -1180,6 +1182,13 @@ $('#detail').addEventListener('click', e => {
       const url = $('#cloud-url').value.trim();
       if (!/^https?:\/\/.+/.test(url)) { toast('Bitte die vollständige Adresse eintragen (beginnt mit https://).'); break; }
       S.apiUrl = url; S.nurLokal = false; speichere(); zeichne(); abgleich(); break;
+    }
+    case 'belege-leeren': {
+      const n = alle('belege').length;
+      if (!n) { toast('Es gibt keine Angebote oder Rechnungen.'); break; }
+      bestaetige(`Alle ${n} Angebote und Rechnungen löschen?`, 'Sie verschwinden samt der erfassten Zahlungen auf allen Geräten. Das lässt sich nicht rückgängig machen.', 'Alle löschen',
+        () => { const z = BelegAktionen.alleLoeschen(); toast(`${z} Angebote und Rechnungen gelöscht`); });
+      break;
     }
     case 'crm-csv': {
       if (!alle('auftraggeber').length) { toast('Es gibt noch keine Firmen zum Exportieren'); break; }
@@ -1603,6 +1612,16 @@ const BelegAktionen = {
     return id;
   },
   loeschen(b) { entferne('belege', b, { firmaId: b.firmaId, geaendertAm: jetztIso() }); nachAenderung(); },
+  /** Alle Angebote und Rechnungen samt der erfassten Zahlungen entfernen (z. B. nach Tests). @return Anzahl */
+  alleLoeschen() {
+    const belege = alle('belege'), nummern = new Set(belege.map(b => b.nummer));
+    for (const b of belege) entferne('belege', b, { firmaId: b.firmaId, geaendertAm: jetztIso() });
+    for (const a of alle('aktivitaeten').filter(a => /^Zahlung .* zu (\S+) erhalten/.test(a.text || '') && nummern.has(a.text.match(/ zu (\S+) erhalten/)[1]))) {
+      entferne('aktivitaeten', a, { firmaId: a.firmaId, geaendertAm: jetztIso() });
+    }
+    nachAenderung();
+    return belege.length;
+  },
 };
 
 /** A4-Seite für Druck und PDF (DIN-5008-ähnlich). */
