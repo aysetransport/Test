@@ -40,7 +40,7 @@ object MailPlaner {
 class MailWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val container = (applicationContext as SchadensfallApp).container
-        if (container.mailSpeicher.aktuell().konfig == null) return Result.success()
+        if (container.mailSpeicher.aktuell().konfig == null && container.mailSpeicherAllgemein.aktuell().konfig == null) return Result.success()
         return try {
             val neu = container.postfach.abrufen()
             Benachrichtigungen.zeigeNeueMails(applicationContext, neu)

@@ -77,6 +77,7 @@ fun UebersichtScreen(
     onFallOeffnen: (Long) -> Unit,
     onNeuerFall: () -> Unit,
     onEinstellungen: () -> Unit,
+    unten: @Composable () -> Unit = {},
 ) {
     val zustand by viewModel.zustand.collectAsStateWithLifecycle()
     val cloudHinweis by viewModel.cloudHinweis.collectAsStateWithLifecycle()
@@ -103,6 +104,7 @@ fun UebersichtScreen(
                 },
             )
         },
+        bottomBar = unten,
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onNeuerFall,

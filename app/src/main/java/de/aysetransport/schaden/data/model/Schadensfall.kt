@@ -41,8 +41,9 @@ data class Schadensfall(
     /** Aktenzeichen bzw. Bezug der Gegenseite. */
     val kundenAktenzeichen: String = "",
 
-    // Auftraggeber
+    // Auftraggeber: Name als Text (wie bisher) und Verweis auf die Firma im CRM
     val auftraggeber: String = "",
+    val auftraggeberUuid: String? = null,
     @ColumnInfo(defaultValue = "''") val auftraggeberKontakt: String = "",
     @ColumnInfo(defaultValue = "''") val auftraggeberTelefon: String = "",
     @ColumnInfo(defaultValue = "''") val auftraggeberEmail: String = "",
@@ -148,31 +149,26 @@ data class Anlage(
     val istLokalVorhanden: Boolean get() = dateiname.isNotEmpty()
 }
 
-/** Ein Auftraggeber aus der Stammdatenliste – zum Auswählen im Formular. */
-@Serializable
-@Entity(tableName = "auftraggeber", indices = [Index("name"), Index("syncOffen")])
-data class AuftraggeberEintrag(
-    @PrimaryKey val uuid: String = neueKennung(),
-    val name: String,
-    val kontakt: String = "",
-    val telefon: String = "",
-    val email: String = "",
-    val geaendertAm: Instant = Instant.EPOCH,
-    val syncOffen: Boolean = true,
-)
-
 /**
- * Eine gesendete oder empfangene E-Mail zu einem Fall. Bleibt auf dem Gerät (für „Antworten“ und
- * damit eine Mail nicht doppelt übernommen wird); lesbar für alle Geräte ist sie über den Verlauf.
+ * Eine gesendete oder empfangene E-Mail. Bleibt auf dem Gerät (für „Antworten“, die Zuordnung und
+ * damit eine Mail nicht doppelt übernommen wird); lesbar für alle Geräte ist sie über den Verlauf
+ * des Falls bzw. die Kontakthistorie der Firma.
+ *
+ * Zuordnung: [fallId] (Schadensfall), sonst [auftraggeberUuid] (Firma). [kundeRef] hält zusätzlich
+ * Name oder Adresse eines Endkunden fest. Ohne alles steht die Mail im Eingang „Nicht zugeordnet“.
  */
+@Serializable
 @Entity(
     tableName = "mail",
-    foreignKeys = [ForeignKey(entity = Schadensfall::class, parentColumns = ["id"], childColumns = ["fallId"], onDelete = ForeignKey.CASCADE)],
-    indices = [Index("fallId"), Index(value = ["messageId"], unique = true)],
+    foreignKeys = [ForeignKey(entity = Schadensfall::class, parentColumns = ["id"], childColumns = ["fallId"], onDelete = ForeignKey.SET_NULL)],
+    indices = [Index("fallId"), Index(value = ["messageId"], unique = true), Index("auftraggeberUuid")],
 )
 data class MailNachricht(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val fallId: Long,
+    val fallId: Long? = null,
+    val auftraggeberUuid: String? = null,
+    @ColumnInfo(defaultValue = "''") val kundeRef: String = "",
+    @ColumnInfo(defaultValue = "'SCHADEN'") val konto: MailKontoArt = MailKontoArt.SCHADEN,
     val eingehend: Boolean,
     /** Message-ID der Mail, ohne spitze Klammern. */
     val messageId: String,
@@ -182,8 +178,15 @@ data class MailNachricht(
     val betreff: String,
     val text: String,
     val zeitpunkt: Instant,
+    /** Verlaufseintrag im Fall, solange die Mail einem Fall zugeordnet ist. */
     val verlaufUuid: String = "",
-)
+    /** Eintrag in der Kontakthistorie der Firma, solange die Mail nur der Firma zugeordnet ist. */
+    @ColumnInfo(defaultValue = "''") val aktivitaetUuid: String = "",
+    /** Namen der Anhänge (eine Zeile je Datei). Bei nicht zugeordneten Mails liegen die Dateien im [MailAnhangSpeicher]. */
+    @ColumnInfo(defaultValue = "''") val anhaenge: String = "",
+) {
+    val istZugeordnet: Boolean get() = fallId != null || auftraggeberUuid != null || kundeRef.isNotBlank()
+}
 
 /** Was gelöscht wurde, merkt sich die App, bis die Löschung in der Cloud angekommen ist. */
 @Entity(tableName = "loeschung")
@@ -193,7 +196,7 @@ data class Loeschung(
     val fallUuid: String,
     val zeitpunkt: Instant,
 ) {
-    enum class Art { FALL, VERLAUF, ANLAGE, AUFTRAGGEBER }
+    enum class Art { FALL, VERLAUF, ANLAGE, AUFTRAGGEBER, ADRESSE, ANSPRECHPARTNER, PREIS, AKTIVITAET, AUFGABE, DOKUMENT }
 }
 
 fun neueKennung(): String = UUID.randomUUID().toString()

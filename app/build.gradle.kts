@@ -15,15 +15,32 @@ android {
         // Bewusst Android 16: Das Laufzeitverhalten dieser Stufe ist getestet. Auf neueren
         // Geräten läuft die App im Kompatibilitätsmodus unverändert weiter.
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.4.0"
+        versionCode = 6
+        versionName = "2.0.0"
 
         // Vorgabe in den Einstellungen; die PIN wird beim Verbinden abgefragt.
         buildConfigField("String", "CLOUD_URL", "\"https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwhDnWP7p9XeoIz8NisZR7NApIj-Xfgd_lP5j8KjPE11OFbQuA/exec\"")
     }
 
+    // Fester Signaturschlüssel, sofern hinterlegt (Umgebungsvariablen, im Workflow aus GitHub-Secrets).
+    // Ohne ihn signiert Gradle mit dem Testschlüssel des jeweiligen Rechners – dann lässt sich eine
+    // neue APK nicht über eine mit anderem Schlüssel gebaute installieren.
+    val signaturDatei = System.getenv("SIGNATUR_DATEI")?.let { file(it) }?.takeIf { it.isFile }
+    val festeSignatur = signaturDatei?.let { datei ->
+        signingConfigs.create("fest") {
+            storeFile = datei
+            storePassword = System.getenv("SIGNATUR_PASSWORT")
+            keyAlias = System.getenv("SIGNATUR_ALIAS")
+            keyPassword = System.getenv("SIGNATUR_SCHLUESSEL_PASSWORT") ?: System.getenv("SIGNATUR_PASSWORT")
+        }
+    }
+
     buildTypes {
+        debug {
+            if (festeSignatur != null) signingConfig = festeSignatur
+        }
         release {
+            if (festeSignatur != null) signingConfig = festeSignatur
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

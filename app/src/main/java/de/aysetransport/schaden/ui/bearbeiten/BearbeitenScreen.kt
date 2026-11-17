@@ -289,7 +289,7 @@ private fun AuftraggeberAuswahl(viewModel: BearbeitenViewModel) {
 
     var suche by remember { mutableStateOf("") }
     val treffer = liste.filter { e ->
-        suche.isBlank() || listOf(e.name, e.kontakt, e.telefon, e.email).any { it.contains(suche.trim(), ignoreCase = true) }
+        suche.isBlank() || listOf(e.name, e.rechtsform, e.telefon, e.email).any { it.contains(suche.trim(), ignoreCase = true) }
     }
     AlertDialog(
         onDismissRequest = { offen = false },
@@ -313,7 +313,7 @@ private fun AuftraggeberAuswahl(viewModel: BearbeitenViewModel) {
                         ListItem(
                             headlineContent = { Text(e.name) },
                             supportingContent = {
-                                val zeile = listOf(e.kontakt, e.telefon, e.email).filter { it.isNotBlank() }.joinToString(" · ")
+                                val zeile = listOf(e.rechtsform, e.telefon, e.email).filter { it.isNotBlank() }.joinToString(" · ")
                                 if (zeile.isNotEmpty()) Text(zeile)
                             },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),

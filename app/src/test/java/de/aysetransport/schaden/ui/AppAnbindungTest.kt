@@ -32,6 +32,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
+import androidx.compose.ui.test.onAllNodesWithTag
 import org.junit.Test
 import androidx.compose.ui.test.performTextInput
 import org.junit.runner.RunWith
@@ -53,6 +54,13 @@ class AppAnbindungTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<MainActivity>()
+
+    /** Die App startet bei den Firmen – diese Tests arbeiten in der Fallliste. */
+    @Before
+    fun zuDenFaellenWechseln() {
+        rule.waitUntil(10_000) { rule.onAllNodesWithTag("nav-faelle").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("nav-faelle").performClick()
+    }
 
     private val app: SchadensfallApp get() = ApplicationProvider.getApplicationContext()
     private val repository get() = app.container.repository
@@ -345,10 +353,16 @@ class AppAnbindungTest {
 
     @Test
     fun `Auftraggeber wird im Formular aus der Liste gewaehlt`() {
-        runBlocking { repository.auftraggeberSpeichern(de.aysetransport.schaden.data.model.AuftraggeberEintrag(name = "Möbelhaus Nordpark", kontakt = "Frau Kaya", telefon = "02191 123", email = "dispo@nordpark.example")) }
+        runBlocking {
+            val crm = app.container.crm
+            val firma = crm.firmaSpeichern(de.aysetransport.schaden.data.model.AuftraggeberEintrag(name = "Möbelhaus Nordpark", telefon = "02191 999"))
+            crm.speichern(de.aysetransport.schaden.data.model.Kontaktperson(auftraggeberUuid = firma, name = "Herr Ott", thema = "Disposition", email = "ott@nordpark.example"))
+            crm.speichern(de.aysetransport.schaden.data.model.Kontaktperson(auftraggeberUuid = firma, name = "Frau Kaya", thema = "Schäden", telefon = "02191 123", email = "dispo@nordpark.example"))
+        }
         warteAufText("Noch keine Schadensfälle")
         rule.onNodeWithContentDescription("Neuer Fall").performClick()
         warteAufText("Neuer Schadensfall")
+        rule.waitUntil(10_000) { rule.onAllNodesWithTag("feld-name").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("feld-name").performTextInput("Anna Becker")
         rule.onNodeWithTag("auftraggeber-auswahl").performScrollTo().performClick()
         warteAufText("Auftraggeber wählen")

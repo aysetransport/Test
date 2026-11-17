@@ -55,7 +55,7 @@ class DetailViewModel(
     private val repository: SchadensfallRepository,
     einstellungenSpeicher: EinstellungenSpeicher,
     private val anlagenSpeicher: AnlagenSpeicher,
-    mailZustand: Flow<MailZustand> = flowOf(MailZustand()),
+    mailEingerichtet: Flow<Boolean> = flowOf(false),
     private val postfach: MailPostfach? = null,
     private val uhr: Clock = Clock.systemDefaultZone(),
 ) : ViewModel() {
@@ -78,7 +78,7 @@ class DetailViewModel(
     val meldungen: Flow<String> = meldungsKanal.receiveAsFlow()
 
     /** Mit eingerichtetem E-Mail-Konto wird in der App geschrieben, sonst in der Mail-App des Geräts. */
-    val mailEingerichtet: StateFlow<Boolean> = mailZustand.map { it.konfig != null }
+    val mailEingerichtet: StateFlow<Boolean> = mailEingerichtet
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     var ruftAb by mutableStateOf(false)
@@ -90,7 +90,7 @@ class DetailViewModel(
         viewModelScope.launch {
             try {
                 val neu = postfach?.abrufen().orEmpty()
-                val hier = neu.count { it.fall.id == fallId }
+                val hier = neu.count { it.fall?.id == fallId }
                 meldungsKanal.send(
                     when {
                         neu.isEmpty() -> "Keine neuen E-Mails zu Fällen"
@@ -196,7 +196,7 @@ class DetailViewModel(
             initializer {
                 DetailViewModel(
                     fallId, container.repository, container.einstellungen, container.anlagenSpeicher,
-                    container.mailSpeicher.zustand, container.postfach,
+                    container.mailEingerichtet, container.postfach,
                 )
             }
         }

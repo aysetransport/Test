@@ -1,4 +1,14 @@
-# Schadensfälle
+# Ayse CRM (vormals „Schadensfälle“)
+
+> **Version 2.0:** Die App ist jetzt das CRM für die Auftraggeber von Ayse Transport – Firmen mit
+> Ansprechpartnern, Adressen, Preisen, Wiedervorlagen, Kontakthistorie und Dokumenten, dazu zwei
+> Postfächer (Schäden und Allgemein) mit automatischer Zuordnung. Die Schadensfälle sind ein Bereich
+> davon und funktionieren wie bisher. **Update, Cloud-Skript und Import des Browser-CRM:
+> [docs/ANLEITUNG-2.0.md](docs/ANLEITUNG-2.0.md).**
+
+| Firmen | Firma | Termine |
+|---|---|---|
+| ![Firmen](docs/screenshots/crm_firmen.png) | ![Firma](docs/screenshots/crm_firma.png) | ![Termine](docs/screenshots/crm_wiedervorlagen.png) |
 
 Android-App und Web-App zum **Nachhaken und Bearbeiten von Schadensfällen bei Transportaufträgen**.
 Jeder Fall bekommt eine Wiedervorlage; die App zeigt jeden Tag, bei wem nachgehakt werden muss,
@@ -89,8 +99,10 @@ dem Postfach; das Passwort liegt verschlüsselt im Android-Schlüsselspeicher un
 - **Empfangen:** Alle 15 Minuten, beim App-Start und über *Postfach abrufen* im Fall-Menü. Eine
   Mail wird einem Fall zugeordnet, wenn ihr Betreff die Fallnummer trägt, wenn sie auf eine Mail
   des Falls antwortet oder wenn ihr Absender bei genau einem offenen Fall als Geschädigter oder
-  Auftraggeber hinterlegt ist. Alle anderen Mails bleiben unberührt; im Postfach wird nichts
-  verändert oder als gelesen markiert. Beim ersten Abruf werden die letzten 30 Tage durchsucht.
+  Auftraggeber hinterlegt ist. Sonst ordnet die Absenderadresse bzw. deren Domain die Mail einer
+  Firma zu; alles Übrige steht im Postfach unter „Nicht zugeordnet“ und lässt sich von Hand
+  zuordnen. Ab 2.0 gibt es zwei Postfächer: eines für Schadensfälle, eines für alles andere. Im
+  Postfach wird nichts verändert oder als gelesen markiert. Beim ersten Abruf werden die letzten 30 Tage durchsucht.
 - Zugeordnete Mails stehen im Verlauf des Falls (mit *Antworten*), Anhänge werden zu Anlagen,
   die Wiedervorlage rückt auf heute, und eine Benachrichtigung weist darauf hin.
 - Über den Verlauf sind die Mails auch in der Web-App lesbar; senden und empfangen lässt sich
@@ -146,7 +158,7 @@ Erinnerungen per Benachrichtigung gibt es nur in der Android-App.
 ## Installieren
 
 1. In GitHub unter **Actions** den neuesten erfolgreichen Lauf öffnen und unter *Artifacts*
-   `Schadensfaelle-debug-apk` herunterladen (ZIP mit der APK-Datei).
+   `Ayse-CRM-apk` herunterladen (ZIP mit der APK-Datei).
 2. Die APK auf dem Android-Gerät öffnen und die Installation aus dieser Quelle erlauben.
 3. Beim ersten Start unter **Einstellungen** Firma, Bearbeiter/in und Funktion eintragen –
    daraus entsteht die Grußformel der Textvorlagen – und Benachrichtigungen erlauben.
@@ -160,7 +172,8 @@ Android installiert eine so gebaute neue Version **nicht über die alte**; die A
 deinstalliert werden, wobei ihre Daten gelöscht werden. Deshalb vor jedem Update:
 **Einstellungen → Backup erstellen**, danach neue Version installieren und
 **Backup wiederherstellen**. Wer regelmäßig aktualisieren will, sollte einen festen
-Signaturschlüssel einrichten.
+Signaturschlüssel einrichten – der Workflow nutzt ihn, sobald die Secrets `SIGNATUR_BASE64`,
+`SIGNATUR_PASSWORT` und `SIGNATUR_ALIAS` hinterlegt sind (siehe [Anleitung](docs/ANLEITUNG-2.0.md)).
 
 ## Daten und Datenschutz
 

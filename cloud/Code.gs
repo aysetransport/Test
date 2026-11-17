@@ -5,7 +5,8 @@
  * Alle Daten liegen im Google Drive des Kontos, das das Skript bereitstellt:
  *
  *   Schadensfaelle/
- *     daten.json        alle Fälle, Verlaufseinträge, Anlagen-Verzeichnis und Auftraggeber-Liste
+ *     daten.json        alle Fälle, Verlaufseinträge, Anlagen-Verzeichnis und das CRM (Firmen,
+ *                       Ansprechpartner, Adressen, Preise, Aktivitäten, Wiedervorlagen, Dokumente)
  *     anlagen/          Fotos und Belege (Dateiname = Kennung der Anlage)
  *     sicherungen/      tägliche Kopie von daten.json (die letzten 14 Tage)
  *
@@ -29,7 +30,21 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 3; // 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers
+var API_VERSION = 4; // 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM
+
+/**
+ * CRM-Tabellen: alle hängen über firmaId an einem Auftraggeber (Tabelle „auftraggeber“).
+ * Feldarten: text, wort:<Vorgabe> (Aufzählung in Großbuchstaben), datum (JJJJ-MM-TT), cent (ganze Zahl), bool.
+ */
+var CRM_TABELLEN = {
+  adressen: { art: 'wort:SONSTIGE', strasse: 'text', plz: 'text', ort: 'text', notiz: 'text' },
+  ansprechpartner: { name: 'text', thema: 'text', telefon: 'text', email: 'text', notiz: 'text' },
+  preise: { bezeichnung: 'text', betragCent: 'cent', einheit: 'text', gueltigAb: 'datum', notiz: 'text' },
+  aktivitaeten: { datum: 'datum', art: 'wort:SONSTIGES', text: 'text', kontakt: 'text' },
+  aufgaben: { faelligAm: 'datum', text: 'text', kontakt: 'text', erledigt: 'bool' },
+  dokumente: { titel: 'text', link: 'text', notiz: 'text' }
+};
+var CRM_NAMEN = Object.keys(CRM_TABELLEN);
 
 // ============================== Einstieg ==============================
 
@@ -148,8 +163,8 @@ function stand() {
  * Nimmt die lokalen Änderungen eines Geräts entgegen und liefert alles zurück, was sich seit
  * dem letzten Abgleich dieses Geräts geändert hat.
  *
- * anfrage: { seit, kennung, faelle: […], verlauf: […], anlagen: […], auftraggeber: […] }
- * antwort: { kennung, rev, faelle: […], verlauf: […], anlagen: […], auftraggeber: […] }
+ * anfrage: { seit, kennung, faelle: […], verlauf: […], anlagen: […], auftraggeber: […], adressen: […], … }
+ * antwort: dieselben Listen mit allem, was sich seit „seit“ geändert hat, dazu kennung und rev
  *
  * Regeln: Bei einem Fall gewinnt der Stand mit dem späteren Änderungszeitpunkt. Gelöscht
  * bleibt gelöscht. Verlaufseinträge und Anlagen werden nur hinzugefügt oder gelöscht.
@@ -168,10 +183,20 @@ function sync(anfrage) {
     liste_(anfrage.faelle).forEach(function (roh) { uebernehmeFall_(d, roh, zurueck.faelle); });
     liste_(anfrage.verlauf).forEach(function (roh) { uebernehmeVerlauf_(d, roh); });
     liste_(anfrage.anlagen).forEach(function (roh) { uebernehmeAnlage_(d, roh); });
-    liste_(anfrage.auftraggeber).forEach(function (roh) { uebernehmeAuftraggeber_(d, roh, zurueck.auftraggeber); });
+    // Gelöschte Firmen zuletzt: Führt ein Gerät zwei gleichnamige Firmen zusammen, schickt es die
+    // umgehängten Einträge zusammen mit der Löschung der zweiten Firma – sie dürfen nicht mitgelöscht werden.
+    var firmen = liste_(anfrage.auftraggeber);
+    firmen.filter(function (roh) { return !(roh && roh.geloescht === true); })
+      .forEach(function (roh) { uebernehmeAuftraggeber_(d, roh, zurueck.auftraggeber); });
+    CRM_NAMEN.forEach(function (t) {
+      zurueck[t] = {};
+      liste_(anfrage[t]).forEach(function (roh) { uebernehmeCrm_(d, t, roh, zurueck[t]); });
+    });
+    firmen.filter(function (roh) { return roh && roh.geloescht === true; })
+      .forEach(function (roh) { uebernehmeAuftraggeber_(d, roh, zurueck.auftraggeber); });
 
     if (d.rev !== vorher) speichereDaten_(d);
-    return {
+    var antwort = {
       kennung: d.kennung,
       rev: d.rev,
       faelle: auswahl_(d.faelle, seit, zurueck.faelle),
@@ -179,6 +204,8 @@ function sync(anfrage) {
       anlagen: auswahl_(d.anlagen, seit, zurueck.anlagen).map(ohneInterna_),
       auftraggeber: auswahl_(d.auftraggeber, seit, zurueck.auftraggeber)
     };
+    CRM_NAMEN.forEach(function (t) { antwort[t] = auswahl_(d[t], seit, zurueck[t]); });
+    return antwort;
   } finally {
     sperre.releaseLock();
   }
@@ -205,23 +232,68 @@ function uebernehmeFall_(d, roh, zurueck) {
   d.faelle[neu.id] = neu;
 }
 
-/** Auftraggeber-Liste: wie bei Fällen gewinnt die spätere Änderung, Gelöschtes bleibt gelöscht. */
+/**
+ * Firmen (Auftraggeber): wie bei Fällen gewinnt die spätere Änderung, Gelöschtes bleibt gelöscht.
+ * Mit einer Firma wird alles gelöscht, was an ihr hängt (Ansprechpartner, Adressen …).
+ */
 function uebernehmeAuftraggeber_(d, roh, zurueck) {
   roh = roh || {};
   var neu = { id: kennung_(roh.id), geaendertAm: zeitpunkt_(roh.geaendertAm) };
   var alt = d.auftraggeber[neu.id];
   if (alt && alt.geloescht) { if (roh.geloescht !== true) zurueck[neu.id] = true; return; }
-  if (roh.geloescht === true) { d.auftraggeber[neu.id] = { id: neu.id, geloescht: true, geaendertAm: neu.geaendertAm, rev: ++d.rev }; return; }
+  if (roh.geloescht === true) {
+    d.auftraggeber[neu.id] = { id: neu.id, geloescht: true, geaendertAm: neu.geaendertAm, rev: ++d.rev };
+    CRM_NAMEN.forEach(function (t) {
+      Object.keys(d[t]).forEach(function (k) {
+        var e = d[t][k];
+        if (e.firmaId === neu.id && !e.geloescht) d[t][k] = { id: k, firmaId: neu.id, geloescht: true, geaendertAm: neu.geaendertAm, rev: ++d.rev };
+      });
+    });
+    return;
+  }
   neu.name = text_(roh.name).slice(0, 200);
-  neu.kontakt = text_(roh.kontakt).slice(0, 200);
+  neu.rechtsform = text_(roh.rechtsform).slice(0, 100);
+  neu.status = wort_(roh.status, 'AKTIV');
   neu.telefon = text_(roh.telefon).slice(0, 100);
   neu.email = text_(roh.email).slice(0, 200);
+  neu.website = text_(roh.website).slice(0, 300);
+  neu.notizen = text_(roh.notizen);
   if (alt && zeit_(neu.geaendertAm) <= zeit_(alt.geaendertAm)) {
     if (!gleicherInhalt_(alt, neu)) zurueck[neu.id] = true;
     return;
   }
   neu.rev = ++d.rev;
   d.auftraggeber[neu.id] = neu;
+}
+
+/** CRM-Einträge: die spätere Änderung gewinnt; was zu einer gelöschten Firma kommt, gilt als gelöscht. */
+function uebernehmeCrm_(d, tabelle, roh, zurueck) {
+  roh = roh || {};
+  var neu = { id: kennung_(roh.id), firmaId: kennung_(roh.firmaId), geaendertAm: zeitpunkt_(roh.geaendertAm) };
+  var alt = d[tabelle][neu.id];
+  var firma = d.auftraggeber[neu.firmaId];
+  if (alt && alt.geloescht) { if (roh.geloescht !== true) zurueck[neu.id] = true; return; }
+  if (roh.geloescht === true || (firma && firma.geloescht)) {
+    if (roh.geloescht !== true) zurueck[neu.id] = true;
+    d[tabelle][neu.id] = { id: neu.id, firmaId: neu.firmaId, geloescht: true, geaendertAm: neu.geaendertAm, rev: ++d.rev };
+    return;
+  }
+  var felder = CRM_TABELLEN[tabelle];
+  Object.keys(felder).forEach(function (k) {
+    var art = felder[k];
+    if (art === 'text') neu[k] = text_(roh[k]);
+    else if (art.indexOf('wort:') === 0) neu[k] = wort_(roh[k], art.slice(5));
+    else if (art === 'datum') neu[k] = datum_(roh[k]);
+    else if (art === 'cent') neu[k] = cent_(roh[k]);
+    else if (art === 'bool') neu[k] = roh[k] === true;
+  });
+  if (tabelle === 'aktivitaeten' && !neu.datum) neu.datum = neu.geaendertAm.slice(0, 10); // ein Kontakt hat immer ein Datum
+  if (alt && zeit_(neu.geaendertAm) <= zeit_(alt.geaendertAm)) {
+    if (!gleicherInhalt_(alt, neu)) zurueck[neu.id] = true;
+    return;
+  }
+  neu.rev = ++d.rev;
+  d[tabelle][neu.id] = neu;
 }
 
 /** Löscht einen Fall samt Verlauf und Anlagen. Zurück bleibt nur ein Vermerk ohne Inhalt. */
@@ -348,7 +420,7 @@ function ohneInterna_(anlage) {
 // Es wird nur übernommen, was die Apps kennen – unbekannte Felder und übergroße Texte fallen weg.
 
 var FALL_TEXTE = ['fallnummer', 'kundeName', 'kundeFirma', 'kundeTelefon', 'kundeEmail', 'kundeAnschrift',
-  'kundenAktenzeichen', 'auftraggeber', 'auftraggeberKontakt', 'auftraggeberTelefon', 'auftraggeberEmail', 'auftraggeberZeichen', 'auftragsReferenz', 'tour', 'fahrzeug', 'fahrer', 'beifahrer1', 'beifahrer2', 'schadensort',
+  'kundenAktenzeichen', 'auftraggeber', 'auftraggeberUuid', 'auftraggeberKontakt', 'auftraggeberTelefon', 'auftraggeberEmail', 'auftraggeberZeichen', 'auftragsReferenz', 'tour', 'fahrzeug', 'fahrer', 'beifahrer1', 'beifahrer2', 'schadensort',
   'beschreibung', 'wiedervorlageNotiz', 'versicherungsNummer'];
 var FALL_DATEN = ['schadensdatum', 'meldedatum', 'wiedervorlageAm', 'zahlungsfrist'];
 
@@ -458,6 +530,7 @@ function ladeDaten_() {
     d.verlauf = d.verlauf || {};
     d.anlagen = d.anlagen || {};
     d.auftraggeber = d.auftraggeber || {};
+    CRM_NAMEN.forEach(function (t) { d[t] = d[t] || {}; });
     return d;
   }
   // Neuer Bestand: sofort anlegen, damit die Kennung bei jedem weiteren Aufruf gleich bleibt.
@@ -467,6 +540,7 @@ function ladeDaten_() {
   try {
     if (datenDatei_()) return ladeDaten_(); // inzwischen von einem anderen Aufruf angelegt
     var neu = { kennung: Utilities.getUuid(), rev: 0, faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {} };
+    CRM_NAMEN.forEach(function (t) { neu[t] = {}; });
     ordner_().createFile(DATEN_DATEI, JSON.stringify(neu), 'application/json');
     return neu;
   } finally {

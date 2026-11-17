@@ -7,16 +7,25 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import de.aysetransport.schaden.data.model.Adresse
+import de.aysetransport.schaden.data.model.Aktivitaet
 import de.aysetransport.schaden.data.model.Anlage
+import de.aysetransport.schaden.data.model.Aufgabe
 import de.aysetransport.schaden.data.model.AuftraggeberEintrag
+import de.aysetransport.schaden.data.model.Dokument
+import de.aysetransport.schaden.data.model.Kontaktperson
+import de.aysetransport.schaden.data.model.Preis
 import de.aysetransport.schaden.data.model.Loeschung
 import de.aysetransport.schaden.data.model.MailNachricht
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
 
 @Database(
-    entities = [Schadensfall::class, VerlaufEintrag::class, Anlage::class, Loeschung::class, AuftraggeberEintrag::class, MailNachricht::class],
-    version = 5,
+    entities = [
+        Schadensfall::class, VerlaufEintrag::class, Anlage::class, Loeschung::class, AuftraggeberEintrag::class, MailNachricht::class,
+        Adresse::class, Kontaktperson::class, Preis::class, Aktivitaet::class, Aufgabe::class, Dokument::class,
+    ],
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(Konverter::class)
@@ -24,12 +33,14 @@ abstract class SchadensfallDatenbank : RoomDatabase() {
 
     abstract fun dao(): SchadensfallDao
 
+    abstract fun crm(): CrmDao
+
     companion object {
         const val DATEINAME = "schadensfaelle.db"
 
         fun erstelle(context: Context): SchadensfallDatenbank =
             Room.databaseBuilder(context, SchadensfallDatenbank::class.java, DATEINAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
 
         /** Version 3: eigene Kontaktdaten für den Auftraggeber und eine Auftraggeber-Liste zum Auswählen. */
@@ -81,6 +92,11 @@ abstract class SchadensfallDatenbank : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `schadensfall` ADD COLUMN `auftraggeberZeichen` TEXT NOT NULL DEFAULT ''")
             }
+        }
+
+        /** Version 6: CRM für die Auftraggeber, E-Mails ohne Fall, zwei Postfächer. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) = MigrationCrm.migriere(db)
         }
 
         /** Zufällige UUID (Version 4) in SQL – wird für jede Zeile neu ausgewertet. */

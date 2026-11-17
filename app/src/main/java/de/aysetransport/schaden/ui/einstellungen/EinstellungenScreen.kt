@@ -68,6 +68,7 @@ import de.aysetransport.schaden.mail.Sicherheit
 import de.aysetransport.schaden.mail.MailServer
 import de.aysetransport.schaden.mail.MailKonfig
 import de.aysetransport.schaden.mail.Anbieter
+import de.aysetransport.schaden.data.model.MailKontoArt
 import de.aysetransport.schaden.domain.Datum
 import de.aysetransport.schaden.erinnerung.Benachrichtigungen
 import java.time.Instant
@@ -101,6 +102,9 @@ fun EinstellungenScreen(viewModel: EinstellungenViewModel, onZurueck: () -> Unit
     }
     val backupOeffnen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) wiederherstellenVon = uri
+    }
+    val crmOeffnen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importiereCrm(uri)
     }
 
     Scaffold(
@@ -184,15 +188,45 @@ fun EinstellungenScreen(viewModel: EinstellungenViewModel, onZurueck: () -> Unit
                 }
             }
 
-            Bereich("Auftraggeber", "Gespeicherte Auftraggeber lassen sich im Fall-Formular auswählen, statt sie einzutippen.") {
-                OutlinedButton(onClick = onAuftraggeber, modifier = Modifier.fillMaxWidth()) { Text("Auftraggeber verwalten") }
+            Bereich("Auftraggeber (CRM)", "Firmen mit Ansprechpartnern, Adressen, Preisen, Wiedervorlagen und Kontakthistorie. Die Sicherung des bisherigen Browser-CRM lässt sich hier einlesen – gleichnamige Firmen werden zusammengeführt.") {
+                OutlinedButton(onClick = onAuftraggeber, modifier = Modifier.fillMaxWidth()) { Text("Zu den Firmen") }
+                OutlinedButton(
+                    enabled = !viewModel.beschaeftigt,
+                    onClick = {
+                        try {
+                            crmOeffnen.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+                        } catch (ex: ActivityNotFoundException) {
+                            viewModel.melde("Keine Dateiauswahl verfügbar")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("crm-import"),
+                ) { Text("Sicherung des Browser-CRM importieren (JSON)") }
+                OutlinedButton(
+                    enabled = !viewModel.beschaeftigt,
+                    onClick = {
+                        viewModel.exportiereCrmCsv { uris ->
+                            val senden = Intent(Intent.ACTION_SEND_MULTIPLE)
+                                .setType("text/csv")
+                                .putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                                .putExtra(Intent.EXTRA_SUBJECT, "CRM Ayse Transport")
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            try {
+                                context.startActivity(Intent.createChooser(senden, "CRM-Listen teilen"))
+                            } catch (ex: ActivityNotFoundException) {
+                                viewModel.melde("Keine App zum Teilen gefunden")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("crm-csv"),
+                ) { Text("CRM für Excel exportieren (5 CSV-Dateien)") }
             }
 
-            MailBereich(viewModel)
+            MailBereich(viewModel, MailKontoArt.SCHADEN)
+            MailBereich(viewModel, MailKontoArt.ALLGEMEIN)
 
             CloudBereich(viewModel)
 
-            Bereich("Daten", "Ein Backup enthält alle Fälle, den Verlauf und die Anlagen dieses Geräts.") {
+            Bereich("Daten", "Ein Backup enthält alle Fälle mit Verlauf und Anlagen sowie das ganze CRM und die E-Mails dieses Geräts.") {
                 OutlinedButton(
                     enabled = !viewModel.beschaeftigt,
                     onClick = {
@@ -236,7 +270,7 @@ fun EinstellungenScreen(viewModel: EinstellungenViewModel, onZurueck: () -> Unit
             }
 
             Text(
-                "Schadensfälle · Version ${BuildConfig.VERSION_NAME}",
+                "Ayse Transport CRM · Version ${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp),
@@ -450,21 +484,23 @@ private fun PinDialog(
 }
 
 @Composable
-private fun MailBereich(viewModel: EinstellungenViewModel) {
-    val zustand by viewModel.mailZustand.collectAsStateWithLifecycle()
+private fun MailBereich(viewModel: EinstellungenViewModel, art: MailKontoArt) {
+    val zustand by viewModel.mailZustand(art).collectAsStateWithLifecycle()
     val z = zustand ?: return
     var einrichten by rememberSaveable { mutableStateOf(false) }
     val konfig = z.konfig
+    val schaden = art == MailKontoArt.SCHADEN
     Bereich(
-        "E-Mail",
-        if (konfig == null) {
-            "Mit deinem Postfach schreibst und empfängst du die Mails zu den Fällen direkt in der App. Antworten werden über die Fallnummer im Betreff automatisch dem Fall zugeordnet."
-        } else {
-            "Mails zu den Fällen werden alle 15 Minuten abgerufen und im Verlauf des Falls abgelegt; Anhänge werden zu Anlagen."
+        if (schaden) "E-Mail für Schadensfälle" else "E-Mail für alles andere",
+        when {
+            schaden && konfig == null -> "Postfach für die Schadensbearbeitung (z. B. schaden@…). Mails aus einem Fall gehen darüber; Antworten werden über die Fallnummer im Betreff dem Fall zugeordnet."
+            konfig == null -> "Postfach für Disposition, Angebote und Abrechnung (z. B. info@…). Mails an Firmen und Ansprechpartner gehen darüber. Ohne eigenes Konto wird das Schadens-Postfach verwendet."
+            schaden -> "Wird alle 15 Minuten abgerufen. Mails zu einem Fall landen im Verlauf (Anhänge werden Anlagen), andere bei der passenden Firma oder im Postfach unter „Nicht zugeordnet“."
+            else -> "Wird alle 15 Minuten abgerufen. Mails landen bei der Firma, deren Adresse oder Domain passt, sonst im Postfach unter „Nicht zugeordnet“."
         },
     ) {
         if (konfig == null) {
-            Button(onClick = { einrichten = true }) { Text("E-Mail-Konto einrichten") }
+            Button(onClick = { einrichten = true }, modifier = Modifier.testTag("mail-einrichten-${art.name}")) { Text("E-Mail-Konto einrichten") }
         } else {
             Text(konfig.adresse, style = MaterialTheme.typography.bodyLarge)
             val status = when {
@@ -477,7 +513,7 @@ private fun MailBereich(viewModel: EinstellungenViewModel) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = viewModel::mailAbrufen, enabled = !viewModel.mailBeschaeftigt) { Text("Jetzt abrufen") }
                 OutlinedButton(onClick = { einrichten = true }) { Text("Ändern") }
-                OutlinedButton(onClick = { viewModel.mailTrennen() }) { Text("Entfernen") }
+                OutlinedButton(onClick = { viewModel.mailTrennen(art) }) { Text("Entfernen") }
             }
         }
     }
@@ -488,7 +524,7 @@ private fun MailBereich(viewModel: EinstellungenViewModel) {
             fehler = viewModel.mailFehler,
             beschaeftigt = viewModel.mailBeschaeftigt,
             onAbbrechen = { einrichten = false },
-            onVerbinden = { k, p -> viewModel.mailEinrichten(k, p) { einrichten = false } },
+            onVerbinden = { k, p -> viewModel.mailEinrichten(art, k, p) { einrichten = false } },
         )
     }
 }
@@ -566,7 +602,7 @@ private fun MailKontoDialog(
                     )
                 }
                 Text(
-                    "Das Passwort wird verschlüsselt nur auf diesem Gerät gespeichert. Die App liest ausschließlich Mails, die zu einem Fall gehören, und verändert im Postfach nichts.",
+                    "Das Passwort wird verschlüsselt nur auf diesem Gerät gespeichert. Die App liest den Posteingang und verändert im Postfach nichts.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

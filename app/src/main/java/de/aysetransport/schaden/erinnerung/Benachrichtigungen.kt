@@ -22,6 +22,9 @@ object Benachrichtigungen {
 
     const val KANAL_ID = "wiedervorlage"
     const val EXTRA_FALL_ID = "de.aysetransport.schaden.FALL_ID"
+    private const val CRM_ID = 1003
+    const val EXTRA_FIRMA = "de.aysetransport.schaden.FIRMA"
+    const val EXTRA_POSTFACH = "de.aysetransport.schaden.POSTFACH"
     const val EXTRA_ZEIGE_FAELLIGE = "de.aysetransport.schaden.ZEIGE_FAELLIGE"
     private const val BENACHRICHTIGUNG_ID = 1001
     private const val MAIL_ID = 1002
@@ -38,17 +41,25 @@ object Benachrichtigungen {
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(kanal)
     }
 
-    /** Neue E-Mails zu Fällen: bei einer Mail direkt in den Fall, sonst in die Liste „Fällig“. */
+    /** Kurzbezeichnung, wohin eine neue Mail gehört. */
+    private fun NeueMail.wohin(): String = fall?.let { "Fall ${it.fallnummer}" } ?: firma?.name ?: "Nicht zugeordnet"
+
+    /** Neue E-Mails: bei einer einzigen direkt in den Fall bzw. zur Firma, sonst ins Postfach. */
     fun zeigeNeueMails(context: Context, mails: List<NeueMail>): Boolean {
         if (mails.isEmpty() || !duerfenAngezeigtWerden(context)) return false
-        val faelle = mails.map { it.fall.id }.distinct()
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            if (faelle.size == 1) putExtra(EXTRA_FALL_ID, faelle.single()) else putExtra(EXTRA_ZEIGE_FAELLIGE, true)
+            val faelle = mails.mapNotNull { it.fall?.id }.distinct()
+            val firmen = mails.mapNotNull { it.firma?.uuid }.distinct()
+            when {
+                faelle.size == 1 && mails.all { it.fall != null } -> putExtra(EXTRA_FALL_ID, faelle.single())
+                firmen.size == 1 && mails.all { it.firma != null && it.fall == null } -> putExtra(EXTRA_FIRMA, firmen.single())
+                else -> putExtra(EXTRA_POSTFACH, true)
+            }
         }
         val antippen = PendingIntent.getActivity(context, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val titel = if (mails.size == 1) "Neue E-Mail zu Fall ${mails.single().fall.fallnummer}" else "${mails.size} neue E-Mails zu Schadensfällen"
-        val stil = NotificationCompat.InboxStyle().also { s -> mails.take(MAX_ZEILEN).forEach { s.addLine("${it.fall.fallnummer} · ${it.von}: ${it.betreff}") } }
+        val titel = if (mails.size == 1) "Neue E-Mail · ${mails.single().wohin()}" else "${mails.size} neue E-Mails"
+        val stil = NotificationCompat.InboxStyle().also { s -> mails.take(MAX_ZEILEN).forEach { s.addLine("${it.wohin()} · ${it.von}: ${it.betreff}") } }
         val n = NotificationCompat.Builder(context, KANAL_ID)
             .setSmallIcon(R.drawable.ic_benachrichtigung)
             .setColor(ContextCompat.getColor(context, R.color.akzent))
@@ -61,6 +72,31 @@ object Benachrichtigungen {
             .build()
         return try {
             NotificationManagerCompat.from(context).notify(MAIL_ID, n)
+            true
+        } catch (e: SecurityException) {
+            false
+        }
+    }
+
+    /** Fällige Wiedervorlagen bei Firmen: Antippen öffnet die Übersicht „Wiedervorlagen“. */
+    fun zeigeFaelligeAufgaben(context: Context, anzahl: Int, erste: String): Boolean {
+        if (anzahl == 0 || !duerfenAngezeigtWerden(context)) return false
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_ZEIGE_FAELLIGE, true)
+        }
+        val antippen = PendingIntent.getActivity(context, 2, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val n = NotificationCompat.Builder(context, KANAL_ID)
+            .setSmallIcon(R.drawable.ic_benachrichtigung)
+            .setColor(ContextCompat.getColor(context, R.color.akzent))
+            .setContentTitle(if (anzahl == 1) "1 Wiedervorlage bei einer Firma" else "$anzahl Wiedervorlagen bei Firmen")
+            .setContentText(erste)
+            .setContentIntent(antippen)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .build()
+        return try {
+            NotificationManagerCompat.from(context).notify(CRM_ID, n)
             true
         } catch (e: SecurityException) {
             false

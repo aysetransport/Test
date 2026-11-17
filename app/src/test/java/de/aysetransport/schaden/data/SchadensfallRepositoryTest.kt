@@ -238,17 +238,23 @@ class SchadensfallRepositoryTest {
     }
 
     @Test
-    fun `neue Auftraggeber aus Faellen kommen automatisch in die Liste, bekannte nicht doppelt`() = runBlocking {
-        repository.anlegen(Schadensfall(kundeName = "A", auftraggeber = "Möbelhaus Nordpark", auftraggeberKontakt = "Frau Kaya", auftraggeberEmail = "dispo@nordpark.example"))
+    fun `neue Auftraggeber aus Faellen werden Firmen mit Ansprechpartner, bekannte nicht doppelt`() = runBlocking {
+        val erster = repository.anlegen(Schadensfall(kundeName = "A", auftraggeber = "Möbelhaus Nordpark", auftraggeberKontakt = "Frau Kaya", auftraggeberEmail = "dispo@nordpark.example"))
         val id = repository.anlegen(Schadensfall(kundeName = "B", auftraggeber = "  möbelhaus NORDPARK "))
-        repository.speichern(repository.ladeFall(id)!!.copy(auftraggeber = "Küchenstudio Süd"))
+        val nordpark = repository.beobachteAuftraggeber().first().single()
+        assertEquals("beide Fälle hängen an derselben Firma", nordpark.uuid, repository.ladeFall(id)!!.auftraggeberUuid)
+        assertEquals(nordpark.uuid, repository.ladeFall(erster)!!.auftraggeberUuid)
+        val kontakt = db.crm().ladeKontaktpersonen(nordpark.uuid).single()
+        assertEquals(listOf("Frau Kaya", "dispo@nordpark.example", "Schäden"), listOf(kontakt.name, kontakt.email, kontakt.thema))
 
+        repository.speichern(repository.ladeFall(id)!!.copy(auftraggeber = "Küchenstudio Süd"))
         val liste = repository.beobachteAuftraggeber().first()
         assertEquals(listOf("Küchenstudio Süd", "Möbelhaus Nordpark"), liste.map { it.name })
-        assertEquals("dispo@nordpark.example", liste.single { it.name == "Möbelhaus Nordpark" }.email)
+        assertEquals("umgehängt", liste.first().uuid, repository.ladeFall(id)!!.auftraggeberUuid)
 
-        repository.auftraggeberLoeschen(liste.first())
+        CrmRepository(db).firmaLoeschen(liste.first())
         assertEquals(listOf("Möbelhaus Nordpark"), repository.beobachteAuftraggeber().first().map { it.name })
         assertEquals("Fall behält seinen Auftraggeber", "Küchenstudio Süd", repository.ladeFall(id)!!.auftraggeber)
+        assertNull(repository.ladeFall(id)!!.auftraggeberUuid)
     }
 }

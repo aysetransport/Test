@@ -40,12 +40,12 @@ const verlauf = (s, typ) => s.evaluate(t => Object.values(S.verlauf).filter(v =>
 test('Windows-App: Cloud, Fall, E-Mail senden, Antwort abrufen und beantworten, Neustart', async t => {
   let { app, s } = await starte();
   t.after(() => app.close().catch(() => {}));
-  assert.equal(await s.title(), 'Schadensfälle');
+  assert.equal(await s.title(), 'Ayse CRM');
   assert.equal(await s.evaluate(() => location.protocol), 'app:');
   assert.equal(await s.evaluate(() => typeof window.require), 'undefined', 'kein Node-Zugriff aus der Oberfläche');
 
   // Cloud: Test-Cloud eintragen (statt der fest hinterlegten echten Adresse) und PIN festlegen.
-  await s.evaluate(url => { localStorage.setItem('schadensfaelle-v1', JSON.stringify({ apiUrl: url })); }, cloud.url);
+  await s.evaluate(url => { localStorage.setItem('schadensfaelle-v1', JSON.stringify({ apiUrl: url })); localStorage.setItem('crm-bereich', 'faelle'); }, cloud.url);
   await s.reload(); await s.waitForFunction(() => window.__appBereit);
   await s.locator('#pin1').fill(PIN); await s.locator('#pin2').fill(PIN); await s.locator('#pin-form button').click();
   await aktuell(s);

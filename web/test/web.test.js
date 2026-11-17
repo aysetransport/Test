@@ -16,14 +16,17 @@ test.after(async () => { await browser.close(); await seite.schliessen(); });
 
 /** Ein „Gerät“ = eigener Browser-Speicher. Mit cloudUrl ist die Cloud-Adresse schon eingetragen. */
 async function geraet(cloudUrl, optionen = {}) {
-  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1200, height: 900 }, acceptDownloads: true, ...optionen });
+  const { bereich, ...kontextOptionen } = optionen;
+  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1200, height: 900 }, acceptDownloads: true, ...kontextOptionen });
   // Tests sprechen nie die echte Cloud an: entweder die Test-Cloud oder „nur auf diesem Gerät“.
   await kontext.route('https://script.google.com/**', route => route.abort());
-  await kontext.addInitScript(url => {
+  await kontext.addInitScript(([url, bereich]) => {
     if (!localStorage.getItem('schadensfaelle-v1')) {
       localStorage.setItem('schadensfaelle-v1', JSON.stringify(url ? { apiUrl: url } : { nurLokal: true }));
+      // Die App startet bei den Firmen; die meisten Tests arbeiten in der Fallliste („Schäden“).
+      localStorage.setItem('crm-bereich', bereich);
     }
-  }, cloudUrl || '');
+  }, [cloudUrl || '', optionen.bereich || 'faelle']);
   const s = await kontext.newPage();
   s.on('pageerror', fehler => { throw fehler; });
   await s.goto(seite.url);
@@ -305,18 +308,20 @@ test('Auftraggeber: Vorlage an dessen Adresse, Auswahl aus der Liste, Abgleich d
   await b.locator('[data-neu]').first().click();
   await b.locator('[name=kundeName]').fill('Carl Demir');
   await b.locator('#ag-auswahl').selectOption({ label: 'Möbelhaus Nordpark · Frau Kaya' });
+  assert.equal(await b.locator('[name=auftraggeberKontakt]').inputValue(), 'Frau Kaya');
   assert.equal(await b.locator('[name=auftraggeberEmail]').inputValue(), 'dispo@nordpark.example');
   await b.locator('#fall-form button.voll').click();
   await b.locator('#detail dd', { hasText: '02191 123' }).waitFor();
 
-  // In den Einstellungen bearbeiten – A übernimmt die Änderung.
-  await b.locator('#einstellungen-knopf').click();
-  await b.locator('[data-ag]').click();
-  await b.locator('#ag-form [name=kontakt]').fill('Herr Ott');
-  await b.locator('#ag-form button.voll').click();
+  // In der Firma bearbeiten – A übernimmt die Änderung.
+  await b.locator('#zur-firma').click();
+  await b.locator('[data-crm=ansprechpartner]', { hasText: 'Frau Kaya' }).click();
+  await b.locator('#crm-form [name=thema]').fill('Schäden, Reklamationen');
+  await b.locator('#crm-form button.voll').click();
   await aktuell(b);
   await abgleich(a);
-  assert.deepEqual(await a.evaluate(() => auftraggeberListe().map(e => [e.name, e.kontakt])), [['Möbelhaus Nordpark', 'Herr Ott']]);
+  assert.deepEqual(await a.evaluate(() => auftraggeberListe().map(e => [e.name, kontakteVon(e.id).map(k => [k.name, k.thema])])),
+    [['Möbelhaus Nordpark', [['Frau Kaya', 'Schäden, Reklamationen']]]]);
   await cloud.schliessen();
 });
 
@@ -324,12 +329,118 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   const cloud = await starteCloud();
   const s = await geraet(cloud.url);
   await melde(s, PIN, true); await aktuell(s);
-  cloud.umgebung.kontext.API_VERSION = 2; // ein älteres Skript ohne das Zeichen des Auftraggebers
+  cloud.umgebung.kontext.API_VERSION = 3; // ein älteres Skript ohne CRM
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 3;
+  cloud.umgebung.kontext.API_VERSION = 4;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
 });
+
+test('CRM: Firma mit Ansprechpartnern, Preisen und Wiedervorlagen; Fall aus der Firma; Abgleich und Suche', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'firmen' });
+  await melde(a, PIN, true); await aktuell(a);
+  await a.getByText('Noch keine Auftraggeber').waitFor();
+
+  await a.locator('[data-neue-firma]').click();
+  await a.locator('#crm-form [name=name]').fill('Seats and Sofas Krefeld');
+  await a.locator('#crm-form [name=telefon]').fill('02151 123');
+  await a.locator('#crm-form button.voll').click();
+  await a.locator('#stammdaten', { hasText: 'Seats and Sofas Krefeld' }).waitFor();
+
+  const neu = async (tabelle, felder) => {
+    await a.locator(`[data-crm-neu=${tabelle}]`).click();
+    for (const [name, wert] of Object.entries(felder)) {
+      const feld = a.locator(`#crm-form [name=${name}]`);
+      if (await feld.evaluate(el => el.tagName) === 'SELECT') await feld.selectOption(wert); else await feld.fill(wert);
+    }
+    await a.locator('#crm-form button.voll').click();
+  };
+  await neu('ansprechpartner', { name: 'Jana Krüger', thema: 'Schäden', email: 'jana@seats.example' });
+  await neu('preise', { bezeichnung: 'Tourpauschale', betrag: '189,50', einheit: 'pro Tour' });
+  await neu('aufgaben', { text: 'Preise 2027 verhandeln', faelligAm: '2020-01-01' });
+  await neu('adressen', { art: 'LAGER', strasse: 'Industriestr. 5', plz: '47803', ort: 'Krefeld' });
+  await neu('aktivitaeten', { art: 'ANRUF', kontakt: 'Jana Krüger', text: 'Mehr Touren ab Dezember' });
+  await neu('dokumente', { titel: 'Rahmenvertrag', link: 'https://drive.example/vertrag' });
+  await a.locator('#detail').getByText('Tourpauschale: 189,50 € pro Tour').waitFor();
+  await a.locator('#detail').getByText('Lager').waitFor();
+
+  // Neuer Fall aus der Firma: Auftraggeber und Ansprechpartner für Schäden sind vorbelegt.
+  await a.locator('[data-crm-neu=faelle]').click();
+  assert.equal(await a.locator('[name=auftraggeber]').inputValue(), 'Seats and Sofas Krefeld');
+  assert.equal(await a.locator('[name=auftraggeberEmail]').inputValue(), 'jana@seats.example');
+  await a.locator('[name=kundeName]').fill('Anna Becker');
+  await a.locator('#fall-form button.voll').click();
+  await a.locator('#wiedervorlage').waitFor();
+  const fall = await a.evaluate(() => faelle()[0]);
+  assert.equal(fall.auftraggeberUuid, await a.evaluate(() => auftraggeberListe()[0].id));
+  assert.equal(await a.evaluate(() => alle('ansprechpartner').length), 1, 'kein doppelter Ansprechpartner');
+
+  // Termine: die überfällige Wiedervorlage der Firma und der Fall
+  await a.locator('[data-bereich=termine]').click();
+  await a.locator('#termine').getByText('Überfällig (1)').waitFor();
+  await a.locator('#termine').getByText('Preise 2027 verhandeln').waitFor();
+  await a.locator('[data-bereich=firmen]').click();
+  await a.locator('#firmen-suche').fill('krüger');
+  await a.locator('#firmen').getByText('Ansprechpartner: Jana Krüger').waitFor();
+
+  // Zweites Gerät bekommt alles; dort wird die Wiedervorlage erledigt.
+  await aktuell(a);
+  const b = await geraet(cloud.url, { bereich: 'termine' });
+  await melde(b); await aktuell(b);
+  await b.locator('#termine [data-erledigt]').first().click();
+  await b.locator('#termine').getByText('Preise 2027 verhandeln').waitFor({ state: 'detached' });
+  await aktuell(b);
+  await abgleich(a);
+  assert.equal(await a.evaluate(() => alle('aufgaben')[0].erledigt), true);
+  const daten = cloudDaten(cloud);
+  assert.deepEqual(Object.values(daten.preise).map(p => [p.bezeichnung, p.betragCent]), [['Tourpauschale', 18950]]);
+  assert.equal(Object.values(daten.faelle)[0].auftraggeberUuid, Object.keys(daten.auftraggeber)[0]);
+  await cloud.schliessen();
+});
+
+test('CRM: Sicherung des Browser-CRM importieren und als CSV exportieren', async () => {
+  const s = await geraet('', { bereich: 'firmen' });
+  await legeFallAnUeberSchaeden(s);
+  const sicherung = { firmen: [
+    { id: 'f1', name: 'seats and sofas krefeld', rechtsform: 'GmbH', status: 'aktiv', telefon: '02151 123', email: '', website: 'seats.example', notizen: 'Rahmenvertrag',
+      adressen: [{ id: 'a', art: 'Lager', strasse: 'Industriestr. 5', plz: '47803', ort: 'Krefeld', notiz: '' }],
+      kontakte: [{ id: 'k', name: 'Jana Krüger', thema: 'Disposition', telefon: '', email: 'jana@seats.example', notiz: '' }],
+      preise: [{ id: 'p', bez: 'Etage', betrag: 12.5, einheit: 'pro Etage', ab: '2026-01-01', notiz: '' }],
+      aktivitaeten: [{ id: 'x', datum: '2026-11-02', art: 'Anruf', kontakt: 'Jana Krüger', text: 'Preise besprochen' }],
+      aufgaben: [{ id: 't', faellig: '2026-12-01', text: 'Angebot', kontakt: '', erledigt: false }],
+      dokumente: [{ id: 'd', titel: 'Vertrag', link: 'https://drive.example/v', notiz: '' }] },
+    { id: 'f2', name: 'Neue Möbel AG', status: 'interessent' }] };
+  await s.locator('#einstellungen-knopf').click();
+  await s.locator('#crm-import').setInputFiles({ name: 'crm-sicherung.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(sicherung)) });
+  await s.getByText('Importiert: 1 neue Firma(n), 1 mit vorhandenen zusammengeführt, 6 Einträge').waitFor();
+  // Zweiter Import legt nichts doppelt an.
+  await s.locator('#crm-import').setInputFiles({ name: 'crm-sicherung.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(sicherung)) });
+  await s.getByText('Importiert: 0 neue Firma(n), 2 mit vorhandenen zusammengeführt, 0 Einträge').waitFor();
+  const r = await s.evaluate(() => ({ firmen: auftraggeberListe().map(e => [e.name, e.rechtsform, e.status]), preise: alle('preise').map(p => p.betragCent),
+    kontakte: alle('ansprechpartner').map(k => k.name).sort() }));
+  assert.deepEqual(r.firmen, [['Neue Möbel AG', '', 'INTERESSENT'], ['Seats and Sofas Krefeld', 'GmbH', 'AKTIV']]);
+  assert.deepEqual(r.preise, [1250]);
+  assert.deepEqual(r.kontakte, ['Jana Krüger', 'Tim Berg']);
+
+  const downloads = [];
+  s.on('download', d => downloads.push(d));
+  await s.locator('#crm-csv').click();
+  await s.waitForFunction(() => true);
+  await new Promise(ok => setTimeout(ok, 500));
+  assert.deepEqual(downloads.map(d => d.suggestedFilename().replace(/_\d{4}-\d{2}-\d{2}/, '')).sort(),
+    ['CRM_Aktivitaeten.csv', 'CRM_Ansprechpartner.csv', 'CRM_Firmen.csv', 'CRM_Preise.csv', 'CRM_Wiedervorlagen.csv']);
+  const preise = require('node:fs').readFileSync(await downloads.find(d => d.suggestedFilename().startsWith('CRM_Preise')).path(), 'utf8');
+  assert.ok(preise.startsWith('\uFEFFFirma;Bezeichnung;Betrag (EUR);Einheit;Gültig ab;Notiz\r\n'), preise);
+  assert.ok(preise.includes('Seats and Sofas Krefeld;Etage;12,50;pro Etage;01.01.2026;'), preise);
+});
+
+/** Legt über den Reiter „Schäden“ einen Fall mit Auftraggeber an (die Firma entsteht dabei automatisch). */
+async function legeFallAnUeberSchaeden(s) {
+  await s.locator('[data-bereich=faelle]').click();
+  await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Seats and Sofas Krefeld', auftraggeberKontakt: 'Tim Berg' });
+  await s.locator('[data-bereich=firmen]').click();
+}

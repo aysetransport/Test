@@ -55,6 +55,7 @@ class CloudAbgleichTest {
             override fun instant(): Instant = jetzt
         }
         val repo = SchadensfallRepository(db, speicher, uhr)
+        val crm = de.aysetransport.schaden.data.CrmRepository(db, uhr)
         val cloudSpeicher = CloudSpeicher(
             PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO + SupervisorJob())) {
                 File(context.cacheDir, "cloud-${UUID.randomUUID()}.preferences_pb")
@@ -271,11 +272,11 @@ class CloudAbgleichTest {
     }
 
     @Test
-    fun `Auftraggeber-Liste und Kontaktdaten wandern zwischen den Geraeten`() {
+    fun `Firmen und Kontaktdaten wandern zwischen den Geraeten`() {
         val a = geraet(neuePin = true)
         runBlocking {
             a.repo.anlegen(Schadensfall(kundeName = "Anna Becker", auftraggeber = "Möbelhaus Nordpark", auftraggeberKontakt = "Frau Kaya", auftraggeberTelefon = "02191 123", auftraggeberEmail = "dispo@nordpark.example"))
-            a.repo.auftraggeberSpeichern(AuftraggeberEintrag(name = "Küchenstudio Süd", telefon = "0202 456"))
+            a.crm.firmaSpeichern(AuftraggeberEintrag(name = "Küchenstudio Süd", telefon = "0202 456"))
         }
         a.abgleichen()
         val b = geraet()
@@ -284,16 +285,19 @@ class CloudAbgleichTest {
         assertEquals(listOf("Frau Kaya", "02191 123", "dispo@nordpark.example"), listOf(fall.auftraggeberKontakt, fall.auftraggeberTelefon, fall.auftraggeberEmail))
         val liste = runBlocking { b.repo.beobachteAuftraggeber().first() }
         assertEquals(listOf("Küchenstudio Süd", "Möbelhaus Nordpark"), liste.map { it.name })
+        val nordpark = liste.single { it.name == "Möbelhaus Nordpark" }
+        assertEquals("Verweis des Falls kommt mit", nordpark.uuid, fall.auftraggeberUuid)
+        assertEquals(listOf("Frau Kaya"), runBlocking { b.crm.ladeKontakte(nordpark.uuid) }.map { it.name })
 
         // Auf B bearbeitet und gelöscht – A übernimmt beides.
         b.spaeter(5)
         runBlocking {
-            b.repo.auftraggeberSpeichern(liste.single { it.name == "Möbelhaus Nordpark" }.copy(kontakt = "Herr Ott"))
-            b.repo.auftraggeberLoeschen(liste.single { it.name == "Küchenstudio Süd" })
+            b.crm.firmaSpeichern(nordpark.copy(rechtsform = "GmbH"))
+            b.crm.firmaLoeschen(liste.single { it.name == "Küchenstudio Süd" })
         }
         b.abgleichen(); a.abgleichen()
         val beiA = runBlocking { a.repo.beobachteAuftraggeber().first() }
-        assertEquals(listOf("Möbelhaus Nordpark" to "Herr Ott"), beiA.map { it.name to it.kontakt })
+        assertEquals(listOf("Möbelhaus Nordpark" to "GmbH"), beiA.map { it.name to it.rechtsform })
         assertTrue(runBlocking { a.db.dao().offeneAuftraggeber().isEmpty() })
     }
 

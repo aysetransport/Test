@@ -27,13 +27,29 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Fester Signaturschlüssel aus den Secrets des Repositorys (optional, siehe docs/ANLEITUNG-2.0.md).
+      # Damit tragen alle künftigen APKs dieselbe Signatur und lassen sich über die vorige installieren.
+      - name: Signaturschlüssel bereitlegen
+        env:
+          SIGNATUR_BASE64: ${{ secrets.SIGNATUR_BASE64 }}
+        run: |
+          if [ -n "$SIGNATUR_BASE64" ]; then
+            echo "$SIGNATUR_BASE64" | base64 -d > "$RUNNER_TEMP/signatur.jks"
+            echo "SIGNATUR_DATEI=$RUNNER_TEMP/signatur.jks" >> "$GITHUB_ENV"
+          else
+            echo "Kein Signaturschlüssel hinterlegt – die APK wird mit einem Testschlüssel signiert."
+          fi
+
       - name: Lint, Tests und Debug-APK
+        env:
+          SIGNATUR_PASSWORT: ${{ secrets.SIGNATUR_PASSWORT }}
+          SIGNATUR_ALIAS: ${{ secrets.SIGNATUR_ALIAS }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug
 
       - name: APK bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: Schadensfaelle-debug-apk
+          name: Ayse-CRM-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 

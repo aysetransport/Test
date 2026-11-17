@@ -3,7 +3,16 @@ package de.aysetransport.schaden.data
 import android.database.SQLException
 import androidx.room.withTransaction
 import de.aysetransport.schaden.data.db.SchadensfallDatenbank
+import de.aysetransport.schaden.data.model.Adresse
+import de.aysetransport.schaden.data.model.Aktivitaet
 import de.aysetransport.schaden.data.model.Anlage
+import de.aysetransport.schaden.data.model.Aufgabe
+import de.aysetransport.schaden.data.model.AuftraggeberEintrag
+import de.aysetransport.schaden.data.model.Dokument
+import de.aysetransport.schaden.data.model.Kontaktperson
+import de.aysetransport.schaden.data.model.MailNachricht
+import de.aysetransport.schaden.data.model.Preis
+import de.aysetransport.schaden.mail.MailAnhangSpeicher
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
 import kotlinx.coroutines.Dispatchers
@@ -27,9 +36,18 @@ data class BackupDaten(
     val faelle: List<Schadensfall> = emptyList(),
     val verlauf: List<VerlaufEintrag> = emptyList(),
     val anlagen: List<Anlage> = emptyList(),
+    // ab Format 2: CRM und E-Mails
+    val auftraggeber: List<AuftraggeberEintrag> = emptyList(),
+    val adressen: List<Adresse> = emptyList(),
+    val ansprechpartner: List<Kontaktperson> = emptyList(),
+    val preise: List<Preis> = emptyList(),
+    val aktivitaeten: List<Aktivitaet> = emptyList(),
+    val aufgaben: List<Aufgabe> = emptyList(),
+    val dokumente: List<Dokument> = emptyList(),
+    val mails: List<MailNachricht> = emptyList(),
 )
 
-data class BackupErgebnis(val faelle: Int, val anlagen: Int)
+data class BackupErgebnis(val faelle: Int, val anlagen: Int, val firmen: Int = 0)
 
 class BackupUngueltigException(message: String, cause: Throwable? = null) : IOException(message, cause)
 
@@ -42,8 +60,10 @@ class BackupManager(
     private val anlagenSpeicher: AnlagenSpeicher,
     private val arbeitsOrdner: File,
     private val uhr: Clock = Clock.systemDefaultZone(),
+    private val mailAnhaenge: MailAnhangSpeicher? = null,
 ) {
     private val dao = db.dao()
+    private val crm = db.crm()
 
     private val json = Json {
         prettyPrint = true
@@ -58,6 +78,14 @@ class BackupManager(
                 faelle = dao.ladeAlle(),
                 verlauf = dao.ladeGesamtenVerlauf(),
                 anlagen = dao.ladeAlleAnlagen(),
+                auftraggeber = dao.ladeAlleAuftraggeber(),
+                adressen = crm.ladeAlleAdressen(),
+                ansprechpartner = crm.ladeAlleKontaktpersonen(),
+                preise = crm.ladeAllePreise(),
+                aktivitaeten = crm.ladeAlleAktivitaeten(),
+                aufgaben = crm.ladeAlleAufgaben(),
+                dokumente = crm.ladeAlleDokumente(),
+                mails = crm.ladeAlleMails(),
             )
         }
         ZipOutputStream(ziel.buffered()).use { zip ->
@@ -71,8 +99,17 @@ class BackupManager(
                 datei.inputStream().use { it.copyTo(zip) }
                 zip.closeEntry()
             }
+            // Anhänge von Mails ohne Fall
+            for (mail in daten.mails) {
+                for (datei in mailAnhaenge?.dateien(mail.id).orEmpty()) {
+                    if (!istSichererName(datei.name)) continue
+                    zip.putNextEntry(ZipEntry("$MAIL_ANHAENGE_PRAEFIX${mail.id}/${datei.name}"))
+                    datei.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+            }
         }
-        BackupErgebnis(faelle = daten.faelle.size, anlagen = daten.anlagen.size)
+        BackupErgebnis(faelle = daten.faelle.size, anlagen = daten.anlagen.size, firmen = daten.auftraggeber.size)
     }
 
     /**
@@ -87,8 +124,10 @@ class BackupManager(
     suspend fun stelleWiederHer(quelle: InputStream): BackupErgebnis = withContext(Dispatchers.IO) {
         val zwischen = File(arbeitsOrdner, "wiederherstellung-${System.nanoTime()}")
         val zwischenAnlagen = File(zwischen, AnlagenSpeicher.ORDNER)
+        val zwischenMail = File(zwischen, MailAnhangSpeicher.ORDNER)
         try {
             zwischenAnlagen.mkdirs()
+            zwischenMail.mkdirs()
             var datenText: String? = null
             try {
                 ZipInputStream(quelle.buffered()).use { zip ->
@@ -99,6 +138,11 @@ class BackupManager(
                             eintrag.name == DATEN_DATEI -> datenText = zip.readBytes().toString(Charsets.UTF_8)
                             eintrag.name.startsWith(ANLAGEN_PRAEFIX) -> {
                                 val ziel = sichererPfad(zwischenAnlagen, eintrag.name.removePrefix(ANLAGEN_PRAEFIX)) ?: continue
+                                ziel.parentFile?.mkdirs()
+                                ziel.outputStream().use { zip.copyTo(it) }
+                            }
+                            eintrag.name.startsWith(MAIL_ANHAENGE_PRAEFIX) -> {
+                                val ziel = sichererPfad(zwischenMail, eintrag.name.removePrefix(MAIL_ANHAENGE_PRAEFIX)) ?: continue
                                 ziel.parentFile?.mkdirs()
                                 ziel.outputStream().use { zip.copyTo(it) }
                             }
@@ -124,6 +168,7 @@ class BackupManager(
             val fallIds = daten.faelle.map { it.id }.toSet()
             val verlauf = daten.verlauf.filter { it.fallId in fallIds }
             val anlagen = daten.anlagen.filter { it.fallId in fallIds && istSichererName(it.dateiname) }
+            val mails = daten.mails.map { if (it.fallId != null && it.fallId !in fallIds) it.copy(fallId = null) else it }
 
             try {
                 db.withTransaction {
@@ -131,6 +176,24 @@ class BackupManager(
                     dao.einfuegenFaelle(daten.faelle)
                     dao.einfuegenVerlauf(verlauf)
                     dao.einfuegenAnlagen(anlagen)
+                    // Ein Backup aus Version 1.x kennt kein CRM: Die Firmen entstehen dann neu aus den Fällen.
+                    dao.loescheAlleAuftraggeber()
+                    crm.loescheAlleAdressen(); crm.loescheAlleKontaktpersonen(); crm.loescheAllePreise()
+                    crm.loescheAlleAktivitaeten(); crm.loescheAlleAufgaben(); crm.loescheAlleDokumente(); crm.loescheAlleMails()
+                    dao.speichereAuftraggeberListe(daten.auftraggeber)
+                    crm.speichereAdressen(daten.adressen)
+                    crm.speichereKontaktpersonen(daten.ansprechpartner)
+                    crm.speicherePreise(daten.preise)
+                    crm.speichereAktivitaeten(daten.aktivitaeten)
+                    crm.speichereAufgaben(daten.aufgaben)
+                    crm.speichereDokumente(daten.dokumente)
+                    crm.einfuegenMails(mails)
+                    CrmVerknuepfer(db, uhr).verknuepfeAlle()
+                    // Was im Backup steht, soll nicht durch eine ältere, noch offene Löschung wieder verschwinden.
+                    val kennungen = daten.faelle.map { it.uuid } + daten.auftraggeber.map { it.uuid } + daten.adressen.map { it.uuid } +
+                        daten.ansprechpartner.map { it.uuid } + daten.preise.map { it.uuid } + daten.aktivitaeten.map { it.uuid } +
+                        daten.aufgaben.map { it.uuid } + daten.dokumente.map { it.uuid }
+                    kennungen.chunked(500).forEach { dao.vergissLoeschungen(it) }
                 }
             } catch (e: SQLException) {
                 // Widersprüchliche Daten, z. B. doppelte Kennungen. Die Transaktion wurde
@@ -143,7 +206,12 @@ class BackupManager(
             if (!zwischenAnlagen.renameTo(wurzel)) {
                 zwischenAnlagen.copyRecursively(wurzel, overwrite = true)
             }
-            BackupErgebnis(faelle = daten.faelle.size, anlagen = anlagen.size)
+            mailAnhaenge?.let { m ->
+                m.wurzel.deleteRecursively()
+                m.wurzel.parentFile?.mkdirs()
+                if (!zwischenMail.renameTo(m.wurzel)) zwischenMail.copyRecursively(m.wurzel, overwrite = true)
+            }
+            BackupErgebnis(faelle = daten.faelle.size, anlagen = anlagen.size, firmen = dao.ladeAlleAuftraggeber().size)
         } finally {
             zwischen.deleteRecursively()
         }
@@ -167,9 +235,11 @@ class BackupManager(
             name.all { it.isLetterOrDigit() || it in "._-" }
 
     companion object {
-        const val FORMAT_VERSION = 1
+        /** 1: Fälle, Verlauf, Anlagen (App 1.x) · 2: zusätzlich CRM und E-Mails (App 2.0) */
+        const val FORMAT_VERSION = 2
         const val DATEN_DATEI = "daten.json"
         const val ANLAGEN_PRAEFIX = "anlagen/"
+        const val MAIL_ANHAENGE_PRAEFIX = "mailanhaenge/"
 
         const val KEIN_BACKUP = "Die gewählte Datei ist kein Backup dieser App."
         const val BESCHAEDIGT = "Das Backup ist beschädigt und kann nicht gelesen werden."

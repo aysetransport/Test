@@ -120,6 +120,8 @@ fun DetailScreen(
     onBearbeiten: () -> Unit,
     /** Öffnet das Schreibfenster: Vorlage oder Empfänger (ohne Vorlage) oder Antwort auf einen Verlaufseintrag. */
     onMailSchreiben: (vorlage: String, empfaenger: String, antwortAuf: String) -> Unit = { _, _, _ -> },
+    /** Öffnet die Firma des Auftraggebers im CRM. */
+    onFirmaOeffnen: (String) -> Unit = {},
 ) {
     val zustand by viewModel.zustand.collectAsStateWithLifecycle()
     val mailEingerichtet by viewModel.mailEingerichtet.collectAsStateWithLifecycle()
@@ -242,7 +244,7 @@ fun DetailScreen(
                     onNachricht = { dialog = OffenerDialog.NachrichtVorlage },
                 )
             }
-            item(key = "daten") { DatenKarte(fall) }
+            item(key = "daten") { DatenKarte(fall, onFirmaOeffnen) }
             item(key = "anlagen") {
                 AnlagenKarte(
                     anlagen = zustand.anlagen,
@@ -541,7 +543,7 @@ private fun KontaktZeile(
 }
 
 @Composable
-private fun DatenKarte(fall: Schadensfall) {
+private fun DatenKarte(fall: Schadensfall, onFirmaOeffnen: (String) -> Unit) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         modifier = Modifier.fillMaxWidth(),
@@ -568,6 +570,9 @@ private fun DatenKarte(fall: Schadensfall) {
                 ),
                 leerText = "Kein Auftraggeber erfasst.",
             )
+            fall.auftraggeberUuid?.takeIf { it.isNotBlank() }?.let { uuid ->
+                TextButton(onClick = { onFirmaOeffnen(uuid) }, modifier = Modifier.testTag("zur-firma")) { Text("Firma im CRM öffnen") }
+            }
             Datenblock(
                 titel = "Transport",
                 zeilen = listOf(

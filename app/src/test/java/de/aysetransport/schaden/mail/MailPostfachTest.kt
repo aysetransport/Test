@@ -156,9 +156,14 @@ class MailPostfachTest {
 
         val neu = postfach.abrufen()
 
-        assertEquals(listOf("AW: ohne Nummer", "Noch etwas"), neu.map { it.betreff })
+        assertEquals(listOf("AW: ohne Nummer", "Noch etwas"), neu.filter { it.fall != null }.map { it.betreff })
         assertEquals(2, verlauf(becker).count { it.typ == VerlaufTyp.EMAIL_EINGANG })
         assertFalse(verlauf(demir).any { it.typ == VerlaufTyp.EMAIL_EINGANG })
+        // Nicht eindeutig für einen Fall, aber die Adresse gehört zum Ansprechpartner der Firma: landet bei der Firma.
+        assertEquals("Möbelhaus", neu.single { it.betreff == "Rückfrage" }.firma?.name)
+        // Alles andere landet im Eingang „Nicht zugeordnet“.
+        val werbung = neu.single { it.betreff == "Angebot der Woche" }
+        assertTrue(werbung.fall == null && werbung.firma == null)
     }
 
     @Test
@@ -170,7 +175,8 @@ class MailPostfachTest {
 
         val neu = postfach.abrufen()
 
-        assertEquals(listOf("Nachtrag [Fall ${heute.year}-001]"), neu.map { it.betreff })
+        assertEquals(listOf("Nachtrag [Fall ${heute.year}-001]"), neu.filter { it.fall != null }.map { it.betreff })
+        assertNull("„Danke“ bleibt im Eingang „Nicht zugeordnet“", neu.single { it.betreff == "Danke" }.fall)
         assertNull("abgeschlossene Fälle bekommen keine Wiedervorlage", repository.ladeFall(id)!!.wiedervorlageAm)
     }
 

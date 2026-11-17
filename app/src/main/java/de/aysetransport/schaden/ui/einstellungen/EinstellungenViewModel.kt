@@ -21,7 +21,11 @@ import de.aysetransport.schaden.data.BackupManager
 import de.aysetransport.schaden.data.BackupUngueltigException
 import de.aysetransport.schaden.data.Einstellungen
 import de.aysetransport.schaden.data.EinstellungenSpeicher
+import de.aysetransport.schaden.data.CrmImport
+import de.aysetransport.schaden.data.CrmRepository
+import de.aysetransport.schaden.data.ImportUngueltigException
 import de.aysetransport.schaden.data.SchadensfallRepository
+import de.aysetransport.schaden.data.model.MailKontoArt
 import de.aysetransport.schaden.domain.CsvExport
 import de.aysetransport.schaden.mail.MailKonfig
 import de.aysetransport.schaden.mail.MailPlaner
@@ -53,10 +57,18 @@ class EinstellungenViewModel(
     offeneAenderungen: Flow<Int>,
     private val mailSpeicher: MailSpeicher? = null,
     private val postfach: MailPostfach? = null,
+    private val mailSpeicherAllgemein: MailSpeicher? = null,
+    private val crm: CrmRepository? = null,
+    private val crmImport: CrmImport? = null,
 ) : ViewModel() {
 
     val mailZustand: StateFlow<MailZustand?> = (mailSpeicher?.zustand ?: flowOf(MailZustand()))
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val mailZustandAllgemein: StateFlow<MailZustand?> = (mailSpeicherAllgemein?.zustand ?: flowOf(MailZustand()))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun mailZustand(art: MailKontoArt): StateFlow<MailZustand?> = if (art == MailKontoArt.SCHADEN) mailZustand else mailZustandAllgemein
 
     var mailBeschaeftigt by mutableStateOf(false)
         private set
@@ -64,14 +76,16 @@ class EinstellungenViewModel(
         private set
 
     /** Prüft die Zugangsdaten am Postfach und speichert das Konto. */
-    fun mailEinrichten(konfig: MailKonfig, passwort: String, danach: () -> Unit) {
+    fun mailEinrichten(konfig: MailKonfig, passwort: String, danach: () -> Unit) = mailEinrichten(MailKontoArt.SCHADEN, konfig, passwort, danach)
+
+    fun mailEinrichten(art: MailKontoArt, konfig: MailKonfig, passwort: String, danach: () -> Unit) {
         val p = postfach ?: return
         if (mailBeschaeftigt) return
         mailBeschaeftigt = true
         mailFehler = null
         viewModelScope.launch {
             try {
-                p.einrichten(konfig, passwort)
+                p.einrichten(art, konfig, passwort)
                 MailPlaner.regelmaessig(appContext, true)
                 MailPlaner.jetzt(appContext)
                 meldungsKanal.send("E-Mail-Konto verbunden")
@@ -91,7 +105,14 @@ class EinstellungenViewModel(
         viewModelScope.launch {
             try {
                 val neu = p.abrufen()
-                meldungsKanal.send(if (neu.isEmpty()) "Keine neuen E-Mails zu Fällen" else "${neu.size} neue E-Mail(s) den Fällen zugeordnet")
+                val offen = neu.count { it.fall == null && it.firma == null }
+                meldungsKanal.send(
+                    when {
+                        neu.isEmpty() -> "Keine neuen E-Mails"
+                        offen == 0 -> "${neu.size} neue E-Mail(s) zugeordnet"
+                        else -> "${neu.size} neue E-Mail(s), davon $offen im Postfach unter „Nicht zugeordnet“"
+                    },
+                )
             } catch (e: IOException) {
                 meldungsKanal.send(e.message ?: "Postfach nicht erreichbar")
             } finally {
@@ -101,9 +122,10 @@ class EinstellungenViewModel(
     }
 
     /** Entfernt Konto und Passwort vom Gerät. Bereits zugeordnete Mails bleiben im Verlauf. */
-    fun mailTrennen() = viewModelScope.launch {
-        mailSpeicher?.trenne()
-        MailPlaner.regelmaessig(appContext, false)
+    fun mailTrennen(art: MailKontoArt = MailKontoArt.SCHADEN) = viewModelScope.launch {
+        (if (art == MailKontoArt.SCHADEN) mailSpeicher else mailSpeicherAllgemein)?.trenne()
+        val nochEines = listOfNotNull(mailSpeicher, mailSpeicherAllgemein).any { it.aktuell().konfig != null }
+        MailPlaner.regelmaessig(appContext, nochEines)
         meldungsKanal.send("E-Mail-Konto entfernt")
     }
 
@@ -162,6 +184,48 @@ class EinstellungenViewModel(
         val datei = anlagenSpeicher.exportDatei("Schadensfaelle_${LocalDate.now()}.csv")
         withContext(Dispatchers.IO) { datei.writeText(csv, Charsets.UTF_8) }
         danach(anlagenSpeicher.freigabeUri(datei))
+    }
+
+    /** Exportiert Firmen, Ansprechpartner, Preise, Aktivitäten und Wiedervorlagen als fünf CSV-Dateien. */
+    fun exportiereCrmCsv(danach: (List<Uri>) -> Unit) = ausfuehren {
+        val c = crm ?: return@ausfuehren
+        val firmen = c.ladeFirmen()
+        if (firmen.isEmpty()) {
+            meldungsKanal.send("Es gibt noch keine Firmen zum Exportieren")
+            return@ausfuehren
+        }
+        val db = c.alleDaten()
+        val heute = LocalDate.now()
+        val dateien = listOf(
+            "CRM_Firmen_$heute.csv" to CsvExport.firmen(firmen, db.adressen),
+            "CRM_Ansprechpartner_$heute.csv" to CsvExport.ansprechpartner(firmen, db.kontakte),
+            "CRM_Preise_$heute.csv" to CsvExport.preise(firmen, db.preise),
+            "CRM_Aktivitaeten_$heute.csv" to CsvExport.aktivitaeten(firmen, db.aktivitaeten),
+            "CRM_Wiedervorlagen_$heute.csv" to CsvExport.wiedervorlagen(firmen, db.aufgaben),
+        ).map { (name, inhalt) ->
+            val datei = anlagenSpeicher.exportDatei(name)
+            withContext(Dispatchers.IO) { datei.writeText(inhalt, Charsets.UTF_8) }
+            anlagenSpeicher.freigabeUri(datei)
+        }
+        danach(dateien)
+    }
+
+    /** Liest die JSON-Sicherung des Browser-CRM ein; gleichnamige Firmen werden zusammengeführt. */
+    fun importiereCrm(quelle: Uri) = ausfuehren {
+        val imp = crmImport ?: return@ausfuehren
+        try {
+            val text = withContext(Dispatchers.IO) {
+                appContext.contentResolver.openInputStream(quelle)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: throw IOException("Quelle nicht lesbar")
+            }
+            val e = imp.importiere(text)
+            meldungsKanal.send(
+                "Importiert: ${e.neueFirmen} neue Firma(n), ${e.zusammengefuehrt} mit vorhandenen zusammengeführt, ${e.eintraege} Einträge",
+            )
+        } catch (e: ImportUngueltigException) {
+            meldungsKanal.send(e.message ?: CrmImport.KEINE_SICHERUNG)
+        } catch (e: IOException) {
+            meldungsKanal.send("Die Datei konnte nicht gelesen werden")
+        }
     }
 
     fun erstelleBackup(ziel: Uri) = ausfuehren {
@@ -275,7 +339,8 @@ class EinstellungenViewModel(
     private fun BackupErgebnis.inWorten(): String {
         val faelleText = if (faelle == 1) "1 Fall" else "$faelle Fälle"
         val anlagenText = if (anlagen == 1) "1 Anlage" else "$anlagen Anlagen"
-        return "$faelleText, $anlagenText"
+        val firmenText = if (firmen == 1) "1 Firma" else "$firmen Firmen"
+        return "$faelleText, $anlagenText, $firmenText"
     }
 
     private fun ausfuehren(aufgabe: suspend () -> Unit) {
@@ -301,9 +366,12 @@ class EinstellungenViewModel(
                     anlagenSpeicher = container.anlagenSpeicher,
                     cloud = container.cloud,
                     cloudSpeicher = container.cloudSpeicher,
-                    offeneAenderungen = container.datenbank.dao().beobachteOffeneAenderungen(),
+                    offeneAenderungen = container.offeneAenderungen,
                     mailSpeicher = container.mailSpeicher,
                     postfach = container.postfach,
+                    mailSpeicherAllgemein = container.mailSpeicherAllgemein,
+                    crm = container.crm,
+                    crmImport = CrmImport(container.datenbank, nachAenderung = container::abgleichAnstossen),
                 )
             }
         }

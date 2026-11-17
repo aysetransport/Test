@@ -11,6 +11,7 @@ import de.aysetransport.schaden.AppContainer
 import de.aysetransport.schaden.data.EinstellungenSpeicher
 import de.aysetransport.schaden.data.SchadensfallRepository
 import de.aysetransport.schaden.data.model.Ansprechpartner
+import de.aysetransport.schaden.data.CrmRepository
 import de.aysetransport.schaden.data.model.AuftraggeberEintrag
 import de.aysetransport.schaden.data.model.FallStatus
 import de.aysetransport.schaden.data.model.Schadensart
@@ -99,6 +100,9 @@ class BearbeitenViewModel(
     private val repository: SchadensfallRepository,
     private val einstellungen: EinstellungenSpeicher,
     private val uhr: Clock = Clock.systemDefaultZone(),
+    private val crm: CrmRepository? = null,
+    /** Neuer Fall aus der Ansicht einer Firma: diese Firma ist vorbelegt. */
+    private val firmaVorgabe: String = "",
 ) : ViewModel() {
 
     val istNeu: Boolean get() = fallId == 0L
@@ -107,13 +111,22 @@ class BearbeitenViewModel(
     val auftraggeberListe: StateFlow<List<AuftraggeberEintrag>> = repository.beobachteAuftraggeber()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Übernimmt Firma und Kontaktdaten eines gespeicherten Auftraggebers ins Formular. */
-    fun auftraggeberUebernehmen(eintrag: AuftraggeberEintrag) = aendere {
-        copy(
+    /**
+     * Übernimmt Firma und Kontaktdaten eines gespeicherten Auftraggebers ins Formular – bevorzugt den
+     * Ansprechpartner für Schäden, sonst den ersten, sonst die Daten der Firma.
+     */
+    fun auftraggeberUebernehmen(eintrag: AuftraggeberEintrag) {
+        viewModelScope.launch { formular = mitFirma(formular, eintrag) }
+    }
+
+    private suspend fun mitFirma(f: Formular, eintrag: AuftraggeberEintrag): Formular {
+        val kontakte = crm?.ladeKontakte(eintrag.uuid).orEmpty()
+        val k = kontakte.firstOrNull { it.thema.contains("schad", ignoreCase = true) || it.thema.contains("schäd", ignoreCase = true) } ?: kontakte.firstOrNull()
+        return f.copy(
             auftraggeber = eintrag.name,
-            auftraggeberKontakt = eintrag.kontakt,
-            auftraggeberTelefon = eintrag.telefon,
-            auftraggeberEmail = eintrag.email,
+            auftraggeberKontakt = k?.name.orEmpty(),
+            auftraggeberTelefon = k?.telefon?.ifBlank { null } ?: eintrag.telefon,
+            auftraggeberEmail = k?.email?.ifBlank { null } ?: eintrag.email,
         )
     }
 
@@ -145,7 +158,8 @@ class BearbeitenViewModel(
                     wiedervorlageAm = heute.plusDays(einstellungen.aktuell().standardWiedervorlageTage.toLong()),
                 )
             }
-            formular = start
+            val vorgabe = if (vorhanden == null && firmaVorgabe.isNotEmpty()) crm?.ladeFirma(firmaVorgabe) else null
+            formular = if (vorgabe != null) mitFirma(start, vorgabe) else start
             ausgangsstand = start
             laedt = false
         }
@@ -231,8 +245,8 @@ class BearbeitenViewModel(
     companion object {
         private val EMAIL_MUSTER = Regex("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")
 
-        fun factory(container: AppContainer, fallId: Long) = viewModelFactory {
-            initializer { BearbeitenViewModel(fallId, container.repository, container.einstellungen) }
+        fun factory(container: AppContainer, fallId: Long, firma: String = "") = viewModelFactory {
+            initializer { BearbeitenViewModel(fallId, container.repository, container.einstellungen, crm = container.crm, firmaVorgabe = firma) }
         }
     }
 }

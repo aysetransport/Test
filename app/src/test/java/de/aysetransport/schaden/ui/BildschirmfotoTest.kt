@@ -31,6 +31,7 @@ import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufTyp
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -50,6 +51,13 @@ class BildschirmfotoTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<MainActivity>()
+
+    /** Die App startet bei den Firmen – diese Tests arbeiten in der Fallliste. */
+    @Before
+    fun zuDenFaellenWechseln() {
+        rule.waitUntil(10_000) { rule.onAllNodesWithTag("nav-faelle").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("nav-faelle").performClick()
+    }
 
     private val app: SchadensfallApp get() = ApplicationProvider.getApplicationContext()
     private val repository get() = app.container.repository

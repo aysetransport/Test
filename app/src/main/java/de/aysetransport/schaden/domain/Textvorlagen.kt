@@ -148,6 +148,12 @@ object Textvorlagen {
         return Nachricht(betreff = betreff(empfaenger, null, fall), text = "$anrede\n\n\n\n${grussformel(absender)}")
     }
 
+    /** Leere Mail ohne Fall (an eine Firma oder einen Ansprechpartner) – nur Anrede und Grußformel. */
+    fun freieNachricht(name: String, absender: Absender): String {
+        val anrede = if (name.isNotBlank()) "Guten Tag ${name.trim()}," else "Sehr geehrte Damen und Herren,"
+        return "$anrede\n\n\n\n${grussformel(absender)}"
+    }
+
     private fun betreff(vorlage: Vorlage, fall: Schadensfall): String = betreff(vorlage.empfaenger, vorlage, fall)
 
     private fun betreff(empfaenger: Empfaenger, vorlage: Vorlage?, fall: Schadensfall): String {

@@ -46,8 +46,11 @@ class MainActivity : ComponentActivity() {
     private fun liesStartauftrag(intent: Intent?) {
         if (intent == null) return
         val fallId = intent.getLongExtra(Benachrichtigungen.EXTRA_FALL_ID, 0L)
+        val firma = intent.getStringExtra(Benachrichtigungen.EXTRA_FIRMA).orEmpty()
         when {
             fallId > 0L -> startauftrag.value = Startauftrag.Fall(fallId)
+            firma.isNotEmpty() -> startauftrag.value = Startauftrag.Firma(firma)
+            intent.getBooleanExtra(Benachrichtigungen.EXTRA_POSTFACH, false) -> startauftrag.value = Startauftrag.Postfach
             intent.getBooleanExtra(Benachrichtigungen.EXTRA_ZEIGE_FAELLIGE, false) -> startauftrag.value = Startauftrag.FaelligeListe
         }
     }

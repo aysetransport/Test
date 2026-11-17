@@ -33,6 +33,7 @@ class SchadensfallRepository(
     private val nachAenderung: () -> Unit = {},
 ) {
     private val dao = db.dao()
+    private val verknuepfer = CrmVerknuepfer(db, uhr)
 
     fun beobachteFaelle(): Flow<List<Schadensfall>> = dao.beobachteAlle()
 
@@ -63,10 +64,9 @@ class SchadensfallRepository(
         val jahr = LocalDate.now(uhr).year
         val nummer = Fallnummer.naechste(jahr, dao.fallnummernMitPraefix(Fallnummer.praefix(jahr)))
         val id = dao.einfuegen(
-            entwurf.copy(id = 0, uuid = neueKennung(), fallnummer = nummer, erstelltAm = jetzt, geaendertAm = jetzt).bereinigt(),
+            verknuepfer.verknuepfe(entwurf.copy(id = 0, uuid = neueKennung(), fallnummer = nummer, erstelltAm = jetzt, geaendertAm = jetzt)).bereinigt(),
         )
         dao.einfuegen(VerlaufEintrag(fallId = id, zeitpunkt = jetzt, typ = VerlaufTyp.ANGELEGT, text = "Fall $nummer angelegt"))
-        merkeAuftraggeber(entwurf)
         id
     }.also { nachAenderung() }
 
@@ -77,9 +77,8 @@ class SchadensfallRepository(
     suspend fun speichern(geaendert: Schadensfall) = aenderung {
         val alt = dao.lade(geaendert.id) ?: return@aenderung
         val jetzt = uhr.instant()
-        val neu = geaendert.copy(uuid = alt.uuid, fallnummer = alt.fallnummer, erstelltAm = alt.erstelltAm, geaendertAm = jetzt).bereinigt()
+        val neu = verknuepfer.verknuepfe(geaendert.copy(uuid = alt.uuid, fallnummer = alt.fallnummer, erstelltAm = alt.erstelltAm, geaendertAm = jetzt)).bereinigt()
         dao.aktualisieren(neu)
-        merkeAuftraggeber(neu)
         if (alt.status != neu.status) {
             vermerke(neu.id, VerlaufTyp.STATUS, "Status: ${alt.status.label} → ${neu.status.label}")
         }
@@ -216,40 +215,6 @@ class SchadensfallRepository(
     // --- Auftraggeber-Liste ---
 
     fun beobachteAuftraggeber(): Flow<List<AuftraggeberEintrag>> = dao.beobachteAuftraggeber()
-
-    /** Legt einen Auftraggeber an oder ändert ihn. Bereits erfasste Fälle bleiben unverändert. */
-    suspend fun auftraggeberSpeichern(eintrag: AuftraggeberEintrag) = aenderung {
-        dao.speichereAuftraggeber(
-            eintrag.copy(
-                name = eintrag.name.trim(),
-                kontakt = eintrag.kontakt.trim(),
-                telefon = eintrag.telefon.trim(),
-                email = eintrag.email.trim(),
-                geaendertAm = uhr.instant(),
-                syncOffen = true,
-            ),
-        )
-    }
-
-    suspend fun auftraggeberLoeschen(eintrag: AuftraggeberEintrag) = aenderung {
-        dao.loescheAuftraggeber(eintrag.uuid)
-        dao.merkeLoeschung(Loeschung(eintrag.uuid, Loeschung.Art.AUFTRAGGEBER, "", uhr.instant()))
-    }
-
-    /** Ein bisher unbekannter Auftraggeber aus einem Fall kommt automatisch in die Liste. */
-    private suspend fun merkeAuftraggeber(fall: Schadensfall) {
-        val name = fall.auftraggeber.trim()
-        if (name.isEmpty() || dao.auftraggeberPerName(name) != null) return
-        dao.speichereAuftraggeber(
-            AuftraggeberEintrag(
-                name = name,
-                kontakt = fall.auftraggeberKontakt.trim(),
-                telefon = fall.auftraggeberTelefon.trim(),
-                email = fall.auftraggeberEmail.trim(),
-                geaendertAm = uhr.instant(),
-            ),
-        )
-    }
 
     /** Für Änderungen außerhalb des Repositorys (z. B. E-Mails): Abgleich mit der Cloud anstoßen. */
     fun angestossen() = nachAenderung()

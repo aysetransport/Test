@@ -60,6 +60,12 @@ object Fallliste {
             .thenBy { if (it.status.offen) it.wiedervorlageAm else null }
             .thenByDescending { it.geaendertAm }
 
+    /** Für die Volltextsuche im CRM: passt der Fall zum Suchtext (alle Wörter müssen vorkommen)? */
+    fun passtZuSuche(fall: Schadensfall, suchtext: String): Boolean {
+        val begriffe = suchtext.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        return begriffe.isNotEmpty() && fall.passtZu(begriffe)
+    }
+
     private fun Schadensfall.passtZu(begriffe: List<String>): Boolean {
         val heuhaufen = listOf(
             fallnummer, kundeName, kundeFirma, kundeTelefon, kundeEmail, kundenAktenzeichen,

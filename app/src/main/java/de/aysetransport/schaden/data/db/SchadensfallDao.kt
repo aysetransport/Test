@@ -182,6 +182,31 @@ interface SchadensfallDao {
     @Query("SELECT * FROM auftraggeber WHERE uuid = :uuid")
     suspend fun auftraggeberPerKennung(uuid: String): AuftraggeberEintrag?
 
+    @Query("SELECT * FROM auftraggeber WHERE uuid = :uuid")
+    fun beobachteFirma(uuid: String): Flow<AuftraggeberEintrag?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun speichereAuftraggeberListe(liste: List<AuftraggeberEintrag>)
+
+    @Query("DELETE FROM auftraggeber")
+    suspend fun loescheAlleAuftraggeber()
+
+    /** Fälle einer Firma – verknüpft oder (z. B. frisch aus der Web-App) nur mit gleichem Namen. */
+    @Query(
+        "SELECT * FROM schadensfall WHERE auftraggeberUuid = :firma OR " +
+            "((auftraggeberUuid IS NULL OR auftraggeberUuid = '') AND lower(trim(auftraggeber)) = lower(trim(:name)) AND trim(:name) != '') ORDER BY geaendertAm DESC",
+    )
+    fun beobachteFaelleDerFirma(firma: String, name: String): Flow<List<Schadensfall>>
+
+    @Query("SELECT * FROM schadensfall WHERE (auftraggeberUuid IS NULL OR auftraggeberUuid = '') AND trim(auftraggeber) != ''")
+    suspend fun faelleOhneFirma(): List<Schadensfall>
+
+    @Query("SELECT * FROM schadensfall WHERE auftraggeberUuid = :firma")
+    suspend fun faelleDerFirma(firma: String): List<Schadensfall>
+
+    @Query("UPDATE schadensfall SET auftraggeberUuid = NULL WHERE auftraggeberUuid = :firma")
+    suspend fun loeseFaelleVonFirma(firma: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun speichereAuftraggeber(eintrag: AuftraggeberEintrag)
 
@@ -204,6 +229,9 @@ interface SchadensfallDao {
 
     @Query("SELECT * FROM mail WHERE messageId = :messageId")
     suspend fun mailPerMessageId(messageId: String): MailNachricht?
+
+    @Query("SELECT * FROM mail WHERE id = :id")
+    suspend fun mailPerId(id: Long): MailNachricht?
 
     @Query("SELECT * FROM mail WHERE verlaufUuid = :uuid")
     suspend fun mailZuVerlauf(uuid: String): MailNachricht?

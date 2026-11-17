@@ -12,8 +12,7 @@ import jakarta.mail.internet.MimeMultipart
 import java.util.Properties
 
 /** Ein echter IMAP-/SMTP-Server im Test (GreenMail) mit dem Postfach der Firma. */
-class TestPostfach : AutoCloseable {
-    val adresse = "schaden@firma.example"
+class TestPostfach(val adresse: String = "schaden@firma.example") : AutoCloseable {
     val passwort = "geheim-123"
     val server = GreenMail(ServerSetup.dynamicPort(ServerSetupTest.SMTP_IMAP)).apply {
         start()

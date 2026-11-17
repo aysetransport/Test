@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import de.aysetransport.schaden.data.model.MailKontoArt
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -106,10 +107,18 @@ class KeystoreTresor : PasswortTresor {
 }
 
 private val Context.mailStore: DataStore<Preferences> by preferencesDataStore(name = "mail")
+private val Context.mailStoreAllgemein: DataStore<Preferences> by preferencesDataStore(name = "mail_allgemein")
 
+/**
+ * Zugang zu einem Postfach. Es gibt zwei: das bisherige für Schadensfälle ([MailKontoArt.SCHADEN])
+ * und eines für alles andere ([MailKontoArt.ALLGEMEIN]). Jedes hat eigene Adresse, Server und Passwort.
+ */
 class MailSpeicher(private val store: DataStore<Preferences>, private val tresor: PasswortTresor) {
 
-    constructor(context: Context) : this(context.applicationContext.mailStore, KeystoreTresor())
+    constructor(context: Context, art: MailKontoArt = MailKontoArt.SCHADEN) : this(
+        if (art == MailKontoArt.SCHADEN) context.applicationContext.mailStore else context.applicationContext.mailStoreAllgemein,
+        KeystoreTresor(),
+    )
 
     val zustand: Flow<MailZustand> = store.data.map { p ->
         val adresse = p[ADRESSE]

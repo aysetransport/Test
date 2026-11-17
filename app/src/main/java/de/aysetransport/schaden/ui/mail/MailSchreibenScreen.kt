@@ -55,7 +55,12 @@ import de.aysetransport.schaden.AppContainer
 import de.aysetransport.schaden.data.AnlagenSpeicher
 import de.aysetransport.schaden.data.DateiZuGrossException
 import de.aysetransport.schaden.data.EinstellungenSpeicher
+import de.aysetransport.schaden.data.CrmRepository
 import de.aysetransport.schaden.data.SchadensfallRepository
+import de.aysetransport.schaden.data.model.MailKontoArt
+import de.aysetransport.schaden.data.model.MailNachricht
+import de.aysetransport.schaden.mail.MailZuordnung
+import androidx.compose.material3.FilterChip
 import de.aysetransport.schaden.data.db.SchadensfallDao
 import de.aysetransport.schaden.data.model.Anlage
 import de.aysetransport.schaden.data.model.Schadensfall
@@ -89,6 +94,13 @@ class MailSchreibenViewModel(
     private val einstellungen: EinstellungenSpeicher,
     private val anlagenSpeicher: AnlagenSpeicher,
     private val postfach: MailPostfach,
+    /** Ohne Fall: Mail an diese Firma (Kontakthistorie). */
+    private val firmaUuid: String = "",
+    /** Vorausgefüllte Empfängeradresse (z. B. eines Ansprechpartners). */
+    private val anVorgabe: String = "",
+    /** Antwort auf eine Mail aus dem Postfach. */
+    private val antwortAufMail: Long = 0,
+    private val crm: CrmRepository? = null,
 ) : ViewModel() {
     var laedt by mutableStateOf(true); private set
     var an by mutableStateOf(""); private set
@@ -105,6 +117,12 @@ class MailSchreibenViewModel(
     var schritteVorauswahl by mutableStateOf<Set<String>>(emptySet()); private set
     var bccAuftraggeber by mutableStateOf(false); private set
     var laedtDateien by mutableStateOf(false); private set
+    /** Ohne Fall: Name der Firma für die Titelzeile. */
+    var firmenName by mutableStateOf(""); private set
+    /** Über welches Postfach gesendet wird; die Auswahl erscheint nur, wenn beide eingerichtet sind. */
+    var konto by mutableStateOf(MailKontoArt.SCHADEN); private set
+    var konten by mutableStateOf<List<Pair<MailKontoArt, String>>>(emptyList()); private set
+    private var zuordnung = MailZuordnung(fallId = fallId.takeIf { it > 0 })
     private var antwortAufId = ""
     private var ausgangsstand = Triple("", "", "")
 
@@ -116,7 +134,16 @@ class MailSchreibenViewModel(
 
     init {
         viewModelScope.launch {
-            val fall = repository.ladeFall(fallId) ?: return@launch
+            konten = postfach.eingerichteteKonten().map { it.first to it.second.adresse }
+            val antwortMail = antwortAufMail.takeIf { it > 0 }?.let { dao.mailPerId(it) }
+            val fallZiel = fallId.takeIf { it > 0 } ?: antwortMail?.fallId ?: 0L
+            konto = postfach.kontoFuer(antwortMail?.konto ?: if (fallZiel > 0) MailKontoArt.SCHADEN else MailKontoArt.ALLGEMEIN) ?: MailKontoArt.SCHADEN
+            if (fallZiel == 0L) {
+                ohneFall(antwortMail)
+                return@launch
+            }
+            zuordnung = MailZuordnung(fallId = fallZiel)
+            val fall = repository.ladeFall(fallZiel) ?: return@launch
             this@MailSchreibenViewModel.fall = fall
             fallnummer = fall.fallnummer
             val absender = einstellungen.aktuell().absender
@@ -125,7 +152,7 @@ class MailSchreibenViewModel(
             schritte = Bearbeitungsschritte.auswaehlbar(verlauf)
             schritteVorauswahl = Bearbeitungsschritte.vorauswahl(fall, verlauf)
             var empfaengerArt = Empfaenger.GESCHAEDIGTER
-            val antwort = antwortAufVerlauf.takeIf { it.isNotEmpty() }?.let { dao.mailZuVerlauf(it) }
+            val antwort = antwortMail ?: antwortAufVerlauf.takeIf { it.isNotEmpty() }?.let { dao.mailZuVerlauf(it) }
             when {
                 antwort != null -> {
                     antwortAufId = antwort.messageId
@@ -161,6 +188,32 @@ class MailSchreibenViewModel(
             laedt = false
         }
     }
+
+    /** Mail an eine Firma, einen Ansprechpartner oder als Antwort auf eine Mail ohne Fall. */
+    private suspend fun ohneFall(antwort: MailNachricht?) {
+        val absender = einstellungen.aktuell().absender
+        val firmaId = firmaUuid.ifEmpty { antwort?.auftraggeberUuid.orEmpty() }
+        val firma = firmaId.takeIf { it.isNotEmpty() }?.let { crm?.ladeFirma(it) }
+        firmenName = firma?.name.orEmpty()
+        zuordnung = MailZuordnung(auftraggeberUuid = firma?.uuid, kundeRef = antwort?.kundeRef.orEmpty())
+        val kontakte = firma?.let { crm?.ladeKontakte(it.uuid) }.orEmpty()
+        if (antwort != null) {
+            antwortAufId = antwort.messageId
+            an = if (antwort.eingehend) antwort.von else antwort.an
+            betreff = if (antwort.betreff.startsWith("Re:", ignoreCase = true) || antwort.betreff.startsWith("AW:", ignoreCase = true)) antwort.betreff else "Re: ${antwort.betreff}"
+            val name = kontakte.firstOrNull { it.email.equals(an, ignoreCase = true) }?.name.orEmpty()
+            text = Textvorlagen.freieNachricht(name, absender) + "\n\nAm ${Datum.formatMitUhrzeit(antwort.zeitpunkt)} schrieb ${antwort.von}:\n" +
+                antwort.text.lines().joinToString("\n") { "> $it" }
+        } else {
+            an = anVorgabe.ifEmpty { firma?.email.orEmpty() }
+            val name = kontakte.firstOrNull { an.isNotBlank() && it.email.equals(an, ignoreCase = true) }?.name.orEmpty()
+            text = Textvorlagen.freieNachricht(name, absender)
+        }
+        ausgangsstand = Triple(an, betreff, text)
+        laedt = false
+    }
+
+    fun setzeKonto(wert: MailKontoArt) { konto = wert }
 
     fun setzeAn(wert: String) { an = wert; fehler = null }
     fun setzeBetreff(wert: String) { betreff = wert }
@@ -216,7 +269,7 @@ class MailSchreibenViewModel(
                     auswahl.map { MailAnhang(it.anzeigename, it.mimeType, anlagenSpeicher.datei(it).readBytes()) }
                 }
                 val bcc = auftraggeberFuerBcc?.takeIf { bccAuftraggeber }.orEmpty()
-                postfach.senden(fallId, MailEntwurf(adressen.joinToString(", "), betreff, text, antwortAufId, anhaenge, bcc))
+                postfach.senden(MailEntwurf(adressen.joinToString(", "), betreff, text, antwortAufId, anhaenge, bcc), zuordnung, konto)
                 ausgangsstand = Triple(an, betreff, text)
                 danach()
             } catch (e: IOException) {
@@ -228,11 +281,15 @@ class MailSchreibenViewModel(
     }
 
     companion object {
-        fun factory(container: AppContainer, fallId: Long, vorlage: String, empfaenger: String, antwortAuf: String) = viewModelFactory {
+        fun factory(
+            container: AppContainer, fallId: Long, vorlage: String, empfaenger: String, antwortAuf: String,
+            firma: String = "", an: String = "", antwortAufMail: Long = 0,
+        ) = viewModelFactory {
             initializer {
                 MailSchreibenViewModel(
                     fallId, vorlage, empfaenger, antwortAuf, container.repository, container.datenbank.dao(),
                     container.einstellungen, container.anlagenSpeicher, container.postfach,
+                    firmaUuid = firma, anVorgabe = an, antwortAufMail = antwortAufMail, crm = container.crm,
                 )
             }
         }
@@ -250,7 +307,15 @@ fun MailSchreibenScreen(viewModel: MailSchreibenViewModel, onSchliessen: () -> U
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (viewModel.fallnummer.isEmpty()) "E-Mail" else "E-Mail · Fall ${viewModel.fallnummer}") },
+                title = {
+                    Text(
+                        when {
+                            viewModel.fallnummer.isNotEmpty() -> "E-Mail · Fall ${viewModel.fallnummer}"
+                            viewModel.firmenName.isNotEmpty() -> "E-Mail · ${viewModel.firmenName}"
+                            else -> "E-Mail"
+                        },
+                    )
+                },
                 navigationIcon = { IconButton(onClick = schliessen) { Icon(Icons.Filled.Close, contentDescription = "Schließen") } },
                 actions = {
                     IconButton(onClick = { viewModel.senden(onGesendet) }, enabled = !viewModel.laedt && !viewModel.sendet) {
@@ -270,6 +335,19 @@ fun MailSchreibenScreen(viewModel: MailSchreibenViewModel, onSchliessen: () -> U
         ) {
             if (viewModel.sendet) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             viewModel.fehler?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            if (viewModel.konten.size > 1) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Von:", style = MaterialTheme.typography.bodyMedium)
+                    viewModel.konten.forEach { (art, adresse) ->
+                        FilterChip(
+                            selected = viewModel.konto == art, onClick = { viewModel.setzeKonto(art) },
+                            label = { Text(adresse, maxLines = 1) }, modifier = Modifier.testTag("mail-konto-${art.name}"),
+                        )
+                    }
+                }
+            } else {
+                viewModel.konten.firstOrNull()?.let { Text("Von: ${it.second}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
             OutlinedTextField(
                 value = viewModel.an, onValueChange = viewModel::setzeAn, label = { Text("An") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -277,7 +355,7 @@ fun MailSchreibenScreen(viewModel: MailSchreibenViewModel, onSchliessen: () -> U
             )
             OutlinedTextField(
                 value = viewModel.betreff, onValueChange = viewModel::setzeBetreff, label = { Text("Betreff") },
-                supportingText = { Text("Die Fallnummer im Betreff ordnet Antworten automatisch diesem Fall zu.") },
+                supportingText = { if (viewModel.fallnummer.isNotEmpty()) Text("Die Fallnummer im Betreff ordnet Antworten automatisch diesem Fall zu.") },
                 modifier = Modifier.fillMaxWidth().testTag("mail-betreff"),
             )
             OutlinedTextField(
@@ -303,6 +381,7 @@ fun MailSchreibenScreen(viewModel: MailSchreibenViewModel, onSchliessen: () -> U
                     }
                 }
             }
+            if (viewModel.fallnummer.isNotEmpty()) {
             Text("Anhänge", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             viewModel.anlagen.forEach { a ->
                 Row(
@@ -322,6 +401,7 @@ fun MailSchreibenScreen(viewModel: MailSchreibenViewModel, onSchliessen: () -> U
                 "Neue Dateien werden auch beim Fall abgelegt.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            }
         }
     }
     if (schritteWaehlen) {

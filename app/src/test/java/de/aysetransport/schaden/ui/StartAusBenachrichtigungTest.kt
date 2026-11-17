@@ -50,7 +50,7 @@ class StartAusBenachrichtigungTest {
     }
 
     @Test
-    fun `Sammelerinnerung oeffnet die Liste der faelligen Faelle`() {
+    fun `Sammelerinnerung oeffnet die Wiedervorlagen`() {
         runBlocking {
             app.container.repository.anlegen(Schadensfall(kundeName = "Fällig Eins", wiedervorlageAm = heute))
             app.container.repository.anlegen(Schadensfall(kundeName = "Fällig Zwei", wiedervorlageAm = heute.minusDays(2)))
@@ -60,8 +60,10 @@ class StartAusBenachrichtigungTest {
         val intent = Intent(app, MainActivity::class.java).putExtra(Benachrichtigungen.EXTRA_ZEIGE_FAELLIGE, true)
         ActivityScenario.launch<MainActivity>(intent).use {
             warteAufText("Fällig Eins")
-            rule.onNodeWithText("Fällig Zwei").assertIsDisplayed()
-            rule.waitUntil(10_000) { rule.onAllNodesWithText("Noch Zeit").fetchSemanticsNodes().isEmpty() }
+            rule.onNodeWithText("Überfällig (1)").assertIsDisplayed()
+            rule.onNodeWithText("Heute (1)").assertIsDisplayed()
+            rule.onNodeWithText("Fällig Zwei", substring = true).assertIsDisplayed()
+            rule.onNodeWithText("Demnächst (1)").assertExists()
         }
     }
 }

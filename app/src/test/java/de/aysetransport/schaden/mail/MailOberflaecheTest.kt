@@ -28,6 +28,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.onAllNodesWithTag
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -42,6 +44,13 @@ class MailOberflaecheTest {
 
     @get:Rule
     val rule = createAndroidComposeRule<MainActivity>()
+
+    /** Die App startet bei den Firmen – diese Tests arbeiten in der Fallliste. */
+    @Before
+    fun zuDenFaellenWechseln() {
+        rule.waitUntil(10_000) { rule.onAllNodesWithTag("nav-faelle").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("nav-faelle").performClick()
+    }
 
     private val app: SchadensfallApp get() = ApplicationProvider.getApplicationContext()
     private lateinit var server: TestPostfach
@@ -89,6 +98,7 @@ class MailOberflaecheTest {
         rule.onNodeWithTag("vorlage-ERINNERUNG").performScrollTo().performClick()
 
         warteAufText("E-Mail · Fall $jahr-001")
+        warteAufText("anna@kunde.example")
         rule.onNodeWithText("anna@kunde.example").assertExists()
         rule.onNodeWithText("Ihre Schadensmeldung vom 03.11.$jahr – Erinnerung [Fall $jahr-001]").assertExists()
         foto("14_mail_schreiben")
@@ -111,6 +121,7 @@ class MailOberflaecheTest {
         foto("15_mail_verlauf")
         rule.onNodeWithText("Antworten").performClick()
         warteAufText("E-Mail · Fall $jahr-001")
+        warteAufText("anna@kunde.example")
         rule.onNodeWithText("anna@kunde.example").assertExists()
         rule.onNodeWithTag("mail-text").performTextClearance()
         rule.onNodeWithTag("mail-text").performTextInput("Danke, wir warten darauf.")
@@ -155,6 +166,7 @@ class MailOberflaecheTest {
         warteAufText("Fall $jahr-001")
 
         // An die Kundin, mit dem Auftraggeber in BCC
+        rule.onNodeWithTag("falldetails").performScrollToIndex(0)
         rule.onNode(hasText("E-Mail") and hasClickAction()).performClick()
         warteAufText("E-Mail schreiben")
         rule.onNodeWithTag("vorlage-ZWISCHENBESCHEID").performScrollTo().performClick()

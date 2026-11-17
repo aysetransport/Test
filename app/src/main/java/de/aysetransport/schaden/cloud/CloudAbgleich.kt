@@ -13,8 +13,19 @@ import de.aysetransport.schaden.data.model.Schadensart
 import de.aysetransport.schaden.data.model.Schadensfall
 import de.aysetransport.schaden.data.model.VerlaufEintrag
 import de.aysetransport.schaden.data.model.VerlaufTyp
+import de.aysetransport.schaden.data.CrmVerknuepfer
+import de.aysetransport.schaden.data.model.Adresse
+import de.aysetransport.schaden.data.model.Aktivitaet
+import de.aysetransport.schaden.data.model.Aufgabe
+import de.aysetransport.schaden.data.model.CrmEintrag
+import de.aysetransport.schaden.data.model.Dokument
+import de.aysetransport.schaden.data.model.FirmenStatus
+import de.aysetransport.schaden.data.model.Kontaktperson
+import de.aysetransport.schaden.data.model.Preis
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -51,7 +62,33 @@ class CloudAbgleich(
     private val apiFuer: (String) -> CloudApi = ::CloudApi,
 ) {
     private val dao = db.dao()
+    private val crm = db.crm()
     private val sperre = Mutex()
+
+    /** Eine CRM-Tabelle (Adressen, Ansprechpartner …) – alle werden gleich abgeglichen. */
+    private class CrmTabelle<T : CrmEintrag>(
+        val name: String,
+        val art: Loeschung.Art,
+        val serializer: KSerializer<T>,
+        val offene: suspend () -> List<T>,
+        val perKennung: suspend (String) -> T?,
+        val speichere: suspend (T) -> Unit,
+        val loesche: suspend (String) -> Unit,
+        val istSynchron: suspend (String, Long) -> Unit,
+        val alleOffen: suspend () -> Unit,
+        val vonFirma: suspend (String) -> List<T>,
+    )
+
+    private val crmTabellen: List<CrmTabelle<out CrmEintrag>> = listOf(
+        CrmTabelle("adressen", Loeschung.Art.ADRESSE, Adresse.serializer(), crm::offeneAdressen, crm::adressePerKennung, crm::speichere, crm::loescheAdresse, crm::adresseIstSynchron, crm::alleAdressenOffen, crm::ladeAdressen),
+        CrmTabelle("ansprechpartner", Loeschung.Art.ANSPRECHPARTNER, Kontaktperson.serializer(), crm::offeneKontaktpersonen, crm::kontaktpersonPerKennung, crm::speichere, crm::loescheKontaktperson, crm::kontaktpersonIstSynchron, crm::alleKontaktpersonenOffen, crm::ladeKontaktpersonen),
+        CrmTabelle("preise", Loeschung.Art.PREIS, Preis.serializer(), crm::offenePreise, crm::preisPerKennung, crm::speichere, crm::loeschePreis, crm::preisIstSynchron, crm::allePreiseOffen, crm::ladePreise),
+        CrmTabelle("aktivitaeten", Loeschung.Art.AKTIVITAET, Aktivitaet.serializer(), crm::offeneAktivitaeten, crm::aktivitaetPerKennung, crm::speichere, crm::loescheAktivitaet, crm::aktivitaetIstSynchron, crm::alleAktivitaetenOffen, crm::ladeAktivitaeten),
+        CrmTabelle("aufgaben", Loeschung.Art.AUFGABE, Aufgabe.serializer(), crm::offeneAufgaben, crm::aufgabePerKennung, crm::speichere, crm::loescheAufgabe, crm::aufgabeIstSynchron, crm::alleAufgabenOffen, crm::ladeAufgaben),
+        CrmTabelle("dokumente", Loeschung.Art.DOKUMENT, Dokument.serializer(), crm::offeneDokumente, crm::dokumentPerKennung, crm::speichere, crm::loescheDokument, crm::dokumentIstSynchron, crm::alleDokumenteOffen, crm::ladeDokumente),
+    )
+
+    private val crmJson = Json { encodeDefaults = true; explicitNulls = true; ignoreUnknownKeys = true; coerceInputValues = true }
 
     /** Prüft eine Adresse und meldet, ob dort schon eine PIN festgelegt ist. */
     suspend fun pruefeAdresse(url: String): Boolean {
@@ -124,6 +161,7 @@ class CloudAbgleich(
         val anlagen = dao.offeneAnlagen()
         val auftraggeber = dao.offeneAuftraggeber()
         val loeschungen = dao.loeschungen()
+        val crmOffen: Map<String, List<CrmEintrag>> = crmTabellen.associate { it.name to it.offene() }
         val fallKennung = (faelle.map { it.id to it.uuid } + dao.ladeAlle().map { it.id to it.uuid }).toMap()
 
         val anfrage = buildJsonObject {
@@ -137,6 +175,10 @@ class CloudAbgleich(
                 loeschungen.filter { it.art == Loeschung.Art.AUFTRAGGEBER }.map { geloescht(it.uuid, it.uuid, it.zeitpunkt) }))
             put("anlagen", JsonArray(anlagen.mapNotNull { a -> fallKennung[a.fallId]?.let { a.alsJson(it) } } +
                 loeschungen.filter { it.art == Loeschung.Art.ANLAGE }.map { geloescht(it.uuid, it.fallUuid, it.zeitpunkt) }))
+            for (t in crmTabellen) {
+                put(t.name, JsonArray(crmOffen.getValue(t.name).map { crmAlsJson(t, it) } +
+                    loeschungen.filter { it.art == t.art }.map { geloeschtCrm(it.uuid, it.fallUuid, it.zeitpunkt) }))
+            }
         }
         val antwort = api.aufruf("sync", JsonPrimitive(z.pin), anfrage).jsonObject
         val kennung = antwort.text("kennung")
@@ -152,30 +194,37 @@ class CloudAbgleich(
             if (verlauf.isNotEmpty()) dao.verlaufIstSynchron(verlauf.map { it.uuid })
             if (anlagen.isNotEmpty()) dao.anlagenSindSynchron(anlagen.map { it.uuid })
             if (loeschungen.isNotEmpty()) dao.vergissLoeschungen(loeschungen.map { it.uuid })
+            for (t in crmTabellen) crmOffen.getValue(t.name).forEach { t.istSynchron(it.uuid, it.geaendertAm.toEpochMilli()) }
 
             // Fälle zuerst: Verlauf und Anlagen verweisen auf sie.
             for (f in antwort.liste("faelle")) if (uebernimmFall(f, zuLoeschendeOrdner)) empfangen++
             for (v in antwort.liste("verlauf")) if (uebernimmVerlauf(v)) empfangen++
             for (a in antwort.liste("anlagen")) if (uebernimmAnlage(a, zuLoeschendeDateien)) empfangen++
             for (a in antwort.liste("auftraggeber")) if (uebernimmAuftraggeber(a)) empfangen++
+            for (t in crmTabellen) for (e in antwort.liste(t.name)) if (uebernimmCrm(t, e)) empfangen++
+            // Fälle aus der Web-App kennen ihre Firma nur beim Namen; gleichnamige Firmen von zwei Geräten zusammenführen.
+            CrmVerknuepfer(db, uhr).run { doppelteFirmenZusammenfuehren(); verknuepfeAlle() }
         }
         zuLoeschendeOrdner.forEach { anlagenSpeicher.loescheOrdner(it) }
         zuLoeschendeDateien.forEach { anlagenSpeicher.loesche(it) }
 
         if (z.kennung.isNotEmpty() && kennung != z.kennung) {
             // Der Bestand in der Cloud wurde neu angelegt: alles von diesem Gerät erneut hochladen.
-            db.withTransaction { dao.alleFaelleOffen(); dao.allerVerlaufOffen(); dao.alleAnlagenOffen(); dao.alleAuftraggeberOffen() }
+            db.withTransaction {
+                dao.alleFaelleOffen(); dao.allerVerlaufOffen(); dao.alleAnlagenOffen(); dao.alleAuftraggeberOffen()
+                crmTabellen.forEach { it.alleOffen() }
+            }
             speicher.abgeglichen(kennung, 0, uhr.millis())
-            return Durchlauf(faelle.size + verlauf.size + anlagen.size + auftraggeber.size, empfangen, nochmal = true)
+            return Durchlauf(faelle.size + verlauf.size + anlagen.size + auftraggeber.size + crmOffen.values.sumOf { it.size }, empfangen, nochmal = true)
         }
         speicher.abgeglichen(kennung, rev, uhr.millis())
 
         dateienHochladen(api, z.pin)
         empfangen += dateienHerunterladen(api, z.pin)
 
-        val gesendet = faelle.size + verlauf.size + anlagen.size + auftraggeber.size + loeschungen.size
+        val gesendet = faelle.size + verlauf.size + anlagen.size + auftraggeber.size + loeschungen.size + crmOffen.values.sumOf { it.size }
         val nochOffen = dao.offeneFaelle().isNotEmpty() || dao.offenerVerlauf().isNotEmpty() || dao.offeneAuftraggeber().isNotEmpty() ||
-            dao.offeneAnlagen().isNotEmpty() || dao.loeschungen().isNotEmpty()
+            dao.offeneAnlagen().isNotEmpty() || dao.loeschungen().isNotEmpty() || crmTabellen.any { it.offene().isNotEmpty() }
         return Durchlauf(gesendet, empfangen, nochmal = nochOffen && gesendet > 0)
     }
 
@@ -203,6 +252,7 @@ class CloudAbgleich(
             kundeAnschrift = json.text("kundeAnschrift"),
             kundenAktenzeichen = json.text("kundenAktenzeichen"),
             auftraggeber = json.text("auftraggeber"),
+            auftraggeberUuid = json.text("auftraggeberUuid").ifEmpty { null },
             auftraggeberKontakt = json.text("auftraggeberKontakt"),
             auftraggeberTelefon = json.text("auftraggeberTelefon"),
             auftraggeberEmail = json.text("auftraggeberEmail"),
@@ -292,6 +342,10 @@ class CloudAbgleich(
         val lokal = dao.auftraggeberPerKennung(uuid)
         if (json.wahr("geloescht")) {
             if (lokal == null) return false
+            // Die Cloud hat alles, was an der Firma hängt, mitgelöscht.
+            for (t in crmTabellen) t.vonFirma(uuid).forEach { t.loesche(it.uuid) }
+            crm.loeseMailsVonFirma(uuid)
+            dao.loeseFaelleVonFirma(uuid)
             dao.loescheAuftraggeber(uuid)
             return true
         }
@@ -299,9 +353,12 @@ class CloudAbgleich(
         val eintrag = AuftraggeberEintrag(
             uuid = uuid,
             name = json.text("name"),
-            kontakt = json.text("kontakt"),
+            rechtsform = json.text("rechtsform"),
+            status = aufzaehlung(json.text("status"), FirmenStatus.AKTIV),
             telefon = json.text("telefon"),
             email = json.text("email"),
+            website = json.text("website"),
+            notizen = json.text("notizen"),
             geaendertAm = json.zeitpunkt("geaendertAm"),
             syncOffen = false,
         )
@@ -355,6 +412,7 @@ class CloudAbgleich(
         put("kundeAnschrift", kundeAnschrift)
         put("kundenAktenzeichen", kundenAktenzeichen)
         put("auftraggeber", auftraggeber)
+        put("auftraggeberUuid", auftraggeberUuid.orEmpty())
         put("auftraggeberKontakt", auftraggeberKontakt)
         put("auftraggeberTelefon", auftraggeberTelefon)
         put("auftraggeberEmail", auftraggeberEmail)
@@ -385,10 +443,53 @@ class CloudAbgleich(
     private fun AuftraggeberEintrag.alsJson() = buildJsonObject {
         put("id", uuid)
         put("name", name)
-        put("kontakt", kontakt)
+        put("rechtsform", rechtsform)
+        put("status", status.name)
         put("telefon", telefon)
         put("email", email)
+        put("website", website)
+        put("notizen", notizen)
         put("geaendertAm", geaendertAm.toString())
+    }
+
+    /** Wie bei Firmen: die spätere Änderung gewinnt, Gelöschtes bleibt gelöscht. */
+    private suspend fun <T : CrmEintrag> uebernimmCrm(t: CrmTabelle<T>, json: JsonObject): Boolean {
+        val uuid = json.text("id")
+        val lokal = t.perKennung(uuid)
+        if (json.wahr("geloescht")) {
+            if (lokal == null) return false
+            t.loesche(uuid)
+            return true
+        }
+        if (lokal != null && lokal.syncOffen) return false
+        val felder = json.toMutableMap()
+        felder.remove("id"); felder.remove("firmaId"); felder.remove("rev"); felder.remove("geloescht")
+        felder["uuid"] = JsonPrimitive(uuid)
+        felder["auftraggeberUuid"] = JsonPrimitive(json.text("firmaId"))
+        felder["syncOffen"] = JsonPrimitive(false)
+        felder["geaendertAm"] = JsonPrimitive(json.zeitpunkt("geaendertAm").toString())
+        val eintrag = try {
+            crmJson.decodeFromJsonElement(t.serializer, JsonObject(felder))
+        } catch (e: RuntimeException) {
+            return false // unvollständiger oder unlesbarer Eintrag – überspringen
+        }
+        if (eintrag == lokal) return false
+        t.speichere(eintrag)
+        return true
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun crmAlsJson(t: CrmTabelle<out CrmEintrag>, e: CrmEintrag): JsonObject {
+        val roh = crmJson.encodeToJsonElement(t.serializer as KSerializer<CrmEintrag>, e).jsonObject.toMutableMap()
+        roh.remove("uuid"); roh.remove("auftraggeberUuid"); roh.remove("syncOffen")
+        return JsonObject(mapOf("id" to JsonPrimitive(e.uuid), "firmaId" to JsonPrimitive(e.auftraggeberUuid)) + roh)
+    }
+
+    private fun geloeschtCrm(uuid: String, firma: String, zeitpunkt: Instant) = buildJsonObject {
+        put("id", uuid)
+        put("firmaId", firma)
+        put("geloescht", true)
+        put("geaendertAm", zeitpunkt.toString())
     }
 
     private fun VerlaufEintrag.alsJson(fallUuid: String) = buildJsonObject {
@@ -434,7 +535,7 @@ class CloudAbgleich(
 
     companion object {
         private const val MAX_DURCHLAEUFE = 3
-        const val MIN_API = 3L
+        const val MIN_API = 4L
         const val VERALTET = "Das Cloud-Skript ist veraltet – bitte die neue Code.gs bereitstellen."
     }
 }

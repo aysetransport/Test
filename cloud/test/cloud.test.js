@@ -245,9 +245,9 @@ test('Auftraggeber: Kontaktdaten am Fall und eigene Liste mit denselben Abgleich
   const u = eingerichtet();
   const AG = 'cccccccc-0000-4000-8000-000000000001';
   const r = u.sync({ seit: 0, faelle: [fall(A, { auftraggeber: 'Möbelhaus', auftraggeberKontakt: 'Frau Kaya', auftraggeberTelefon: '02191 1', auftraggeberEmail: 'dispo@x.example' })],
-    auftraggeber: [{ id: AG, name: 'Möbelhaus', kontakt: 'Frau Kaya', email: 'dispo@x.example', geaendertAm: '2026-11-10T08:00:00Z', fremd: 1 }] });
+    auftraggeber: [{ id: AG, name: 'Möbelhaus', rechtsform: 'GmbH', status: 'INTERESSENT', email: 'dispo@x.example', website: 'moebel.example', geaendertAm: '2026-11-10T08:00:00Z', fremd: 1 }] });
   assert.deepEqual([r.faelle[0].auftraggeberKontakt, r.faelle[0].auftraggeberTelefon, r.faelle[0].auftraggeberEmail], ['Frau Kaya', '02191 1', 'dispo@x.example']);
-  assert.deepEqual(r.auftraggeber.map(e => [e.name, e.kontakt, e.telefon, e.fremd]), [['Möbelhaus', 'Frau Kaya', '', undefined]]);
+  assert.deepEqual(r.auftraggeber.map(e => [e.name, e.rechtsform, e.status, e.telefon, e.website, e.fremd]), [['Möbelhaus', 'GmbH', 'INTERESSENT', '', 'moebel.example', undefined]]);
 
   const aelter = u.sync({ seit: r.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Alt', geaendertAm: '2026-11-09T08:00:00Z' }] });
   assert.equal(aelter.auftraggeber[0].name, 'Möbelhaus', 'der neuere Stand gewinnt und geht an das Gerät zurück');
@@ -255,5 +255,56 @@ test('Auftraggeber: Kontaktdaten am Fall und eigene Liste mit denselben Abgleich
   assert.deepEqual(weg.auftraggeber.map(e => [e.geloescht, e.name]), [[true, undefined]]);
   const spaeter = u.sync({ seit: weg.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Wieder da?', geaendertAm: '2026-11-12T08:00:00Z' }] });
   assert.equal(spaeter.auftraggeber[0].geloescht, true, 'gelöscht bleibt gelöscht');
-  assert.equal(u.aufruf('status').api, 3);
+  assert.equal(u.aufruf('status').api, 4);
+});
+
+test('CRM: Ansprechpartner, Preise usw. gleichen sich ab und verschwinden mit ihrer Firma', () => {
+  const u = eingerichtet();
+  const F = 'dddddddd-0000-4000-8000-000000000001';
+  const K = 'dddddddd-0000-4000-8000-000000000002';
+  const P = 'dddddddd-0000-4000-8000-000000000003';
+  const W = 'dddddddd-0000-4000-8000-000000000004';
+  const AK = 'dddddddd-0000-4000-8000-000000000005';
+  const t = '2026-11-10T08:00:00Z';
+  const r = u.sync({ seit: 0,
+    faelle: [fall(A, { auftraggeber: 'Seats and Sofas', auftraggeberUuid: F })],
+    auftraggeber: [{ id: F, name: 'Seats and Sofas', status: 'AKTIV', geaendertAm: t }],
+    ansprechpartner: [{ id: K, firmaId: F, name: 'Jana Krüger', thema: 'Disposition', email: 'jana@seats.example', geaendertAm: t, boese: '<script>' }],
+    preise: [{ id: P, firmaId: F, bezeichnung: 'Tourpauschale', betragCent: 18950, einheit: 'pro Tour', gueltigAb: '2026-01-01', geaendertAm: t }],
+    aufgaben: [{ id: W, firmaId: F, faelligAm: '2026-11-20', text: 'Preise nachverhandeln', erledigt: false, geaendertAm: t }],
+    aktivitaeten: [{ id: AK, firmaId: F, datum: 'kaputt', art: 'ANRUF', text: 'Telefonat', geaendertAm: t }] });
+  assert.equal(r.faelle[0].auftraggeberUuid, F);
+  assert.deepEqual(r.ansprechpartner.map(k => [k.name, k.thema, k.firmaId, k.boese]), [['Jana Krüger', 'Disposition', F, undefined]]);
+  assert.deepEqual(r.preise.map(p => [p.betragCent, p.gueltigAb, p.einheit]), [[18950, '2026-01-01', 'pro Tour']]);
+  assert.equal(r.aufgaben[0].erledigt, false);
+  assert.equal(r.aktivitaeten[0].datum, '2026-11-10', 'ein Kontakt bekommt immer ein Datum');
+  assert.deepEqual([r.adressen, r.dokumente], [[], []]);
+
+  // Ein zweites Gerät hakt die Wiedervorlage ab – die spätere Änderung gewinnt.
+  const erledigt = u.sync({ seit: r.rev, kennung: r.kennung, aufgaben: [{ id: W, firmaId: F, faelligAm: '2026-11-20', text: 'Preise nachverhandeln', erledigt: true, geaendertAm: '2026-11-11T08:00:00Z' }] });
+  assert.equal(erledigt.aufgaben[0].erledigt, true);
+  const aelter = u.sync({ seit: erledigt.rev, kennung: r.kennung, aufgaben: [{ id: W, firmaId: F, text: 'alt', erledigt: false, geaendertAm: '2026-11-09T08:00:00Z' }] });
+  assert.equal(aelter.aufgaben[0].erledigt, true, 'der neuere Stand geht an das Gerät zurück');
+
+  // Firma löschen: alles, was an ihr hängt, ist mit weg – auch was ein Gerät später noch schickt.
+  const weg = u.sync({ seit: aelter.rev, kennung: r.kennung, auftraggeber: [{ id: F, geloescht: true, geaendertAm: '2026-11-12T08:00:00Z' }] });
+  assert.deepEqual(weg.ansprechpartner.map(k => [k.id, k.geloescht]), [[K, true]]);
+  assert.deepEqual(weg.preise.map(p => p.geloescht), [true]);
+  const nachzuegler = u.sync({ seit: weg.rev, kennung: r.kennung, dokumente: [{ id: N1, firmaId: F, titel: 'Vertrag', geaendertAm: '2026-11-13T08:00:00Z' }] });
+  assert.equal(nachzuegler.dokumente[0].geloescht, true);
+  assert.equal(u.sync({ seit: 0 }).faelle[0].auftraggeber, 'Seats and Sofas', 'der Fall bleibt erhalten');
+});
+
+test('CRM: Zusammenführen zweier Firmen – umgehängte Einträge überleben die Löschung der zweiten', () => {
+  const u = eingerichtet();
+  const F1 = 'eeeeeeee-0000-4000-8000-000000000001';
+  const F2 = 'eeeeeeee-0000-4000-8000-000000000002';
+  const K = 'eeeeeeee-0000-4000-8000-000000000003';
+  const t = '2026-11-10T08:00:00Z', spaeter = '2026-11-10T09:00:00Z';
+  const r = u.sync({ seit: 0, auftraggeber: [{ id: F1, name: 'Media Markt', geaendertAm: t }, { id: F2, name: 'media markt', geaendertAm: t }],
+    ansprechpartner: [{ id: K, firmaId: F2, name: 'Herr Ott', geaendertAm: t }] });
+  const z = u.sync({ seit: r.rev, kennung: r.kennung, auftraggeber: [{ id: F2, geloescht: true, geaendertAm: spaeter }],
+    ansprechpartner: [{ id: K, firmaId: F1, name: 'Herr Ott', geaendertAm: spaeter }] });
+  assert.deepEqual(z.ansprechpartner.map(k => [k.firmaId, k.geloescht]), [[F1, undefined]]);
+  assert.equal(z.auftraggeber.find(f => f.id === F2).geloescht, true);
 });
