@@ -633,8 +633,12 @@ async function abgleich() {
   SYNC.laeuft = true; SYNC.nochmal = false; zeichneSync();
   try {
     // Ein veraltetes Cloud-Skript würde unbekannte Felder verwerfen – dann lieber gar nicht abgleichen.
-    const st = await api('status');
-    if (!(st.api >= CLOUD_API)) throw new Error(VERALTET);
+    // Jeder Aufruf beim Cloud-Skript kostet Sekunden – die Version genügt einmal pro Stunde.
+    if (!(SYNC.versionOk && SYNC.versionOk.url === apiUrl() && Date.now() - SYNC.versionOk.zeit < 3600000)) {
+      const st = await api('status');
+      if (!(st.api >= CLOUD_API)) { SYNC.versionOk = null; throw new Error(VERALTET); }
+      SYNC.versionOk = { url: apiUrl(), zeit: Date.now() };
+    }
     const gesendet = Object.fromEntries(TABELLEN.map(t => [t, offene(t)]));
     const marken = new Map(Object.values(gesendet).flat().map(d => [d.id, d._n]));
     const r = await api('sync', PIN, { seit: S.seit, kennung: S.kennung, ...Object.fromEntries(TABELLEN.map(t => [t, gesendet[t].map(ohneLokales)])) });

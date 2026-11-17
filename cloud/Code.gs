@@ -517,9 +517,35 @@ function unterordner_(name) {
   return treffer.hasNext() ? treffer.next() : ordner_().createFolder(name);
 }
 
+/**
+ * daten.json – über die gemerkte Datei-ID (schnell); nur wenn sie fehlt, per Suche im Ordner
+ * (die Suche in Google Drive dauert spürbar länger).
+ */
 function datenDatei_() {
-  var treffer = ordner_().getFilesByName(DATEN_DATEI);
-  return treffer.hasNext() ? treffer.next() : null;
+  var props = PropertiesService.getScriptProperties();
+  var ordner = ordner_();
+  // gemerkt als „Ordner-ID|Datei-ID“: Wurde der Ordner gelöscht und neu angelegt, gilt die Datei nicht mehr.
+  var gemerkt = String(props.getProperty('DATEN_ID') || '').split('|');
+  if (gemerkt[0] === ordner.getId() && gemerkt[1]) {
+    try {
+      var datei = DriveApp.getFileById(gemerkt[1]);
+      if (!datei.isTrashed()) return datei;
+    } catch (fehler) { /* Datei gelöscht – neu suchen */ }
+  }
+  props.deleteProperty('DATEN_ID');
+  var treffer = ordner.getFilesByName(DATEN_DATEI);
+  if (!treffer.hasNext()) return null;
+  var gefunden = treffer.next();
+  props.setProperty('DATEN_ID', ordner.getId() + '|' + gefunden.getId());
+  return gefunden;
+}
+
+/** Legt daten.json an und merkt sich die ID. */
+function neueDatenDatei_(text) {
+  var ordner = ordner_();
+  var datei = ordner.createFile(DATEN_DATEI, text, 'application/json');
+  PropertiesService.getScriptProperties().setProperty('DATEN_ID', ordner.getId() + '|' + datei.getId());
+  return datei;
 }
 
 function ladeDaten_() {
@@ -541,7 +567,7 @@ function ladeDaten_() {
     if (datenDatei_()) return ladeDaten_(); // inzwischen von einem anderen Aufruf angelegt
     var neu = { kennung: Utilities.getUuid(), rev: 0, faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {} };
     CRM_NAMEN.forEach(function (t) { neu[t] = {}; });
-    ordner_().createFile(DATEN_DATEI, JSON.stringify(neu), 'application/json');
+    neueDatenDatei_(JSON.stringify(neu));
     return neu;
   } finally {
     sperre.releaseLock();
@@ -552,7 +578,7 @@ function speichereDaten_(d) {
   var text = JSON.stringify(d);
   var datei = datenDatei_();
   if (!datei) {
-    ordner_().createFile(DATEN_DATEI, text, 'application/json');
+    neueDatenDatei_(text);
     return;
   }
   sichereTaeglich_(datei);

@@ -88,6 +88,9 @@ class CloudAbgleich(
         CrmTabelle("dokumente", Loeschung.Art.DOKUMENT, Dokument.serializer(), crm::offeneDokumente, crm::dokumentPerKennung, crm::speichere, crm::loescheDokument, crm::dokumentIstSynchron, crm::alleDokumenteOffen, crm::ladeDokumente),
     )
 
+    /** Wann die Version des Cloud-Skripts zuletzt erfolgreich geprüft wurde (Adresse, Zeitpunkt). */
+    private var geprueft: Pair<String, Long>? = null
+
     private val crmJson = Json { encodeDefaults = true; explicitNulls = true; ignoreUnknownKeys = true; coerceInputValues = true }
 
     /** Prüft eine Adresse und meldet, ob dort schon eine PIN festgelegt ist. */
@@ -141,6 +144,8 @@ class CloudAbgleich(
      * den gekürzten Stand zurückschicken. Deshalb wird dann gar nicht erst abgeglichen.
      */
     private suspend fun pruefeVersion(url: String) {
+        // Jeder Aufruf beim Cloud-Skript kostet Sekunden – die Version genügt einmal pro Stunde.
+        if (geprueft?.let { it.first == url && uhr.millis() - it.second < VERSION_GILT_MS } == true) return
         val version = try {
             apiFuer(url).aufruf("status").jsonObject["api"]?.jsonPrimitive?.longOrNull ?: 0
         } catch (e: IOException) {
@@ -148,9 +153,11 @@ class CloudAbgleich(
             throw e
         }
         if (version < MIN_API) {
+            geprueft = null
             speicher.fehler(VERALTET)
             throw CloudFehler(VERALTET)
         }
+        geprueft = url to uhr.millis()
     }
 
     private class Durchlauf(val gesendet: Int, val empfangen: Int, val nochmal: Boolean)
@@ -377,7 +384,8 @@ class CloudAbgleich(
                 api.aufruf("anlageHochladen", JsonPrimitive(pin), JsonPrimitive(anlage.uuid), JsonPrimitive(Base64.encodeToString(datei.readBytes(), Base64.NO_WRAP)))
                 dao.anlageIstInCloud(anlage.uuid)
             } catch (e: CloudFehler) {
-                if (e.message == "Anlage unbekannt") continue // inzwischen gelöscht
+                // Die Cloud kennt die Anlage nicht (mehr) – nicht bei jedem Abgleich erneut die ganze Datei schicken.
+                if (e.message == "Anlage unbekannt") { dao.anlageIstInCloud(anlage.uuid); continue }
                 throw e
             }
         }
@@ -536,6 +544,7 @@ class CloudAbgleich(
     companion object {
         private const val MAX_DURCHLAEUFE = 3
         const val MIN_API = 4L
+        private const val VERSION_GILT_MS = 60 * 60 * 1000L
         const val VERALTET = "Das Cloud-Skript ist veraltet – bitte die neue Code.gs bereitstellen."
     }
 }

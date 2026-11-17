@@ -330,9 +330,10 @@ test('Auftraggeber: Vorlage an dessen Adresse, Auswahl aus der Liste, Abgleich d
 
 test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   const cloud = await starteCloud();
-  const s = await geraet(cloud.url);
-  await melde(s, PIN, true); await aktuell(s);
   cloud.umgebung.kontext.API_VERSION = 3; // ein älteres Skript ohne CRM
+  const s = await geraet(cloud.url);
+  await melde(s, PIN, true);
+  await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
