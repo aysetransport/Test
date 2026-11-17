@@ -179,6 +179,7 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Fahrzeugakte:** Wartung, Reparatur, Reifen, Tanken, Prüfungen, Schäden, Fahrerwechsel und sonstige Kosten. Daraus ergeben sich Kosten pro Jahr und pro km sowie der Durchschnittsverbrauch.
 - Schadensfälle, bei denen das Kennzeichen im Feld *Fahrzeug* steht, erscheinen beim Fahrzeug. Im Fall-Formular werden Kennzeichen und Fahrer vorgeschlagen.
 - CSV-Export für Fahrzeuge und Fahrzeugakte.
+- **Import** (Fuhrpark → *Importieren*): übernimmt eine Fuhrpark-Datei mit Fahrzeugdaten und Dokumenten (z. B. aus eingelesenen Fahrzeugscheinen). Gleiches Kennzeichen = gleiches Fahrzeug, vorhandene Angaben bleiben, nichts wird doppelt angelegt.
 - **Drucken** von Rechnungen und Angeboten öffnet kein eigenes Fenster mehr und wird darum nicht mehr blockiert.
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.

@@ -682,5 +682,17 @@ test('Fuhrpark: Fahrzeug mit Fahrzeugschein und Fristen, Tanken, Dokument, Termi
   // Drucken öffnet kein neues Fenster mehr (wird in der Windows-App und von Popup-Blockern gesperrt)
   const druck = await a.evaluate(() => { let geoeffnet = false; window.open = () => { geoeffnet = true; return null; }; druckeHtml('<p>Test</p>'); return { geoeffnet, rahmen: !!document.querySelector('#druckrahmen') }; });
   assert.deepEqual(druck, { geoeffnet: false, rahmen: true });
+
+  // Import aus eingelesenen Fahrzeugscheinen: neues Fahrzeug, vorhandenes nur ergänzen, Dokument nicht doppelt
+  const datei = { name: 'fuhrpark.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({
+    fahrzeuge: [{ kennzeichen: 'RS-FK 4204', art: 'TRANSPORTER', marke: 'Mercedes-Benz', huBis: '2028-01-31', zgg: 3500 }, { kennzeichen: 'KR AT 123', marke: 'Andere Marke', farbe: 'Weiß' }],
+    dokumente: [{ kennzeichen: 'RS-FK 4204', art: 'Fahrzeugschein (Teil I)', name: 'Schein.pdf', mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.4').toString('base64') }] })) };
+  await a.locator('[data-bereich=fuhrpark]').click();
+  await a.locator('#fuhrpark-import').setInputFiles(datei);
+  await a.locator('#toast', { hasText: '1 Fahrzeuge neu, 1 ergänzt, 1 Dokumente' }).waitFor();
+  await a.locator('#fuhrpark-import').setInputFiles(datei); // ein zweites Mal: nichts doppelt
+  await a.locator('#toast', { hasText: '0 Fahrzeuge neu, 0 ergänzt, 0 Dokumente' }).waitFor();
+  const imp = await a.evaluate(() => alle('fahrzeuge').map(z => [z.kennzeichen, z.marke, z.farbe || '', anlagenVon(z.id).length]).sort());
+  assert.deepEqual(imp, [['KR-AT 123', 'Mercedes-Benz', 'Weiß', 1], ['RS-FK 4204', 'Mercedes-Benz', '', 1]]);
   await cloud.schliessen();
 });
