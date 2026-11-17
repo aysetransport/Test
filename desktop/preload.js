@@ -21,5 +21,7 @@ contextBridge.exposeInMainWorld('desktop', {
   benachrichtige: (titel, text, ziel) => aufruf('benachrichtige', titel, text, ziel),
   oeffneDatei: (name, bytes) => aufruf('datei:oeffnen', name, bytes),
   oeffneExtern: adresse => aufruf('extern:oeffnen', adresse),
+  pdf: html => aufruf('pdf:erzeugen', html),
+  speichere: (name, base64) => aufruf('datei:speichern', name, base64),
   beiZiel: rueckruf => ipcRenderer.on('ziel', (_e, ziel) => rueckruf(ziel)),
 });

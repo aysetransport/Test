@@ -508,3 +508,75 @@ test('CRM: Chancen, Schlagworte, Kennzahlen, Folgetermin, Verschieben und Zusamm
   assert.equal(Object.values(daten.auftraggeber).filter(f => !f.geloescht).length, 1);
   await cloud.schliessen();
 });
+
+test('Finanzen: Rechnung aus der Preisliste, Summen, Zahlung, Überfällig, Angebot → Rechnung, CSV und Übersicht', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'firmen' });
+  await melde(a, PIN, true); await aktuell(a);
+  await a.locator('[data-neue-firma]').click();
+  await a.locator('#crm-form [name=name]').fill('Seats and Sofas');
+  await a.locator('#crm-form [name=kundennummer]').fill('K-1001');
+  await a.locator('#crm-form [name=zahlungszielTage]').fill('30');
+  await a.locator('#crm-form button.voll').click();
+  await a.locator('#stammdaten', { hasText: 'Seats and Sofas' }).waitFor();
+  await a.locator('[data-crm-neu=preise]').click();
+  await a.locator('#crm-form [name=bezeichnung]').fill('Tourpauschale');
+  await a.locator('#crm-form [name=betrag]').fill('189,50');
+  await a.locator('#crm-form [name=einheit]').fill('pro Tour');
+  await a.locator('#crm-form button.voll').click();
+
+  // Rechnung aus der Firma, Position aus der Preisliste, Menge 2
+  await a.locator('[data-crm-neu=belege]').click();
+  await a.locator('#beleg-form').waitFor();
+  const jahr = new Date().getFullYear();
+  assert.match(await a.locator('#detail h2').innerText(), new RegExp(`Rechnung RE-${jahr}-0001`));
+  const preisId = await a.evaluate(() => alle('preise')[0].id);
+  await a.locator('#aus-preisliste').selectOption(preisId);
+  await a.locator('[data-pos="0"] [name=menge]').waitFor();
+  await a.locator('[data-pos="0"] [name=menge]').fill('2');
+  await a.locator('#beleg-speichern').click();
+  await a.locator('#beleg-form').getByText('451,01').first().waitFor();
+  const b = await a.evaluate(() => { const b = alle('belege')[0]; return { s: belegSummen(b), faellig: b.faelligAm, datum: b.datum, html: belegHtml(b) }; });
+  assert.deepEqual(b.s, { netto: 37900, mwst: 7201, brutto: 45101 });
+  assert.equal(b.faellig, await a.evaluate(d => plusTage(d, 30), b.datum), 'Zahlungsziel der Firma');
+  assert.ok(b.html.includes('K-1001') && b.html.includes('Tourpauschale') && b.html.includes('451,01'));
+
+  // Versendet, dann Teilzahlung und Rest
+  await a.locator('[data-beleg-akt=festschreiben]').click();
+  await a.locator('[data-beleg-akt=zahlung]').click();
+  await a.locator('#zahlung-form [name=betrag]').fill('200');
+  await a.locator('#zahlung-form button.voll').click();
+  await a.locator('#detail .marke', { hasText: 'Teilbezahlt' }).waitFor();
+  await a.locator('[data-beleg-akt=zahlung]').click();
+  await a.locator('#zahlung-form button.voll').click();
+  await a.locator('#detail .marke', { hasText: 'Bezahlt' }).waitFor();
+  assert.equal(await a.evaluate(() => alle('aktivitaeten').filter(x => x.text.includes('Zahlung')).length), 2, 'Zahlungen in der Kontakthistorie');
+
+  // Eine überfällige Rechnung und ein Angebot, das zur Rechnung wird
+  await a.evaluate(() => {
+    const f = alle('auftraggeber')[0].id;
+    const id = BelegAktionen.neu('RECHNUNG', f, { positionen: JSON.stringify([{ bez: 'Montage', menge: 1, einzelCent: 10000 }]), status: 'OFFEN', datum: '2020-01-01', faelligAm: '2020-01-15' });
+    BelegAktionen.neu('ANGEBOT', f, { positionen: JSON.stringify([{ bez: 'Etage', menge: 3, einzelCent: 1250 }]), status: 'OFFEN' });
+    return id;
+  });
+  await a.locator('[data-bereich=finanzen]').click();
+  await a.locator('[data-beleg-filter=UEBERFAELLIG]').first().click();
+  await a.locator('#belege').getByText(`RE-${jahr}-0002`).waitFor();
+  await a.locator('[data-beleg-filter=ANGEBOTE]').last().click();
+  await a.locator('#belege').getByText(`AN-${jahr}-0001`).click();
+  await a.locator('[data-beleg-akt=zurechnung]').click();
+  await a.locator('#detail h2', { hasText: `Rechnung RE-${jahr}-0003` }).waitFor();
+  assert.equal(await a.evaluate(() => alle('belege').find(b => b.art === 'ANGEBOT').status), 'ANGENOMMEN');
+
+  // Übersicht
+  await a.locator('[data-bereich=uebersicht]').click();
+  await a.locator('#liste').getByText('Überfällig (1)').waitFor();
+  const csv = await a.evaluate(() => belegeCsv());
+  assert.ok(csv.startsWith('﻿Nummer;Art;Firma') && csv.includes(`RE-${jahr}-0001;Rechnung;Seats and Sofas`) && csv.includes(';Bezahlt;379,00;72,01;451,01;451,01;'), csv);
+  const ics = await a.evaluate(() => termineIcs());
+  assert.ok(ics.startsWith('BEGIN:VCALENDAR') && ics.includes('END:VCALENDAR'));
+
+  await aktuell(a);
+  assert.equal(Object.values(cloudDaten(cloud).belege).length, 4, 'Belege landen in der Cloud');
+  await cloud.schliessen();
+});

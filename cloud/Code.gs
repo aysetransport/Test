@@ -43,8 +43,13 @@ var CRM_TABELLEN = {
   aktivitaeten: { datum: 'datum', art: 'wort:SONSTIGES', text: 'text', kontakt: 'text' },
   aufgaben: { faelligAm: 'datum', text: 'text', kontakt: 'text', erledigt: 'bool' },
   dokumente: { titel: 'text', link: 'text', notiz: 'text' },
-  chancen: { titel: 'text', wertCent: 'cent', phase: 'wort:ANFRAGE', erwartetAm: 'datum', notiz: 'text' }
+  chancen: { titel: 'text', wertCent: 'cent', phase: 'wort:ANFRAGE', erwartetAm: 'datum', notiz: 'text' },
+  // Angebote und Rechnungen (bisher nur Web-/Windows-App); positionen als JSON-Text
+  belege: { art: 'wort:RECHNUNG', nummer: 'text', datum: 'datum', faelligAm: 'datum', status: 'wort:OFFEN', positionen: 'text', mwstProzent: 'cent',
+    einleitung: 'text', schluss: 'text', bezahltCent: 'cent', bezahltAm: 'datum', mahnstufe: 'cent', bezug: 'text', notiz: 'text', fallId: 'text' }
 };
+/** Felder einer Firma, die nicht jede App kennt: Fehlen sie in einer Änderung, bleibt der bisherige Wert. */
+var FIRMEN_ZUSATZ = ['kundennummer', 'ustId', 'zahlungszielTage', 'schlagworte'];
 var CRM_NAMEN = Object.keys(CRM_TABELLEN);
 
 // ============================== Einstieg ==============================
@@ -260,6 +265,11 @@ function uebernehmeAuftraggeber_(d, roh, zurueck) {
   neu.website = text_(roh.website).slice(0, 300);
   neu.notizen = text_(roh.notizen);
   neu.schlagworte = text_(roh.schlagworte).slice(0, 500);
+  neu.kundennummer = text_(roh.kundennummer).slice(0, 50);
+  neu.ustId = text_(roh.ustId).slice(0, 50);
+  neu.zahlungszielTage = text_(roh.zahlungszielTage).slice(0, 5);
+  // Ältere Apps schicken diese Felder nicht mit – dann den bisherigen Wert behalten statt ihn zu leeren.
+  FIRMEN_ZUSATZ.forEach(function (k) { if (roh[k] === undefined && alt && alt[k] !== undefined) neu[k] = alt[k]; });
   if (alt && zeit_(neu.geaendertAm) <= zeit_(alt.geaendertAm)) {
     if (!gleicherInhalt_(alt, neu)) zurueck[neu.id] = true;
     return;

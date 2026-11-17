@@ -308,3 +308,17 @@ test('CRM: Zusammenführen zweier Firmen – umgehängte Einträge überleben di
   assert.deepEqual(z.ansprechpartner.map(k => [k.firmaId, k.geloescht]), [[F1, undefined]]);
   assert.equal(z.auftraggeber.find(f => f.id === F2).geloescht, true);
 });
+
+test('Belege (Angebote/Rechnungen) gleichen sich ab; Firmenfelder, die eine App nicht kennt, bleiben erhalten', () => {
+  const u = eingerichtet();
+  const F = 'ffffffff-0000-4000-8000-000000000001', R = 'ffffffff-0000-4000-8000-000000000002';
+  const r = u.sync({ seit: 0, auftraggeber: [{ id: F, name: 'Seats', kundennummer: 'K-1001', ustId: 'DE123', zahlungszielTage: '30', schlagworte: 'Möbel', geaendertAm: '2026-11-10T08:00:00Z' }],
+    belege: [{ id: R, firmaId: F, art: 'RECHNUNG', nummer: 'RE-2026-0001', datum: '2026-11-10', faelligAm: '2026-11-24', status: 'OFFEN',
+      positionen: JSON.stringify([{ bez: 'Tourpauschale', menge: 2, einzelCent: 18950 }]), mwstProzent: 19, bezahltCent: 0, geaendertAm: '2026-11-10T08:00:00Z' }] });
+  assert.equal(r.belege[0].nummer, 'RE-2026-0001');
+  assert.equal(JSON.parse(r.belege[0].positionen)[0].einzelCent, 18950);
+  // Die Android-App kennt Kundennummer & Co. nicht und schickt die Firma ohne diese Felder.
+  const z = u.sync({ seit: r.rev, kennung: r.kennung, auftraggeber: [{ id: F, name: 'Seats and Sofas', geaendertAm: '2026-11-11T08:00:00Z' }] });
+  assert.deepEqual([z.auftraggeber[0].name, z.auftraggeber[0].kundennummer, z.auftraggeber[0].ustId, z.auftraggeber[0].zahlungszielTage, z.auftraggeber[0].schlagworte],
+    ['Seats and Sofas', 'K-1001', 'DE123', '30', 'Möbel']);
+});

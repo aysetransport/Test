@@ -151,6 +151,24 @@ grüner Lauf → *Artifacts* `Schadensfaelle-Windows-Setup` → `Schadensfaelle-
 Für 2.1 braucht es wieder die **aktuelle `Code.gs`** (Version 5) – wie in Schritt 2 bereitstellen
 („Neue Version“). Ohne sie meldet die App „Cloud-Skript veraltet“.
 
+## Neu in 2.2 (Windows-App und Web-App)
+
+- **Übersicht** als erster Reiter: Termine, nicht zugeordnete Mails, offene und überfällige Rechnungen,
+  Umsatz Monat/Jahr, offene Chancen und Angebote, offene Schadensfälle, Firmen lange ohne Kontakt
+- **Angebote und Rechnungen**: fortlaufende Nummern (AN-/RE-Jahr-Nummer), Positionen frei oder aus der
+  Preisliste, Netto/MwSt./Brutto, Einleitung und Schlusstext, **PDF speichern**, Drucken,
+  **per E-Mail mit PDF-Anhang** (an den Ansprechpartner für Abrechnung), Angebot → Rechnung, Stornieren
+- **Zahlstatus**: Entwurf, offen, teilbezahlt, bezahlt, überfällig; Zahlungen (auch Teilzahlungen)
+  erfassen – sie stehen auch in der Kontakthistorie; **Zahlungserinnerung und Mahnungen** per Mail
+  mit Mahnstufe
+- **Finanzen**: offene Posten, Überfälliges, Umsatz je Firma, Suche, CSV-Export
+- **Eigene Firmendaten** für Rechnungen unter ⚙ (Anschrift, Steuernummer, USt-IdNr., Bank, Zahlungsziel,
+  MwSt.); je Firma **Kundennummer, USt-IdNr. und Zahlungsziel**
+- **Termine als Kalenderdatei (.ics)** für Outlook/Google Kalender
+
+Angebote und Rechnungen gleichen sich über die Cloud zwischen Windows-App und Web-App ab; die
+Android-App kennt sie noch nicht (sie lässt sie unverändert).
+
 ## Bekannte Grenzen
 
 - Mails ohne Fall liegen nur auf dem Gerät, das sie abgerufen hat. Mails zu Firmen erscheinen über

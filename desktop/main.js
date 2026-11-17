@@ -4,7 +4,7 @@
  * ergänzt, was ein Browser nicht kann: E-Mail direkt per IMAP/SMTP, Windows-Benachrichtigungen,
  * Öffnen von Anlagen mit den Programmen des Rechners und ein über Windows verschlüsseltes Passwort.
  */
-const { app, BrowserWindow, ipcMain, Notification, protocol, net, safeStorage, session, shell, Menu } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Notification, protocol, net, safeStorage, session, shell, Menu } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -76,6 +76,33 @@ behandle('datei:oeffnen', async (name, bytes) => {
 behandle('extern:oeffnen', adresse => {
   if (!/^(mailto:|tel:|https:)/i.test(String(adresse))) throw new Error('Adresse nicht erlaubt');
   return shell.openExternal(adresse);
+});
+
+// ------------------------------ PDF (Angebote, Rechnungen) ------------------------------
+/** Erzeugt aus einer fertigen HTML-Seite ein PDF (A4) und liefert es als Base64. */
+behandle('pdf:erzeugen', async html => {
+  const unsichtbar = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true } });
+  try {
+    await unsichtbar.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(String(html)));
+    const pdf = await unsichtbar.webContents.printToPDF({ pageSize: 'A4', printBackground: true, margins: { marginType: 'none' } });
+    return Buffer.from(pdf).toString('base64');
+  } finally {
+    unsichtbar.destroy();
+  }
+});
+/** Fragt nach dem Speicherort und legt die Datei dort ab (z. B. ein PDF oder eine Kalenderdatei). */
+behandle('datei:speichern', async (vorschlag, base64) => {
+  const name = String(vorschlag || 'Datei').replace(/[\\/:*?"<>|]/g, '_').slice(0, 120);
+  if (process.env.SCHADEN_TEST) {
+    // Tests: ohne Dialog in den Datenordner
+    const ziel = path.join(app.getPath('userData'), name);
+    fs.writeFileSync(ziel, Buffer.from(String(base64), 'base64'));
+    return ziel;
+  }
+  const { canceled, filePath } = await dialog.showSaveDialog(fenster, { defaultPath: path.join(app.getPath('documents'), name) });
+  if (canceled || !filePath) return '';
+  fs.writeFileSync(filePath, Buffer.from(String(base64), 'base64'));
+  return filePath;
 });
 
 // ------------------------------ Fenster ------------------------------
