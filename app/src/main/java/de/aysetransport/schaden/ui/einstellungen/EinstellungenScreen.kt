@@ -218,7 +218,7 @@ fun EinstellungenScreen(viewModel: EinstellungenViewModel, onZurueck: () -> Unit
                         }
                     },
                     modifier = Modifier.fillMaxWidth().testTag("crm-csv"),
-                ) { Text("CRM für Excel exportieren (5 CSV-Dateien)") }
+                ) { Text("CRM für Excel exportieren (6 CSV-Dateien)") }
             }
 
             MailBereich(viewModel, MailKontoArt.SCHADEN)

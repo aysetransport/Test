@@ -167,12 +167,29 @@ class MigrationTest {
     }
 
     @Test
+    fun `Version 6 nach 7 behaelt die Firmen und ergaenzt Schlagworte und Verkaufschancen`() {
+        helfer.createDatabase("migration7.db", 6).use { db ->
+            db.execSQL(
+                "INSERT INTO auftraggeber (uuid, name, rechtsform, status, telefon, email, website, notizen, geaendertAm, syncOffen) " +
+                    "VALUES ('f1', 'Seats and Sofas', 'GmbH', 'AKTIV', '02151', 'a@b.example', '', 'Rahmenvertrag', 5, 0)",
+            )
+        }
+        val db = helfer.runMigrationsAndValidate("migration7.db", 7, true, SchadensfallDatenbank.MIGRATION_6_7)
+        db.query("SELECT name, notizen, schlagworte, syncOffen FROM auftraggeber").use { c ->
+            c.moveToFirst()
+            assertEquals(listOf("Seats and Sofas", "Rahmenvertrag", "", "0"), listOf(c.getString(0), c.getString(1), c.getString(2), c.getInt(3).toString()))
+        }
+        db.execSQL("INSERT INTO chance (uuid, auftraggeberUuid, titel, wertCent, phase, erwartetAm, notiz, geaendertAm, syncOffen) VALUES ('c1', 'f1', 'Mehr Touren', 250000, 'ANGEBOT', NULL, '', 1, 1)")
+        db.close()
+    }
+
+    @Test
     fun `Version 1 laesst sich in einem Zug auf den neuesten Stand bringen`() {
         helfer.createDatabase("migration16.db", 1).close()
         helfer.runMigrationsAndValidate(
-            "migration16.db", 6, true,
+            "migration16.db", 7, true,
             SchadensfallDatenbank.MIGRATION_1_2, SchadensfallDatenbank.MIGRATION_2_3, SchadensfallDatenbank.MIGRATION_3_4,
-            SchadensfallDatenbank.MIGRATION_4_5, SchadensfallDatenbank.MIGRATION_5_6,
+            SchadensfallDatenbank.MIGRATION_4_5, SchadensfallDatenbank.MIGRATION_5_6, SchadensfallDatenbank.MIGRATION_6_7,
         ).close()
     }
 }

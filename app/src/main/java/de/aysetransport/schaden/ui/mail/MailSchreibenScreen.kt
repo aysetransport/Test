@@ -61,6 +61,10 @@ import de.aysetransport.schaden.data.model.MailKontoArt
 import de.aysetransport.schaden.data.model.MailNachricht
 import de.aysetransport.schaden.mail.MailZuordnung
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.AssistChip
+import androidx.compose.foundation.horizontalScroll
+import de.aysetransport.schaden.domain.FirmenVorlage
+import de.aysetransport.schaden.domain.Crm
 import de.aysetransport.schaden.data.db.SchadensfallDao
 import de.aysetransport.schaden.data.model.Anlage
 import de.aysetransport.schaden.data.model.Schadensfall
@@ -215,6 +219,21 @@ class MailSchreibenViewModel(
 
     fun setzeKonto(wert: MailKontoArt) { konto = wert }
 
+    /** Vorlagen gibt es bei Mails an eine Firma (ohne Fall). */
+    val firmenVorlagenMoeglich: Boolean get() = fallnummer.isEmpty() && antwortAufId.isEmpty()
+
+    fun firmenVorlage(v: FirmenVorlage) {
+        viewModelScope.launch {
+            val firma = zuordnung.auftraggeberUuid?.let { crm?.ladeFirma(it) }
+            val name = firma?.let { f -> crm?.ladeKontakte(f.uuid)?.firstOrNull { an.isNotBlank() && it.email.equals(an.trim(), ignoreCase = true) }?.name }.orEmpty()
+            val preise = firma?.let { f -> crm?.beobachtePreise(f.uuid)?.first() }.orEmpty()
+            val liste = if (firma != null && preise.isNotEmpty()) Crm.preislisteText(firma, preise).substringAfter('\n') else ""
+            val n = Textvorlagen.firmenVorlage(v, name, einstellungen.aktuell().absender, liste)
+            betreff = n.betreff
+            text = n.text
+        }
+    }
+
     fun setzeAn(wert: String) { an = wert; fehler = null }
     fun setzeBetreff(wert: String) { betreff = wert }
     fun setzeText(wert: String) { text = wert }
@@ -347,6 +366,13 @@ fun MailSchreibenScreen(viewModel: MailSchreibenViewModel, onSchliessen: () -> U
                 }
             } else {
                 viewModel.konten.firstOrNull()?.let { Text("Von: ${it.second}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            if (viewModel.firmenVorlagenMoeglich) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    FirmenVorlage.entries.forEach { v ->
+                        AssistChip(onClick = { viewModel.firmenVorlage(v) }, label = { Text(v.label) }, modifier = Modifier.testTag("firmenvorlage-${v.name}"))
+                    }
+                }
             }
             OutlinedTextField(
                 value = viewModel.an, onValueChange = viewModel::setzeAn, label = { Text("An") }, singleLine = true,

@@ -7,6 +7,7 @@ import androidx.room.Query
 import de.aysetransport.schaden.data.model.Adresse
 import de.aysetransport.schaden.data.model.Aktivitaet
 import de.aysetransport.schaden.data.model.Aufgabe
+import de.aysetransport.schaden.data.model.Chance
 import de.aysetransport.schaden.data.model.Dokument
 import de.aysetransport.schaden.data.model.Kontaktperson
 import de.aysetransport.schaden.data.model.MailNachricht
@@ -262,13 +263,55 @@ interface CrmDao {
     @Query("UPDATE dokument SET auftraggeberUuid = :nach, syncOffen = 1, geaendertAm = :jetzt WHERE auftraggeberUuid = :von")
     suspend fun haengeDokumenteUm(von: String, nach: String, jetzt: Long)
 
+    // --- Chancen ---
+
+    @Query("SELECT * FROM chance WHERE auftraggeberUuid = :firma ORDER BY phase, erwartetAm IS NULL, erwartetAm")
+    fun beobachteChancen(firma: String): Flow<List<Chance>>
+
+    @Query("SELECT * FROM chance WHERE auftraggeberUuid = :firma ORDER BY phase, erwartetAm IS NULL, erwartetAm")
+    suspend fun ladeChancen(firma: String): List<Chance>
+
+    @Query("SELECT * FROM chance ORDER BY auftraggeberUuid, phase, erwartetAm IS NULL, erwartetAm")
+    suspend fun ladeAlleChancen(): List<Chance>
+
+    @Query("SELECT * FROM chance ORDER BY auftraggeberUuid, phase, erwartetAm IS NULL, erwartetAm")
+    fun beobachteAlleChancen(): Flow<List<Chance>>
+
+    @Query("SELECT * FROM chance WHERE uuid = :uuid")
+    suspend fun chancePerKennung(uuid: String): Chance?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun speichere(eintrag: Chance)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun speichereChancen(eintraege: List<Chance>)
+
+    @Query("DELETE FROM chance WHERE uuid = :uuid")
+    suspend fun loescheChance(uuid: String)
+
+    @Query("DELETE FROM chance")
+    suspend fun loescheAlleChancen()
+
+    @Query("SELECT * FROM chance WHERE syncOffen = 1")
+    suspend fun offeneChancen(): List<Chance>
+
+    @Query("UPDATE chance SET syncOffen = 0 WHERE uuid = :uuid AND geaendertAm = :geaendertAm")
+    suspend fun chanceIstSynchron(uuid: String, geaendertAm: Long)
+
+    @Query("UPDATE chance SET syncOffen = 1")
+    suspend fun alleChancenOffen()
+
+    @Query("UPDATE chance SET auftraggeberUuid = :nach, syncOffen = 1, geaendertAm = :jetzt WHERE auftraggeberUuid = :von")
+    suspend fun haengeChancenUm(von: String, nach: String, jetzt: Long)
+
     @Query("SELECT * FROM aufgabe WHERE erledigt = 0 ORDER BY faelligAm IS NULL, faelligAm")
     fun beobachteOffeneAufgaben(): Flow<List<Aufgabe>>
 
     @Query(
         "SELECT (SELECT COUNT(*) FROM adresse WHERE syncOffen = 1) + (SELECT COUNT(*) FROM ansprechpartner WHERE syncOffen = 1) + " +
             "(SELECT COUNT(*) FROM preis WHERE syncOffen = 1) + (SELECT COUNT(*) FROM aktivitaet WHERE syncOffen = 1) + " +
-            "(SELECT COUNT(*) FROM aufgabe WHERE syncOffen = 1) + (SELECT COUNT(*) FROM dokument WHERE syncOffen = 1)",
+            "(SELECT COUNT(*) FROM aufgabe WHERE syncOffen = 1) + (SELECT COUNT(*) FROM dokument WHERE syncOffen = 1) + " +
+            "(SELECT COUNT(*) FROM chance WHERE syncOffen = 1)",
     )
     fun beobachteOffeneCrmAenderungen(): Flow<Int>
 

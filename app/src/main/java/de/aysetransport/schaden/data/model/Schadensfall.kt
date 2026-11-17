@@ -196,7 +196,7 @@ data class Loeschung(
     val fallUuid: String,
     val zeitpunkt: Instant,
 ) {
-    enum class Art { FALL, VERLAUF, ANLAGE, AUFTRAGGEBER, ADRESSE, ANSPRECHPARTNER, PREIS, AKTIVITAET, AUFGABE, DOKUMENT }
+    enum class Art { FALL, VERLAUF, ANLAGE, AUFTRAGGEBER, ADRESSE, ANSPRECHPARTNER, PREIS, AKTIVITAET, AUFGABE, DOKUMENT, CHANCE }
 }
 
 fun neueKennung(): String = UUID.randomUUID().toString()

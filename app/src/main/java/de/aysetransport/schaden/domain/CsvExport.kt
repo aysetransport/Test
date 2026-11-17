@@ -86,10 +86,10 @@ object CsvExport {
     private fun firmenName(firmen: Map<String, AuftraggeberEintrag>, uuid: String) = firmen[uuid]?.name.orEmpty()
 
     fun firmen(firmen: List<AuftraggeberEintrag>, adressen: List<Adresse>): String = tabelle(
-        listOf("Firma", "Rechtsform", "Status", "Telefon", "E-Mail", "Website", "Hauptsitz", "Notizen"),
+        listOf("Firma", "Rechtsform", "Status", "Telefon", "E-Mail", "Website", "Hauptsitz", "Notizen", "Schlagworte"),
         firmen.sortedBy { it.name.lowercase() }.map { f ->
             val sitz = adressen.filter { it.auftraggeberUuid == f.uuid }.let { l -> l.firstOrNull { it.art == AdressArt.HAUPTSITZ } ?: l.firstOrNull() }
-            listOf(f.name, f.rechtsform, f.status.label, f.telefon, f.email, f.website, sitz?.einzeilig.orEmpty(), f.notizen)
+            listOf(f.name, f.rechtsform, f.status.label, f.telefon, f.email, f.website, sitz?.einzeilig.orEmpty(), f.notizen, f.schlagworte)
         },
     )
 
@@ -131,6 +131,15 @@ object CsvExport {
             listOf("Fällig am", "Firma", "Aufgabe", "Ansprechpartner", "Erledigt"),
             aufgaben.sortedWith(compareBy({ it.erledigt }, { it.faelligAm ?: java.time.LocalDate.MAX }))
                 .map { listOf(it.faelligAm?.let(Datum::format).orEmpty(), firmenName(nachKennung, it.auftraggeberUuid), it.text, it.kontakt, if (it.erledigt) "ja" else "nein") },
+        )
+    }
+
+    fun chancen(firmen: List<AuftraggeberEintrag>, chancen: List<de.aysetransport.schaden.data.model.Chance>): String {
+        val nachKennung = firmen.associateBy { it.uuid }
+        return tabelle(
+            listOf("Firma", "Verkaufschance", "Phase", "Wert (EUR)", "Entscheidung bis", "Notiz"),
+            chancen.sortedWith(compareBy({ it.phase.ordinal }, { firmenName(nachKennung, it.auftraggeberUuid).lowercase() }))
+                .map { listOf(firmenName(nachKennung, it.auftraggeberUuid), it.titel, it.phase.label, it.wertCent?.let(Geld::formatOhneSymbol).orEmpty(), it.erwartetAm?.let(Datum::format).orEmpty(), it.notiz) },
         )
     }
 

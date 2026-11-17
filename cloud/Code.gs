@@ -30,7 +30,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 4; // 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM
+var API_VERSION = 5; // 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
 
 /**
  * CRM-Tabellen: alle hängen über firmaId an einem Auftraggeber (Tabelle „auftraggeber“).
@@ -42,7 +42,8 @@ var CRM_TABELLEN = {
   preise: { bezeichnung: 'text', betragCent: 'cent', einheit: 'text', gueltigAb: 'datum', notiz: 'text' },
   aktivitaeten: { datum: 'datum', art: 'wort:SONSTIGES', text: 'text', kontakt: 'text' },
   aufgaben: { faelligAm: 'datum', text: 'text', kontakt: 'text', erledigt: 'bool' },
-  dokumente: { titel: 'text', link: 'text', notiz: 'text' }
+  dokumente: { titel: 'text', link: 'text', notiz: 'text' },
+  chancen: { titel: 'text', wertCent: 'cent', phase: 'wort:ANFRAGE', erwartetAm: 'datum', notiz: 'text' }
 };
 var CRM_NAMEN = Object.keys(CRM_TABELLEN);
 
@@ -258,6 +259,7 @@ function uebernehmeAuftraggeber_(d, roh, zurueck) {
   neu.email = text_(roh.email).slice(0, 200);
   neu.website = text_(roh.website).slice(0, 300);
   neu.notizen = text_(roh.notizen);
+  neu.schlagworte = text_(roh.schlagworte).slice(0, 500);
   if (alt && zeit_(neu.geaendertAm) <= zeit_(alt.geaendertAm)) {
     if (!gleicherInhalt_(alt, neu)) zurueck[neu.id] = true;
     return;

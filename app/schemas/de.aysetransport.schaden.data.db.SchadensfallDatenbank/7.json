@@ -1,0 +1,1373 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "175b50b6c46cdc75d9fae7eb4a2d59e2",
+    "entities": [
+      {
+        "tableName": "schadensfall",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uuid` TEXT NOT NULL DEFAULT '', `syncOffen` INTEGER NOT NULL DEFAULT 1, `fallnummer` TEXT NOT NULL, `kundeName` TEXT NOT NULL, `kundeFirma` TEXT NOT NULL, `kundeTelefon` TEXT NOT NULL, `kundeEmail` TEXT NOT NULL, `kundeAnschrift` TEXT NOT NULL, `kundenAktenzeichen` TEXT NOT NULL, `auftraggeber` TEXT NOT NULL, `auftraggeberUuid` TEXT, `auftraggeberKontakt` TEXT NOT NULL DEFAULT '', `auftraggeberTelefon` TEXT NOT NULL DEFAULT '', `auftraggeberEmail` TEXT NOT NULL DEFAULT '', `auftraggeberZeichen` TEXT NOT NULL DEFAULT '', `auftragsReferenz` TEXT NOT NULL, `tour` TEXT NOT NULL, `fahrzeug` TEXT NOT NULL, `fahrer` TEXT NOT NULL, `beifahrer1` TEXT NOT NULL DEFAULT '', `beifahrer2` TEXT NOT NULL DEFAULT '', `schadensort` TEXT NOT NULL, `schadensdatum` INTEGER, `meldedatum` INTEGER, `schadensart` TEXT NOT NULL, `beschreibung` TEXT NOT NULL, `forderungCent` INTEGER, `status` TEXT NOT NULL, `wartetAuf` TEXT, `wiedervorlageAm` INTEGER, `wiedervorlageNotiz` TEXT NOT NULL, `vergleichCent` INTEGER, `zahlungsfrist` INTEGER, `versicherungsNummer` TEXT NOT NULL, `erstelltAm` INTEGER NOT NULL, `geaendertAm` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "fallnummer",
+            "columnName": "fallnummer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kundeName",
+            "columnName": "kundeName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kundeFirma",
+            "columnName": "kundeFirma",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kundeTelefon",
+            "columnName": "kundeTelefon",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kundeEmail",
+            "columnName": "kundeEmail",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kundeAnschrift",
+            "columnName": "kundeAnschrift",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kundenAktenzeichen",
+            "columnName": "kundenAktenzeichen",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "auftraggeber",
+            "columnName": "auftraggeber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "auftraggeberUuid",
+            "columnName": "auftraggeberUuid",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "auftraggeberKontakt",
+            "columnName": "auftraggeberKontakt",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "auftraggeberTelefon",
+            "columnName": "auftraggeberTelefon",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "auftraggeberEmail",
+            "columnName": "auftraggeberEmail",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "auftraggeberZeichen",
+            "columnName": "auftraggeberZeichen",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "auftragsReferenz",
+            "columnName": "auftragsReferenz",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tour",
+            "columnName": "tour",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fahrzeug",
+            "columnName": "fahrzeug",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fahrer",
+            "columnName": "fahrer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "beifahrer1",
+            "columnName": "beifahrer1",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "beifahrer2",
+            "columnName": "beifahrer2",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "schadensort",
+            "columnName": "schadensort",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "schadensdatum",
+            "columnName": "schadensdatum",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "meldedatum",
+            "columnName": "meldedatum",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "schadensart",
+            "columnName": "schadensart",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "beschreibung",
+            "columnName": "beschreibung",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "forderungCent",
+            "columnName": "forderungCent",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "wartetAuf",
+            "columnName": "wartetAuf",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "wiedervorlageAm",
+            "columnName": "wiedervorlageAm",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "wiedervorlageNotiz",
+            "columnName": "wiedervorlageNotiz",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vergleichCent",
+            "columnName": "vergleichCent",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "zahlungsfrist",
+            "columnName": "zahlungsfrist",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "versicherungsNummer",
+            "columnName": "versicherungsNummer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "erstelltAm",
+            "columnName": "erstelltAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geaendertAm",
+            "columnName": "geaendertAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_schadensfall_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_schadensfall_status` ON `${TABLE_NAME}` (`status`)"
+          },
+          {
+            "name": "index_schadensfall_wiedervorlageAm",
+            "unique": false,
+            "columnNames": [
+              "wiedervorlageAm"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_schadensfall_wiedervorlageAm` ON `${TABLE_NAME}` (`wiedervorlageAm`)"
+          },
+          {
+            "name": "index_schadensfall_uuid",
+            "unique": true,
+            "columnNames": [
+              "uuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_schadensfall_uuid` ON `${TABLE_NAME}` (`uuid`)"
+          },
+          {
+            "name": "index_schadensfall_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_schadensfall_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          }
+        ]
+      },
+      {
+        "tableName": "verlauf",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uuid` TEXT NOT NULL DEFAULT '', `syncOffen` INTEGER NOT NULL DEFAULT 1, `fallId` INTEGER NOT NULL, `zeitpunkt` INTEGER NOT NULL, `typ` TEXT NOT NULL, `text` TEXT NOT NULL, FOREIGN KEY(`fallId`) REFERENCES `schadensfall`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "fallId",
+            "columnName": "fallId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zeitpunkt",
+            "columnName": "zeitpunkt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "typ",
+            "columnName": "typ",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_verlauf_fallId",
+            "unique": false,
+            "columnNames": [
+              "fallId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_verlauf_fallId` ON `${TABLE_NAME}` (`fallId`)"
+          },
+          {
+            "name": "index_verlauf_uuid",
+            "unique": true,
+            "columnNames": [
+              "uuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_verlauf_uuid` ON `${TABLE_NAME}` (`uuid`)"
+          },
+          {
+            "name": "index_verlauf_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_verlauf_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "schadensfall",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "fallId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "anlage",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uuid` TEXT NOT NULL DEFAULT '', `syncOffen` INTEGER NOT NULL DEFAULT 1, `inCloud` INTEGER NOT NULL DEFAULT 0, `fallId` INTEGER NOT NULL, `dateiname` TEXT NOT NULL, `anzeigename` TEXT NOT NULL, `mimeType` TEXT NOT NULL, `groesseBytes` INTEGER NOT NULL, `hinzugefuegtAm` INTEGER NOT NULL, FOREIGN KEY(`fallId`) REFERENCES `schadensfall`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "inCloud",
+            "columnName": "inCloud",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "fallId",
+            "columnName": "fallId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dateiname",
+            "columnName": "dateiname",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "anzeigename",
+            "columnName": "anzeigename",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "groesseBytes",
+            "columnName": "groesseBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hinzugefuegtAm",
+            "columnName": "hinzugefuegtAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_anlage_fallId",
+            "unique": false,
+            "columnNames": [
+              "fallId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_anlage_fallId` ON `${TABLE_NAME}` (`fallId`)"
+          },
+          {
+            "name": "index_anlage_uuid",
+            "unique": true,
+            "columnNames": [
+              "uuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_anlage_uuid` ON `${TABLE_NAME}` (`uuid`)"
+          },
+          {
+            "name": "index_anlage_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_anlage_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "schadensfall",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "fallId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "loeschung",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uuid` TEXT NOT NULL, `art` TEXT NOT NULL, `fallUuid` TEXT NOT NULL, `zeitpunkt` INTEGER NOT NULL, PRIMARY KEY(`uuid`))",
+        "fields": [
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "art",
+            "columnName": "art",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fallUuid",
+            "columnName": "fallUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zeitpunkt",
+            "columnName": "zeitpunkt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uuid"
+          ]
+        }
+      },
+      {
+        "tableName": "auftraggeber",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uuid` TEXT NOT NULL, `name` TEXT NOT NULL, `rechtsform` TEXT NOT NULL DEFAULT '', `status` TEXT NOT NULL DEFAULT 'AKTIV', `telefon` TEXT NOT NULL, `email` TEXT NOT NULL, `website` TEXT NOT NULL DEFAULT '', `notizen` TEXT NOT NULL DEFAULT '', `schlagworte` TEXT NOT NULL DEFAULT '', `geaendertAm` INTEGER NOT NULL, `syncOffen` INTEGER NOT NULL, PRIMARY KEY(`uuid`))",
+        "fields": [
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rechtsform",
+            "columnName": "rechtsform",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'AKTIV'"
+          },
+          {
+            "fieldPath": "telefon",
+            "columnName": "telefon",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "email",
+            "columnName": "email",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "website",
+            "columnName": "website",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "notizen",
+            "columnName": "notizen",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "schlagworte",
+            "columnName": "schlagworte",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "geaendertAm",
+            "columnName": "geaendertAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_auftraggeber_name",
+            "unique": false,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_auftraggeber_name` ON `${TABLE_NAME}` (`name`)"
+          },
+          {
+            "name": "index_auftraggeber_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_auftraggeber_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          }
+        ]
+      },
+      {
+        "tableName": "mail",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `fallId` INTEGER, `auftraggeberUuid` TEXT, `kundeRef` TEXT NOT NULL DEFAULT '', `konto` TEXT NOT NULL DEFAULT 'SCHADEN', `eingehend` INTEGER NOT NULL, `messageId` TEXT NOT NULL, `antwortAuf` TEXT NOT NULL, `von` TEXT NOT NULL, `an` TEXT NOT NULL, `betreff` TEXT NOT NULL, `text` TEXT NOT NULL, `zeitpunkt` INTEGER NOT NULL, `verlaufUuid` TEXT NOT NULL, `aktivitaetUuid` TEXT NOT NULL DEFAULT '', `anhaenge` TEXT NOT NULL DEFAULT '', FOREIGN KEY(`fallId`) REFERENCES `schadensfall`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fallId",
+            "columnName": "fallId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "auftraggeberUuid",
+            "columnName": "auftraggeberUuid",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "kundeRef",
+            "columnName": "kundeRef",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "konto",
+            "columnName": "konto",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'SCHADEN'"
+          },
+          {
+            "fieldPath": "eingehend",
+            "columnName": "eingehend",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "messageId",
+            "columnName": "messageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "antwortAuf",
+            "columnName": "antwortAuf",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "von",
+            "columnName": "von",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "an",
+            "columnName": "an",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "betreff",
+            "columnName": "betreff",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zeitpunkt",
+            "columnName": "zeitpunkt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "verlaufUuid",
+            "columnName": "verlaufUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aktivitaetUuid",
+            "columnName": "aktivitaetUuid",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "anhaenge",
+            "columnName": "anhaenge",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_mail_fallId",
+            "unique": false,
+            "columnNames": [
+              "fallId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_mail_fallId` ON `${TABLE_NAME}` (`fallId`)"
+          },
+          {
+            "name": "index_mail_messageId",
+            "unique": true,
+            "columnNames": [
+              "messageId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_mail_messageId` ON `${TABLE_NAME}` (`messageId`)"
+          },
+          {
+            "name": "index_mail_auftraggeberUuid",
+            "unique": false,
+            "columnNames": [
+              "auftraggeberUuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_mail_auftraggeberUuid` ON `${TABLE_NAME}` (`auftraggeberUuid`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "schadensfall",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "fallId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "adresse",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uuid` TEXT NOT NULL, `auftraggeberUuid` TEXT NOT NULL, `art` TEXT NOT NULL, `strasse` TEXT NOT NULL, `plz` TEXT NOT NULL, `ort` TEXT NOT NULL, `notiz` TEXT NOT NULL, `geaendertAm` INTEGER NOT NULL, `syncOffen` INTEGER NOT NULL, PRIMARY KEY(`uuid`))",
+        "fields": [
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "auftraggeberUuid",
+            "columnName": "auftraggeberUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "art",
+            "columnName": "art",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "strasse",
+            "columnName": "strasse",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "plz",
+            "columnName": "plz",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ort",
+            "columnName": "ort",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiz",
+            "columnName": "notiz",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geaendertAm",
+            "columnName": "geaendertAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_adresse_auftraggeberUuid",
+            "unique": false,
+            "columnNames": [
+              "auftraggeberUuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_adresse_auftraggeberUuid` ON `${TABLE_NAME}` (`auftraggeberUuid`)"
+          },
+          {
+            "name": "index_adresse_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_adresse_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          }
+        ]
+      },
+      {
+        "tableName": "ansprechpartner",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uuid` TEXT NOT NULL, `auftraggeberUuid` TEXT NOT NULL, `name` TEXT NOT NULL, `thema` TEXT NOT NULL, `telefon` TEXT NOT NULL, `email` TEXT NOT NULL, `notiz` TEXT NOT NULL, `geaendertAm` INTEGER NOT NULL, `syncOffen` INTEGER NOT NULL, PRIMARY KEY(`uuid`))",
+        "fields": [
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "auftraggeberUuid",
+            "columnName": "auftraggeberUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "thema",
+            "columnName": "thema",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "telefon",
+            "columnName": "telefon",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "email",
+            "columnName": "email",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiz",
+            "columnName": "notiz",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geaendertAm",
+            "columnName": "geaendertAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_ansprechpartner_auftraggeberUuid",
+            "unique": false,
+            "columnNames": [
+              "auftraggeberUuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_ansprechpartner_auftraggeberUuid` ON `${TABLE_NAME}` (`auftraggeberUuid`)"
+          },
+          {
+            "name": "index_ansprechpartner_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_ansprechpartner_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          }
+        ]
+      },
+      {
+        "tableName": "preis",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uuid` TEXT NOT NULL, `auftraggeberUuid` TEXT NOT NULL, `bezeichnung` TEXT NOT NULL, `betragCent` INTEGER, `einheit` TEXT NOT NULL, `gueltigAb` INTEGER, `notiz` TEXT NOT NULL, `geaendertAm` INTEGER NOT NULL, `syncOffen` INTEGER NOT NULL, PRIMARY KEY(`uuid`))",
+        "fields": [
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "auftraggeberUuid",
+            "columnName": "auftraggeberUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bezeichnung",
+            "columnName": "bezeichnung",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "betragCent",
+            "columnName": "betragCent",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "einheit",
+            "columnName": "einheit",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gueltigAb",
+            "columnName": "gueltigAb",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "notiz",
+            "columnName": "notiz",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geaendertAm",
+            "columnName": "geaendertAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_preis_auftraggeberUuid",
+            "unique": false,
+            "columnNames": [
+              "auftraggeberUuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_preis_auftraggeberUuid` ON `${TABLE_NAME}` (`auftraggeberUuid`)"
+          },
+          {
+            "name": "index_preis_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_preis_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          }
+        ]
+      },
+      {
+        "tableName": "aktivitaet",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uuid` TEXT NOT NULL, `auftraggeberUuid` TEXT NOT NULL, `datum` INTEGER NOT NULL, `art` TEXT NOT NULL, `text` TEXT NOT NULL, `kontakt` TEXT NOT NULL, `geaendertAm` INTEGER NOT NULL, `syncOffen` INTEGER NOT NULL, PRIMARY KEY(`uuid`))",
+        "fields": [
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "auftraggeberUuid",
+            "columnName": "auftraggeberUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "datum",
+            "columnName": "datum",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "art",
+            "columnName": "art",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kontakt",
+            "columnName": "kontakt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geaendertAm",
+            "columnName": "geaendertAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_aktivitaet_auftraggeberUuid",
+            "unique": false,
+            "columnNames": [
+              "auftraggeberUuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aktivitaet_auftraggeberUuid` ON `${TABLE_NAME}` (`auftraggeberUuid`)"
+          },
+          {
+            "name": "index_aktivitaet_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aktivitaet_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          }
+        ]
+      },
+      {
+        "tableName": "aufgabe",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uuid` TEXT NOT NULL, `auftraggeberUuid` TEXT NOT NULL, `faelligAm` INTEGER, `text` TEXT NOT NULL, `kontakt` TEXT NOT NULL, `erledigt` INTEGER NOT NULL, `geaendertAm` INTEGER NOT NULL, `syncOffen` INTEGER NOT NULL, PRIMARY KEY(`uuid`))",
+        "fields": [
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "auftraggeberUuid",
+            "columnName": "auftraggeberUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "faelligAm",
+            "columnName": "faelligAm",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kontakt",
+            "columnName": "kontakt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "erledigt",
+            "columnName": "erledigt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geaendertAm",
+            "columnName": "geaendertAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_aufgabe_auftraggeberUuid",
+            "unique": false,
+            "columnNames": [
+              "auftraggeberUuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aufgabe_auftraggeberUuid` ON `${TABLE_NAME}` (`auftraggeberUuid`)"
+          },
+          {
+            "name": "index_aufgabe_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aufgabe_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          },
+          {
+            "name": "index_aufgabe_faelligAm",
+            "unique": false,
+            "columnNames": [
+              "faelligAm"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aufgabe_faelligAm` ON `${TABLE_NAME}` (`faelligAm`)"
+          }
+        ]
+      },
+      {
+        "tableName": "dokument",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uuid` TEXT NOT NULL, `auftraggeberUuid` TEXT NOT NULL, `titel` TEXT NOT NULL, `link` TEXT NOT NULL, `notiz` TEXT NOT NULL, `geaendertAm` INTEGER NOT NULL, `syncOffen` INTEGER NOT NULL, PRIMARY KEY(`uuid`))",
+        "fields": [
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "auftraggeberUuid",
+            "columnName": "auftraggeberUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titel",
+            "columnName": "titel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "link",
+            "columnName": "link",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notiz",
+            "columnName": "notiz",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geaendertAm",
+            "columnName": "geaendertAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_dokument_auftraggeberUuid",
+            "unique": false,
+            "columnNames": [
+              "auftraggeberUuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_dokument_auftraggeberUuid` ON `${TABLE_NAME}` (`auftraggeberUuid`)"
+          },
+          {
+            "name": "index_dokument_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_dokument_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          }
+        ]
+      },
+      {
+        "tableName": "chance",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uuid` TEXT NOT NULL, `auftraggeberUuid` TEXT NOT NULL, `titel` TEXT NOT NULL, `wertCent` INTEGER, `phase` TEXT NOT NULL, `erwartetAm` INTEGER, `notiz` TEXT NOT NULL, `geaendertAm` INTEGER NOT NULL, `syncOffen` INTEGER NOT NULL, PRIMARY KEY(`uuid`))",
+        "fields": [
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "auftraggeberUuid",
+            "columnName": "auftraggeberUuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titel",
+            "columnName": "titel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "wertCent",
+            "columnName": "wertCent",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "phase",
+            "columnName": "phase",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "erwartetAm",
+            "columnName": "erwartetAm",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "notiz",
+            "columnName": "notiz",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "geaendertAm",
+            "columnName": "geaendertAm",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncOffen",
+            "columnName": "syncOffen",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_chance_auftraggeberUuid",
+            "unique": false,
+            "columnNames": [
+              "auftraggeberUuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_chance_auftraggeberUuid` ON `${TABLE_NAME}` (`auftraggeberUuid`)"
+          },
+          {
+            "name": "index_chance_syncOffen",
+            "unique": false,
+            "columnNames": [
+              "syncOffen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_chance_syncOffen` ON `${TABLE_NAME}` (`syncOffen`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '175b50b6c46cdc75d9fae7eb4a2d59e2')"
+    ]
+  }
+}

@@ -337,7 +337,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 4;
+  cloud.umgebung.kontext.API_VERSION = 5;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
@@ -436,7 +436,7 @@ test('CRM: Sicherung des Browser-CRM importieren und als CSV exportieren', async
   await s.waitForFunction(() => true);
   await new Promise(ok => setTimeout(ok, 500));
   assert.deepEqual(downloads.map(d => d.suggestedFilename().replace(/_\d{4}-\d{2}-\d{2}/, '')).sort(),
-    ['CRM_Aktivitaeten.csv', 'CRM_Ansprechpartner.csv', 'CRM_Firmen.csv', 'CRM_Preise.csv', 'CRM_Wiedervorlagen.csv']);
+    ['CRM_Aktivitaeten.csv', 'CRM_Ansprechpartner.csv', 'CRM_Firmen.csv', 'CRM_Preise.csv', 'CRM_Verkaufschancen.csv', 'CRM_Wiedervorlagen.csv']);
   const preise = require('node:fs').readFileSync(await downloads.find(d => d.suggestedFilename().startsWith('CRM_Preise')).path(), 'utf8');
   assert.ok(preise.startsWith('\uFEFFFirma;Bezeichnung;Betrag (EUR);Einheit;Gültig ab;Notiz\r\n'), preise);
   assert.ok(preise.includes('Seats and Sofas Krefeld;Etage;12,50;pro Etage;01.01.2026;'), preise);
@@ -448,3 +448,63 @@ async function legeFallAnUeberSchaeden(s) {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Seats and Sofas Krefeld', auftraggeberKontakt: 'Tim Berg' });
   await s.locator('[data-bereich=firmen]').click();
 }
+
+test('CRM: Chancen, Schlagworte, Kennzahlen, Folgetermin, Verschieben und Zusammenführen', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'firmen' });
+  await melde(a, PIN, true); await aktuell(a);
+  const firma = async (name, schlagworte) => {
+    await a.locator('[data-neue-firma]').click();
+    await a.locator('#crm-form [name=name]').fill(name);
+    await a.locator('#crm-form [name=schlagworte]').fill(schlagworte);
+    await a.locator('#crm-form button.voll').click();
+    await a.locator('#stammdaten', { hasText: name }).waitFor();
+  };
+  await firma('Seats and Sofas', 'Möbel, Montage');
+  await a.locator('[data-crm-neu=chancen]').click();
+  await a.locator('#crm-form [name=titel]').fill('Neue Filiale Düsseldorf');
+  await a.locator('#crm-form [name=phase]').selectOption('ANGEBOT');
+  await a.locator('#crm-form [name=betrag]').fill('25.000');
+  await a.locator('#crm-form button.voll').click();
+  await a.locator('#kennzahlen', { hasText: 'Offene Chancen' }).waitFor();
+  assert.match(await a.locator('#kennzahlen').innerText(), /1 · 25\.000,00/);
+
+  // Kontakt mit Folgetermin legt eine Wiedervorlage an.
+  await a.locator('[data-crm-neu=aktivitaeten]').click();
+  await a.locator('#crm-form [name=text]').fill('Angebot besprochen');
+  await a.locator('#crm-form [name=folgeAm]').fill('2020-01-01');
+  await a.locator('#crm-form button.voll').click();
+  await a.locator('#detail').getByText('Nachfassen: Angebot besprochen').waitFor();
+
+  // Termine: überfällige Wiedervorlage auf morgen schieben.
+  await a.locator('[data-bereich=termine]').click();
+  await a.locator('#termine').getByText('Überfällig (1)').waitFor();
+  await a.locator('#termine [data-tage="1"]').click();
+  await a.locator('#termine').getByText('Demnächst (1)').waitFor();
+
+  // Schlagwort-Filter und „Lange kein Kontakt“
+  await a.locator('[data-bereich=firmen]').click();
+  await firma('Media Markt', 'Elektro');
+  await a.locator('[data-schlagwort="Elektro"]').click();
+  assert.deepEqual(await a.locator('#firmen .titel').allInnerTexts(), ['Media Markt']);
+  await a.locator('[data-schlagwort="Elektro"]').click();
+  await a.locator('[data-firmen-status=PAUSE]').click();
+  assert.deepEqual(await a.locator('#firmen .titel').allInnerTexts(), ['Media Markt'], 'mit Seats wurde gerade gesprochen');
+
+  // Media Markt in Seats and Sofas überführen.
+  await a.locator('[data-firmen-status=""]').click();
+  await a.locator('#firmen').getByText('Media Markt').click();
+  await a.locator('[data-firma-bearbeiten]').click();
+  await a.locator('#crm-form summary').click();
+  const seatsId = await a.evaluate(() => auftraggeberListe().find(e => e.name === 'Seats and Sofas').id);
+  await a.locator('#zusammen-ziel').selectOption(seatsId);
+  await a.locator('#zusammen-los').click();
+  await a.locator('#ja').click();
+  await a.locator('#stammdaten', { hasText: 'Seats and Sofas' }).waitFor();
+  assert.deepEqual(await a.evaluate(() => auftraggeberListe().map(e => [e.name, e.schlagworte])), [['Seats and Sofas', 'Möbel, Montage, Elektro']]);
+  await aktuell(a);
+  const daten = cloudDaten(cloud);
+  assert.deepEqual(Object.values(daten.chancen).map(c => [c.titel, c.phase, c.wertCent]), [['Neue Filiale Düsseldorf', 'ANGEBOT', 2500000]]);
+  assert.equal(Object.values(daten.auftraggeber).filter(f => !f.geloescht).length, 1);
+  await cloud.schliessen();
+});

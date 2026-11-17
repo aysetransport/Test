@@ -202,6 +202,7 @@ class EinstellungenViewModel(
             "CRM_Preise_$heute.csv" to CsvExport.preise(firmen, db.preise),
             "CRM_Aktivitaeten_$heute.csv" to CsvExport.aktivitaeten(firmen, db.aktivitaeten),
             "CRM_Wiedervorlagen_$heute.csv" to CsvExport.wiedervorlagen(firmen, db.aufgaben),
+            "CRM_Verkaufschancen_$heute.csv" to CsvExport.chancen(firmen, db.chancen),
         ).map { (name, inhalt) ->
             val datei = anlagenSpeicher.exportDatei(name)
             withContext(Dispatchers.IO) { datei.writeText(inhalt, Charsets.UTF_8) }

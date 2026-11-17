@@ -18,6 +18,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -57,6 +58,9 @@ class WiedervorlagenViewModel(private val crm: CrmRepository, repository: Schade
 
     fun aktualisiereHeute() { heute.value = LocalDate.now() }
     fun erledigt(a: Aufgabe) = viewModelScope.launch { crm.aufgabeErledigt(a, true) }
+
+    /** Wiedervorlage verschieben – ab heute gerechnet, auch wenn sie überfällig war. */
+    fun verschieben(a: Aufgabe, tage: Long) = viewModelScope.launch { crm.speichern(a.copy(faelligAm = LocalDate.now().plusDays(tage))) }
 
     companion object {
         fun factory(container: AppContainer) = viewModelFactory { initializer { WiedervorlagenViewModel(container.crm, container.repository) } }
@@ -148,6 +152,12 @@ private fun TerminEintrag(titel: String, zusatz: String, datum: LocalDate?, aufg
             Text(titel, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val zeile = listOfNotNull(datum?.let(Datum::format), zusatz.takeIf { it.isNotBlank() }).joinToString(" · ")
             if (zeile.isNotEmpty()) Text(zeile, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (aufgabe != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { viewModel.verschieben(aufgabe, 1) }, modifier = Modifier.testTag("morgen-${aufgabe.uuid}")) { Text("Morgen") }
+                    TextButton(onClick = { viewModel.verschieben(aufgabe, 7) }, modifier = Modifier.testTag("woche-${aufgabe.uuid}")) { Text("+1 Woche") }
+                }
+            }
         }
     }
 }

@@ -11,6 +11,7 @@ import de.aysetransport.schaden.data.model.Adresse
 import de.aysetransport.schaden.data.model.Aktivitaet
 import de.aysetransport.schaden.data.model.Anlage
 import de.aysetransport.schaden.data.model.Aufgabe
+import de.aysetransport.schaden.data.model.Chance
 import de.aysetransport.schaden.data.model.AuftraggeberEintrag
 import de.aysetransport.schaden.data.model.Dokument
 import de.aysetransport.schaden.data.model.Kontaktperson
@@ -23,9 +24,9 @@ import de.aysetransport.schaden.data.model.VerlaufEintrag
 @Database(
     entities = [
         Schadensfall::class, VerlaufEintrag::class, Anlage::class, Loeschung::class, AuftraggeberEintrag::class, MailNachricht::class,
-        Adresse::class, Kontaktperson::class, Preis::class, Aktivitaet::class, Aufgabe::class, Dokument::class,
+        Adresse::class, Kontaktperson::class, Preis::class, Aktivitaet::class, Aufgabe::class, Dokument::class, Chance::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Konverter::class)
@@ -40,7 +41,7 @@ abstract class SchadensfallDatenbank : RoomDatabase() {
 
         fun erstelle(context: Context): SchadensfallDatenbank =
             Room.databaseBuilder(context, SchadensfallDatenbank::class.java, DATEINAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
 
         /** Version 3: eigene Kontaktdaten für den Auftraggeber und eine Auftraggeber-Liste zum Auswählen. */
@@ -97,6 +98,20 @@ abstract class SchadensfallDatenbank : RoomDatabase() {
         /** Version 6: CRM für die Auftraggeber, E-Mails ohne Fall, zwei Postfächer. */
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) = MigrationCrm.migriere(db)
+        }
+
+        /** Version 7: Verkaufschancen und Schlagworte für Firmen. */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `auftraggeber` ADD COLUMN `schlagworte` TEXT NOT NULL DEFAULT ''")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `chance` (`uuid` TEXT NOT NULL, `auftraggeberUuid` TEXT NOT NULL, `titel` TEXT NOT NULL, " +
+                        "`wertCent` INTEGER, `phase` TEXT NOT NULL, `erwartetAm` INTEGER, `notiz` TEXT NOT NULL, `geaendertAm` INTEGER NOT NULL, " +
+                        "`syncOffen` INTEGER NOT NULL, PRIMARY KEY(`uuid`))",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_chance_auftraggeberUuid` ON `chance` (`auftraggeberUuid`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_chance_syncOffen` ON `chance` (`syncOffen`)")
+            }
         }
 
         /** Zufällige UUID (Version 4) in SQL – wird für jede Zeile neu ausgewertet. */

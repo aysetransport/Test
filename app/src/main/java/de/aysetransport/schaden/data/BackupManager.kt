@@ -7,6 +7,7 @@ import de.aysetransport.schaden.data.model.Adresse
 import de.aysetransport.schaden.data.model.Aktivitaet
 import de.aysetransport.schaden.data.model.Anlage
 import de.aysetransport.schaden.data.model.Aufgabe
+import de.aysetransport.schaden.data.model.Chance
 import de.aysetransport.schaden.data.model.AuftraggeberEintrag
 import de.aysetransport.schaden.data.model.Dokument
 import de.aysetransport.schaden.data.model.Kontaktperson
@@ -45,6 +46,8 @@ data class BackupDaten(
     val aufgaben: List<Aufgabe> = emptyList(),
     val dokumente: List<Dokument> = emptyList(),
     val mails: List<MailNachricht> = emptyList(),
+    // ab App 2.1
+    val chancen: List<Chance> = emptyList(),
 )
 
 data class BackupErgebnis(val faelle: Int, val anlagen: Int, val firmen: Int = 0)
@@ -86,6 +89,7 @@ class BackupManager(
                 aufgaben = crm.ladeAlleAufgaben(),
                 dokumente = crm.ladeAlleDokumente(),
                 mails = crm.ladeAlleMails(),
+                chancen = crm.ladeAlleChancen(),
             )
         }
         ZipOutputStream(ziel.buffered()).use { zip ->
@@ -179,7 +183,7 @@ class BackupManager(
                     // Ein Backup aus Version 1.x kennt kein CRM: Die Firmen entstehen dann neu aus den Fällen.
                     dao.loescheAlleAuftraggeber()
                     crm.loescheAlleAdressen(); crm.loescheAlleKontaktpersonen(); crm.loescheAllePreise()
-                    crm.loescheAlleAktivitaeten(); crm.loescheAlleAufgaben(); crm.loescheAlleDokumente(); crm.loescheAlleMails()
+                    crm.loescheAlleAktivitaeten(); crm.loescheAlleAufgaben(); crm.loescheAlleDokumente(); crm.loescheAlleMails(); crm.loescheAlleChancen()
                     dao.speichereAuftraggeberListe(daten.auftraggeber)
                     crm.speichereAdressen(daten.adressen)
                     crm.speichereKontaktpersonen(daten.ansprechpartner)
@@ -187,12 +191,13 @@ class BackupManager(
                     crm.speichereAktivitaeten(daten.aktivitaeten)
                     crm.speichereAufgaben(daten.aufgaben)
                     crm.speichereDokumente(daten.dokumente)
+                    crm.speichereChancen(daten.chancen)
                     crm.einfuegenMails(mails)
                     CrmVerknuepfer(db, uhr).verknuepfeAlle()
                     // Was im Backup steht, soll nicht durch eine ältere, noch offene Löschung wieder verschwinden.
                     val kennungen = daten.faelle.map { it.uuid } + daten.auftraggeber.map { it.uuid } + daten.adressen.map { it.uuid } +
                         daten.ansprechpartner.map { it.uuid } + daten.preise.map { it.uuid } + daten.aktivitaeten.map { it.uuid } +
-                        daten.aufgaben.map { it.uuid } + daten.dokumente.map { it.uuid }
+                        daten.aufgaben.map { it.uuid } + daten.dokumente.map { it.uuid } + daten.chancen.map { it.uuid }
                     kennungen.chunked(500).forEach { dao.vergissLoeschungen(it) }
                 }
             } catch (e: SQLException) {

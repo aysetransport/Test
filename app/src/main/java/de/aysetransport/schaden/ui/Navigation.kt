@@ -200,6 +200,7 @@ fun SchadensfallNavigation(
                 onNeuerFall = { nav.navigate(BearbeitenZiel(firma = ziel.uuid)) { launchSingleTop = true } },
                 onMailSchreiben = { an -> nav.navigate(MailZiel(firma = ziel.uuid, an = an)) { launchSingleTop = true } },
                 onMailOeffnen = zurMail,
+                onFirmaOeffnen = { uuid -> nav.navigate(FirmaZiel(uuid)) { popUpTo<FirmaZiel> { inclusive = true }; launchSingleTop = true } },
             )
         }
         composable<MailAnsichtZiel> { eintrag ->

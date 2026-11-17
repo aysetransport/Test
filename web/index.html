@@ -405,8 +405,8 @@ function csvErstellen(faelle, anlagenJeFall) {
 
 // ============================== Daten im Browser ==============================
 const SPEICHER = 'schadensfaelle-v1', PIN_SPEICHER = 'schadensfaelle-pin';
-const CRM_TABELLEN = ['adressen', 'ansprechpartner', 'preise', 'aktivitaeten', 'aufgaben', 'dokumente'];
-const LEER = () => ({ faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {}, adressen: {}, ansprechpartner: {}, preise: {}, aktivitaeten: {}, aufgaben: {}, dokumente: {}, seit: 0, kennung: '', apiUrl: '', nurLokal: false,
+const CRM_TABELLEN = ['adressen', 'ansprechpartner', 'preise', 'aktivitaeten', 'aufgaben', 'dokumente', 'chancen'];
+const LEER = () => ({ faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {}, adressen: {}, ansprechpartner: {}, preise: {}, aktivitaeten: {}, aufgaben: {}, dokumente: {}, chancen: {}, seit: 0, kennung: '', apiUrl: '', nurLokal: false,
   einstellungen: { firma: '', bearbeiter: '', funktion: '', wiedervorlageTage: 7 } });
 let S = LEER();
 try { S = Object.assign(LEER(), JSON.parse(localStorage.getItem(SPEICHER) || '{}')); } catch { /* beschädigter Stand: neu beginnen, die Cloud liefert nach */ }
@@ -550,6 +550,18 @@ const Aktionen = {
     for (const fall of faelle().filter(x => x.auftraggeberUuid === e.id)) S.faelle[fall.id] = { ...fall, auftraggeberUuid: '' };
     entferne('auftraggeber', e, { geaendertAm: jetztIso() }); nachAenderung();
   },
+  /** Doppelt angelegte Firma [weg] in [ziel] überführen. */
+  firmenZusammenfuehren(weg, ziel) {
+    const jetzt = jetztIso();
+    for (const t of CRM_TABELLEN) for (const x of alle(t).filter(x => x.firmaId === weg.id)) merke(t, { ...x, firmaId: ziel.id, geaendertAm: jetzt });
+    for (const f of faelle().filter(f => gehoertZu(f, weg))) fallMerken({ ...f, auftraggeberUuid: ziel.id, auftraggeber: ziel.name });
+    for (const m of Object.values(mails())) if (m.firmaId === weg.id) m.firmaId = ziel.id;
+    const w = [...new Map([...schlagwortListe(ziel), ...schlagwortListe(weg)].map(x => [x.toLowerCase(), x])).values()].join(', ');
+    merke('auftraggeber', { ...ziel, rechtsform: ziel.rechtsform || weg.rechtsform || '', telefon: ziel.telefon || weg.telefon || '', email: ziel.email || weg.email || '',
+      website: ziel.website || weg.website || '', notizen: [ziel.notizen, weg.notizen].filter(Boolean).join('\n\n'), schlagworte: w, geaendertAm: jetzt });
+    entferne('auftraggeber', weg, { geaendertAm: jetzt });
+    nachAenderung();
+  },
   crmSpeichern(tabelle, e) { merke(tabelle, { ...e, id: e.id || uuid(), geaendertAm: jetztIso() }); nachAenderung(); },
   crmLoeschen(tabelle, e) { entferne(tabelle, e, { firmaId: e.firmaId, geaendertAm: jetztIso() }); nachAenderung(); },
   fallLoeschen(id) {
@@ -615,7 +627,7 @@ async function api(fn, ...args) {
   return j.ok;
 }
 const TABELLEN = ['faelle', 'verlauf', 'anlagen', 'auftraggeber', ...CRM_TABELLEN];
-const CLOUD_API = 4;
+const CLOUD_API = 5;
 const VERALTET = 'Das Cloud-Skript ist veraltet – bitte die neue Code.gs bereitstellen.';
 const offeneAnzahl = () => TABELLEN.reduce((n, t) => n + offene(t).length, 0);
 const SYNC = { laeuft: false, nochmal: false, fehler: '', zuletzt: 0, timer: 0 };
@@ -1116,7 +1128,7 @@ function zeichneEinstellungen() {
     ${window.desktop ? mailEinstellungen() : ''}
     <div class="karte block"><h3>CRM</h3><p class="leise" style="margin-bottom:8px">Die Sicherung des bisherigen Browser-CRM (JSON) einlesen. Firmen mit gleichem Namen werden zusammengeführt, nichts wird doppelt angelegt.</p>
       <div class="zeile"><label class="knopf" id="crm-import-knopf">Sicherung des Browser-CRM importieren<input type="file" id="crm-import" accept=".json,application/json" hidden></label>
-      <button class="knopf" id="crm-csv">CRM für Excel exportieren (5 CSV-Dateien)</button></div></div>
+      <button class="knopf" id="crm-csv">CRM für Excel exportieren (6 CSV-Dateien)</button></div></div>
     <div class="karte block"><h3>Daten</h3><button class="knopf" id="csv">Fallliste für Excel exportieren (CSV)</button></div>
     <p class="leise">Erinnerungen per Benachrichtigung gibt es in der Android-App. Hier stehen fällige Fälle immer oben.</p>`;
 }
@@ -1172,6 +1184,15 @@ $('#detail').addEventListener('click', e => {
 const FIRMEN_STATUS = { INTERESSENT: ['Interessent', 'violett'], AKTIV: ['Aktiv', 'gruen'], PAUSIERT: ['Pausiert', 'gelb'], EHEMALIG: ['Ehemalig', 'grau'] };
 const ADRESS_ART = { HAUPTSITZ: 'Hauptsitz', LAGER: 'Lager', FILIALE: 'Filiale', RECHNUNG: 'Rechnungsadresse', SONSTIGE: 'Sonstige' };
 const AKTIVITAET_ART = { ANRUF: 'Anruf', EMAIL: 'E-Mail', TREFFEN: 'Treffen', ANGEBOT: 'Angebot', SONSTIGES: 'Sonstiges' };
+const CHANCEN_PHASE = { ANFRAGE: ['Anfrage', true], ANGEBOT: ['Angebot', true], VERHANDLUNG: ['Verhandlung', true], GEWONNEN: ['Gewonnen', false], VERLOREN: ['Verloren', false] };
+const KONTAKT_PAUSE_TAGE = 60;
+const schlagwortListe = e => [...new Map(String(e.schlagworte || '').split(',').map(x => x.trim()).filter(Boolean).map(x => [x.toLowerCase(), x])).values()];
+const letzterKontakt = id => vonFirma('aktivitaeten', id).map(a => a.datum).sort().pop() || null;
+const langeKeinKontakt = e => (e.status || 'AKTIV') === 'AKTIV' && (!letzterKontakt(e.id) || letzterKontakt(e.id) < plusTage(heute(), -KONTAKT_PAUSE_TAGE));
+function preislisteText(e) {
+  return `Preise und Konditionen – ${firmaName(e)}\n` + vonFirma('preise', e.id).sort((a, b) => a.bezeichnung.localeCompare(b.bezeichnung, 'de')).map(p =>
+    `• ${p.bezeichnung}${p.betragCent != null ? ': ' + geld(p.betragCent) : ''}${p.einheit ? ' ' + p.einheit : ''}${p.gueltigAb ? ` (gültig ab ${datumText(p.gueltigAb)})` : ''}${p.notiz ? ' – ' + p.notiz : ''}`).join('\n');
+}
 const firmenStatus = e => FIRMEN_STATUS[e.status] || FIRMEN_STATUS.AKTIV;
 const firmaName = e => [e.name, e.rechtsform].filter(Boolean).join(' ');
 const vonFirma = (tabelle, id) => alle(tabelle).filter(x => x.firmaId === id);
@@ -1195,6 +1216,7 @@ function firmaTreffer(e, such) {
   const p = t => String(t || '').toLowerCase().includes(such);
   if (p(e.name) || p(e.rechtsform)) return '';
   if (p(e.notizen)) return 'Notizen';
+  if (p(e.schlagworte)) return 'Schlagwort';
   if (p(e.email) || p(e.telefon) || p(e.website)) return 'Kontaktdaten';
   let x = vonFirma('ansprechpartner', e.id).find(k => [k.name, k.thema, k.telefon, k.email, k.notiz].some(p)); if (x) return 'Ansprechpartner: ' + x.name;
   x = vonFirma('adressen', e.id).find(a => [a.strasse, a.plz, a.ort, a.notiz].some(p)); if (x) return 'Adresse: ' + adresseText(x);
@@ -1218,7 +1240,9 @@ function bereichsReiter() {
 
 function zeichneFirmenliste(r) {
   const such = ANSICHT.firmenSuche.trim().toLowerCase();
-  const zeilen = auftraggeberListe().filter(e => !ANSICHT.firmenStatus || e.status === ANSICHT.firmenStatus)
+  const zeilen = auftraggeberListe()
+    .filter(e => (ANSICHT.firmenStatus === 'PAUSE' ? langeKeinKontakt(e) : !ANSICHT.firmenStatus || e.status === ANSICHT.firmenStatus))
+    .filter(e => !ANSICHT.schlagwort || schlagwortListe(e).some(w => w.toLowerCase() === ANSICHT.schlagwort.toLowerCase()))
     .map(e => ({ e, treffer: such ? firmaTreffer(e, such) : '' })).filter(z => z.treffer !== null);
   const karten = zeilen.map(({ e, treffer }) => {
     const t = naechsterTermin(e), offen = faelle().filter(f => gehoertZu(f, e) && status(f).offen).length;
@@ -1226,7 +1250,8 @@ function zeichneFirmenliste(r) {
     return `<button class="karte klickbar ${r.art === 'firma' && r.id === e.id ? 'gewaehlt' : ''}" data-firma="${e.id}">
       <div class="zeile eng"><span class="titel fuell">${esc(firmaName(e))}</span><span class="marke ${firmenStatus(e)[1]}">${firmenStatus(e)[0]}</span></div>
       ${treffer ? `<div class="leise" style="color:var(--primaer)">${esc(treffer)}</div>` : ''}
-      ${offen || e.telefon ? `<div class="leise">${esc([offen && (offen === 1 ? '1 offener Schadensfall' : offen + ' offene Schadensfälle'), e.telefon].filter(Boolean).join(' · '))}</div>` : ''}
+      ${schlagwortListe(e).length ? `<div class="leise" style="color:var(--primaer)">${schlagwortListe(e).map(w => '#' + esc(w)).join('  ')}</div>` : ''}
+      ${offen || e.telefon || letzterKontakt(e.id) ? `<div class="leise">${esc([offen && (offen === 1 ? '1 offener Schadensfall' : offen + ' offene Schadensfälle'), letzterKontakt(e.id) && 'letzter Kontakt ' + datumText(letzterKontakt(e.id)), e.telefon].filter(Boolean).join(' · '))}</div>` : ''}
       ${t ? `<div class="leise" style="${t.datum <= heute() ? 'color:var(--rot-t)' : ''}">⏱ ${esc(tText)}: ${esc(t.titel)}</div>` : ''}</button>`;
   }).join('');
   const faelleTreffer = such ? filtereUndSortiere(faelle(), 'ALLE', such) : [];
@@ -1234,8 +1259,11 @@ function zeichneFirmenliste(r) {
     ? '<div class="leer">🏢<b>Noch keine Auftraggeber</b>Lege die erste Firma an oder importiere die Sicherung des Browser-CRM unter ⚙ → CRM. Auftraggeber aus Schadensfällen kommen automatisch dazu.</div>'
     : `<div class="leer"><b>Keine Treffer</b>${such ? `Zu „${esc(ANSICHT.firmenSuche.trim())}“ wurde nichts gefunden.` : 'In dieser Ansicht gibt es keine Firmen.'}</div>`;
   return `<input class="suche" id="firmen-suche" type="search" placeholder="Firma, Ansprechpartner, Notiz, Fall …" aria-label="Firmen durchsuchen" value="${esc(ANSICHT.firmenSuche)}">
-    <div class="chips" role="group" aria-label="Status"><button class="chip" data-firmen-status="" aria-pressed="${!ANSICHT.firmenStatus}">Alle</button>${Object.entries(FIRMEN_STATUS).map(([k, [l]]) =>
+    <div class="chips" role="group" aria-label="Status"><button class="chip" data-firmen-status="" aria-pressed="${!ANSICHT.firmenStatus}">Alle</button>
+      <button class="chip" data-firmen-status="PAUSE" aria-pressed="${ANSICHT.firmenStatus === 'PAUSE'}">Lange kein Kontakt</button>${Object.entries(FIRMEN_STATUS).map(([k, [l]]) =>
       `<button class="chip" data-firmen-status="${k}" aria-pressed="${ANSICHT.firmenStatus === k}">${l}</button>`).join('')}</div>
+    ${(() => { const w = [...new Map(auftraggeberListe().flatMap(schlagwortListe).map(x => [x.toLowerCase(), x])).values()].sort((a, b) => a.localeCompare(b, 'de'));
+      return w.length ? `<div class="chips" role="group" aria-label="Schlagworte">${w.map(x => `<button class="chip" data-schlagwort="${esc(x)}" aria-pressed="${(ANSICHT.schlagwort || '').toLowerCase() === x.toLowerCase()}"># ${esc(x)}</button>`).join('')}</div>` : ''; })()}
     <button class="knopf voll fab" data-neue-firma>＋ Neue Firma</button>
     <div id="firmen">${karten || (faelleTreffer.length ? '' : leer)}</div>
     ${faelleTreffer.length ? `<h3 class="abschnitt">Schadensfälle</h3>${faelleTreffer.map(f => `<button class="karte klickbar" data-fall="${f.id}"><div class="zeile eng"><span class="titel fuell">${esc(anzeigeName(f))}</span><span class="marke ${status(f).farbe}">${esc(status(f).label)}</span></div><div class="leise">${esc([f.fallnummer, f.auftraggeber].filter(Boolean).join(' · '))}</div></button>`).join('')}` : ''}`;
@@ -1244,7 +1272,8 @@ function zeichneFirmenliste(r) {
 function zeichneTermine() {
   const w = wiedervorlagen();
   const eintrag = x => x.art === 'aufgabe'
-    ? `<div class="termin"><input type="checkbox" data-erledigt="${x.a.id}" aria-label="Erledigt"><button class="vorlage fuell" data-firma="${x.a.firmaId}"><b>${esc(x.titel)}</b><br><span class="leise">${esc([x.datum !== heute() && datumText(x.datum), x.zusatz].filter(Boolean).join(' · '))}</span></button></div>`
+    ? `<div class="termin"><input type="checkbox" data-erledigt="${x.a.id}" aria-label="Erledigt"><button class="vorlage fuell" data-firma="${x.a.firmaId}"><b>${esc(x.titel)}</b><br><span class="leise">${esc([x.datum !== heute() && datumText(x.datum), x.zusatz].filter(Boolean).join(' · '))}</span></button>
+      <button class="knopf text" data-verschieben="${x.a.id}" data-tage="1">Morgen</button><button class="knopf text" data-verschieben="${x.a.id}" data-tage="7">+1 Woche</button></div>`
     : `<div class="termin"><span class="termin-symbol">🚚</span><button class="vorlage fuell" data-fall="${x.f.id}"><b>${esc(x.titel)}</b><br><span class="leise">${esc([x.datum !== heute() && datumText(x.datum), x.zusatz].filter(Boolean).join(' · '))}</span></button></div>`;
   const gruppe = (titel, liste, farbe) => (liste.length ? `<h3 class="abschnitt" style="${farbe}">${titel} (${liste.length})</h3>${liste.map(eintrag).join('')}` : '');
   const ohne = w.ohneDatum.length ? `<h3 class="abschnitt">Ohne Datum</h3>${w.ohneDatum.map(a => eintrag({ art: 'aufgabe', datum: '', titel: a.text, zusatz: S.auftraggeber[a.firmaId]?.name || '', a })).join('')}` : '';
@@ -1286,6 +1315,17 @@ function zeichneFirma(id) {
       ${/^https?:\/\//i.test(d.link || '') ? `<a class="symbol" href="${esc(d.link)}" target="_blank" rel="noopener" aria-label="${esc(d.titel)} öffnen">↗</a>` : ''}</div>`).join('');
   const faelleDerFirma = faelle().filter(f => gehoertZu(f, e)).sort((a, b) => String(b.geaendertAm).localeCompare(String(a.geaendertAm)))
     .map(f => `<button class="vorlage" data-fall="${f.id}"><div class="zeile eng"><b class="fuell">${esc(f.fallnummer)} · ${esc(anzeigeName(f))}</b><span class="marke ${status(f).farbe}">${esc(status(f).label)}</span></div></button>`).join('');
+  const chancen = vonFirma('chancen', id).sort((a, b) => Object.keys(CHANCEN_PHASE).indexOf(a.phase) - Object.keys(CHANCEN_PHASE).indexOf(b.phase))
+    .map(c => zeile('chancen', c, [c.titel, c.wertCent != null && geld(c.wertCent)].filter(Boolean).join(' · '),
+      [(CHANCEN_PHASE[c.phase] || CHANCEN_PHASE.ANFRAGE)[0], c.erwartetAm && 'Entscheidung bis ' + datumText(c.erwartetAm), c.notiz].filter(Boolean).join(' · '))).join('');
+  const fd = faelle().filter(f => gehoertZu(f, e)), ch = vonFirma('chancen', id);
+  const offeneCh = ch.filter(c => (CHANCEN_PHASE[c.phase] || CHANCEN_PHASE.ANFRAGE)[1]), summe = l => l.reduce((n, x) => n + (x || 0), 0);
+  const kennzahlen = [['Schadensfälle', `${fd.filter(f => status(f).offen).length} offen / ${fd.length}`],
+    summe(fd.filter(f => status(f).offen).map(f => f.forderungCent)) && ['Offene Forderungen', geld(summe(fd.filter(f => status(f).offen).map(f => f.forderungCent)))],
+    summe(fd.map(f => f.vergleichCent)) && ['Gezahlt / verglichen', geld(summe(fd.map(f => f.vergleichCent)))],
+    offeneCh.length && ['Offene Chancen', `${offeneCh.length} · ${geld(summe(offeneCh.map(c => c.wertCent)))}`],
+    summe(ch.filter(c => c.phase === 'GEWONNEN').map(c => c.wertCent)) && ['Gewonnen', geld(summe(ch.filter(c => c.phase === 'GEWONNEN').map(c => c.wertCent)))],
+    ['Letzter Kontakt', letzterKontakt(id) ? datumText(letzterKontakt(id)) : 'noch keiner']].filter(Boolean);
   el.dataset.id = 'firma' + id;
   el.innerHTML = `<div class="karte" id="stammdaten">
       <div class="zeile eng"><h2 class="gross fuell">${esc(firmaName(e))}</h2><span class="marke ${firmenStatus(e)[1]}">${firmenStatus(e)[0]}</span>
@@ -1294,10 +1334,14 @@ function zeichneFirma(id) {
       ${e.email ? `<p><button class="knopf text" style="padding:0" data-oeffne="mailto:${esc(e.email)}">✉ ${esc(e.email)}</button></p>` : ''}
       ${e.website ? `<p><a href="${esc(/^https?:/i.test(e.website) ? e.website : 'https://' + e.website)}" target="_blank" rel="noopener">🌐 ${esc(e.website)}</a></p>` : ''}
       ${e.notizen ? `<p class="leise" style="white-space:pre-wrap;margin-top:6px">${esc(e.notizen)}</p>` : ''}
-      ${!e.telefon && !e.email && !e.website && !e.notizen ? '<p class="leise">Telefon, E-Mail, Website und Notizen über ✎ eintragen.</p>' : ''}</div>
+      ${schlagwortListe(e).length ? `<p class="leise" style="color:var(--primaer)">${schlagwortListe(e).map(w => '#' + esc(w)).join('  ')}</p>` : ''}
+      ${!e.telefon && !e.email && !e.website && !e.notizen ? '<p class="leise">Telefon, E-Mail, Website und Notizen über ✎ eintragen.</p>' : ''}
+      ${MAIL.konto ? '<button class="knopf" style="margin-top:8px" data-oeffne="mailto:' + esc(e.email || '') + '">✉ E-Mail schreiben</button>' : ''}</div>
+    <div class="karte" id="kennzahlen"><dl>${kennzahlen.map(([l, w]) => `<dt>${esc(l)}</dt><dd>${esc(w)}</dd>`).join('')}</dl></div>
+    ${bereich('Verkaufschancen', 'chancen', chancen)}
     ${bereich('Ansprechpartner', 'ansprechpartner', kontakte)}
     ${bereich('Adressen', 'adressen', adressen)}
-    ${bereich('Preise und Konditionen', 'preise', preise)}
+    ${bereich('Preise und Konditionen', 'preise', preise + (preise ? '<button class="knopf text" data-preise-teilen>Preisliste kopieren</button>' : ''))}
     ${bereich('Wiedervorlagen', 'aufgaben', offen.map(aufgabeZeile).join('') + (erledigt.length ? `<details><summary class="leise" style="cursor:pointer;margin:6px 0">${erledigt.length} erledigt</summary>${erledigt.map(aufgabeZeile).join('')}</details>` : ''))}
     ${bereich('Kontakthistorie', 'aktivitaeten', historie, 'Kontakt festhalten')}
     ${bereich('Dokumente', 'dokumente', dokumente)}
@@ -1307,23 +1351,26 @@ function zeichneFirma(id) {
 // ---------- Dialoge für Firmen und Einträge ----------
 const CRM_FELDER = {
   auftraggeber: ['Firma', [['name', 'Firma', 'pflicht'], ['rechtsform', 'Rechtsform (z. B. GmbH)'], ['status', 'Status', Object.fromEntries(Object.entries(FIRMEN_STATUS).map(([k, [l]]) => [k, l]))],
-    ['telefon', 'Telefon', 'tel'], ['email', 'E-Mail', 'email'], ['website', 'Website'], ['notizen', 'Notizen', 'lang']]],
+    ['telefon', 'Telefon', 'tel'], ['email', 'E-Mail', 'email'], ['website', 'Website'], ['schlagworte', 'Schlagworte, durch Komma getrennt (z. B. Möbel, Elektro, Küchen)'], ['notizen', 'Notizen', 'lang']]],
   ansprechpartner: ['Ansprechpartner', [['name', 'Name', 'pflicht'], ['thema', 'Zuständig für (Disposition, Abrechnung, Schäden, Geschäftsführung …)'], ['telefon', 'Telefon', 'tel'], ['email', 'E-Mail', 'email'], ['notiz', 'Notiz', 'lang']]],
   adressen: ['Adresse', [['art', 'Art', ADRESS_ART], ['strasse', 'Straße und Hausnummer'], ['plz', 'PLZ'], ['ort', 'Ort', 'pflicht'], ['notiz', 'Notiz (z. B. Rampe, Öffnungszeiten)', 'lang']]],
   preise: ['Preis', [['bezeichnung', 'Bezeichnung (Tourpauschale, Montage, Extra-km, Etage, Maut …)', 'pflicht'], ['betrag', 'Betrag in Euro', 'geld'], ['einheit', 'Einheit (pro Tour, pro km …)'], ['gueltigAb', 'Gültig ab', 'date'], ['notiz', 'Notiz', 'lang']]],
   aktivitaeten: ['Kontakt', [['datum', 'Datum', 'date'], ['art', 'Art', AKTIVITAET_ART], ['kontakt', 'Ansprechpartner'], ['text', 'Was wurde besprochen?', 'lang pflicht']]],
+  chancen: ['Verkaufschance', [['titel', 'Worum geht es? (z. B. Montage für neue Filiale)', 'pflicht'], ['phase', 'Phase', Object.fromEntries(Object.entries(CHANCEN_PHASE).map(([k, [l]]) => [k, l]))],
+    ['betrag', 'Geschätzter Wert in Euro (z. B. pro Jahr)', 'geld'], ['erwartetAm', 'Entscheidung erwartet bis', 'date'], ['notiz', 'Notiz', 'lang']]],
   aufgaben: ['Wiedervorlage', [['text', 'Was ist zu tun?', 'pflicht'], ['faelligAm', 'Fällig am', 'date'], ['kontakt', 'Ansprechpartner']]],
   dokumente: ['Dokument', [['titel', 'Titel (z. B. Rahmenvertrag 2026)', 'pflicht'], ['link', 'Link oder Pfad'], ['notiz', 'Notiz', 'lang']]],
 };
 const CRM_VORGABEN = {
   auftraggeber: () => ({ status: 'AKTIV' }), adressen: () => ({ art: 'HAUPTSITZ' }), aktivitaeten: () => ({ datum: heute(), art: 'ANRUF' }),
-  aufgaben: () => ({ faelligAm: plusTage(heute(), 7), erledigt: false }),
+  aufgaben: () => ({ faelligAm: plusTage(heute(), 7), erledigt: false }), chancen: () => ({ phase: 'ANFRAGE' }),
 };
 
 function crmDialog(tabelle, eintrag, firmaId, danach) {
   const neu = !eintrag;
   const [titel, felder] = CRM_FELDER[tabelle];
-  const e = eintrag ? { ...eintrag, betrag: eintrag.betragCent != null ? geldOhneSymbol(eintrag.betragCent) : '' } : { ...(CRM_VORGABEN[tabelle] || (() => ({})))() };
+  const centFeld = tabelle === 'chancen' ? 'wertCent' : 'betragCent';
+  const e = eintrag ? { ...eintrag, betrag: eintrag[centFeld] != null ? geldOhneSymbol(eintrag[centFeld]) : '' } : { ...(CRM_VORGABEN[tabelle] || (() => ({})))() };
   const namen = tabelle === 'aktivitaeten' || tabelle === 'aufgaben' ? kontakteVon(firmaId).map(k => k.name) : [];
   const feld = ([name, label, art = '']) => {
     const wert = esc(e[name] ?? ''), pflicht = typeof art === 'string' && art.includes('pflicht') ? 'required' : '';
@@ -1334,7 +1381,10 @@ function crmDialog(tabelle, eintrag, firmaId, danach) {
     return `<label class="feld">${label}<input name="${name}" ${typ} ${pflicht} ${liste} value="${wert}"><span class="fehlertext" data-fehler="${name}" hidden></span></label>`;
   };
   dialog(`<form method="dialog" id="crm-form"><h2>${neu ? (tabelle === 'aktivitaeten' ? 'Kontakt festhalten' : (tabelle === 'auftraggeber' ? 'Neue Firma' : 'Neu: ' + titel)) : titel}</h2>
-    ${felder.map(feld).join('')}${namen.length ? `<datalist id="crm-kontakte">${namen.map(n => `<option value="${esc(n)}">`).join('')}</datalist>` : ''}
+    ${felder.map(feld).join('')}${tabelle === 'aktivitaeten' && neu ? '<label class="feld">Wiedervorlage am (optional)<input name="folgeAm" type="date"></label><label class="feld">Was ist dann zu tun?<input name="folgeText"></label>' : ''}
+    ${tabelle === 'auftraggeber' && !neu && auftraggeberListe().length > 1 ? `<details><summary class="knopf text" style="display:inline-flex">Mit anderer Firma zusammenführen …</summary>
+      <label class="feld">In diese Firma überführen<select id="zusammen-ziel"><option value="">– Firma wählen –</option>${auftraggeberListe().filter(x => x.id !== eintrag.id).map(x => `<option value="${x.id}">${esc(firmaName(x))}</option>`).join('')}</select></label>
+      <button type="button" class="knopf" id="zusammen-los">Zusammenführen</button></details>` : ''}${namen.length ? `<datalist id="crm-kontakte">${namen.map(n => `<option value="${esc(n)}">`).join('')}</datalist>` : ''}
     <div class="dialog-knoepfe">${neu ? '' : '<button type="button" class="knopf text gefahr" id="crm-loeschen">Löschen</button>'}<span class="fuell"></span>
       <button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll">Speichern</button></div></form>`);
   $('#crm-form').onsubmit = ev => {
@@ -1344,14 +1394,24 @@ function crmDialog(tabelle, eintrag, firmaId, danach) {
     if ('email' in w && !zeige('email', w.email && !w.email.split(/[,;]/).every(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x.trim())) ? 'Die E-Mail-Adresse sieht unvollständig aus.' : '')) return;
     if ('betrag' in w) {
       if (!zeige('betrag', w.betrag && geldLesen(w.betrag) == null ? 'Bitte einen Betrag wie 89,50 eingeben.' : '')) return;
-      w.betragCent = w.betrag ? geldLesen(w.betrag) : null; delete w.betrag;
-      w.gueltigAb = w.gueltigAb || null;
+      w[centFeld] = w.betrag ? geldLesen(w.betrag) : null; delete w.betrag;
+      if (tabelle === 'preise') w.gueltigAb = w.gueltigAb || null;
     }
+    if ('erwartetAm' in w) w.erwartetAm = w.erwartetAm || null;
+    const folge = { am: w.folgeAm, text: w.folgeText }; delete w.folgeAm; delete w.folgeText;
     if ('faelligAm' in w) w.faelligAm = w.faelligAm || null;
     if (tabelle === 'aktivitaeten') w.datum = w.datum || heute();
     $('#dialog').close();
     if (tabelle === 'auftraggeber') { const id = Aktionen.firmaSpeichern({ ...(eintrag || {}), ...w, id: eintrag?.id }); if (danach) danach(id); return; }
-    Aktionen.crmSpeichern(tabelle, { ...(eintrag || { erledigt: false }), ...w, firmaId, id: eintrag?.id });
+    Aktionen.crmSpeichern(tabelle, { ...(eintrag || (tabelle === 'aufgaben' ? { erledigt: false } : {})), ...w, firmaId, id: eintrag?.id });
+    if (tabelle === 'aktivitaeten' && folge.am) {
+      Aktionen.crmSpeichern('aufgaben', { firmaId, faelligAm: folge.am, kontakt: w.kontakt || '', erledigt: false, text: folge.text || 'Nachfassen: ' + String(w.text).split('\n')[0].slice(0, 80) });
+    }
+  };
+  if ($('#zusammen-los')) $('#zusammen-los').onclick = () => {
+    const ziel = S.auftraggeber[$('#zusammen-ziel').value]; if (!ziel) return;
+    bestaetige(`In „${ziel.name}“ überführen?`, `Ansprechpartner, Adressen, Preise, Kontakthistorie, Wiedervorlagen, Chancen, Dokumente und Schadensfälle von „${eintrag.name}“ wandern zu „${ziel.name}“. „${eintrag.name}“ wird danach gelöscht.`, 'Zusammenführen',
+      () => { Aktionen.firmenZusammenfuehren(eintrag, ziel); gehe('#/firma/' + ziel.id); });
   };
   if (!neu) $('#crm-loeschen').onclick = () => (tabelle === 'auftraggeber'
     ? bestaetige(`„${eintrag.name}“ löschen?`, 'Mit Ansprechpartnern, Adressen, Preisen, Kontakthistorie und Dokumenten – auf allen Geräten. Schadensfälle bleiben erhalten.', 'Löschen', () => { Aktionen.firmaLoeschen(eintrag); gehe('#/'); })
@@ -1405,11 +1465,13 @@ function crmCsvDateien() {
   const nach = (a, b) => name(a.firmaId).localeCompare(name(b.firmaId), 'de');
   const sitz = id => { const l = vonFirma('adressen', id); return l.find(a => a.art === 'HAUPTSITZ') || l[0]; };
   return {
-    Firmen: tab(['Firma', 'Rechtsform', 'Status', 'Telefon', 'E-Mail', 'Website', 'Hauptsitz', 'Notizen'],
-      firmen.map(f => [f.name, f.rechtsform, firmenStatus(f)[0], f.telefon, f.email, f.website, sitz(f.id) ? adresseText(sitz(f.id)) : '', f.notizen])),
+    Firmen: tab(['Firma', 'Rechtsform', 'Status', 'Telefon', 'E-Mail', 'Website', 'Hauptsitz', 'Notizen', 'Schlagworte'],
+      firmen.map(f => [f.name, f.rechtsform, firmenStatus(f)[0], f.telefon, f.email, f.website, sitz(f.id) ? adresseText(sitz(f.id)) : '', f.notizen, f.schlagworte || ''])),
     Ansprechpartner: tab(['Firma', 'Name', 'Zuständigkeit', 'Telefon', 'E-Mail', 'Notiz'], alle('ansprechpartner').sort(nach).map(k => [name(k.firmaId), k.name, k.thema, k.telefon, k.email, k.notiz])),
     Preise: tab(['Firma', 'Bezeichnung', 'Betrag (EUR)', 'Einheit', 'Gültig ab', 'Notiz'], alle('preise').sort(nach).map(p => [name(p.firmaId), p.bezeichnung, p.betragCent != null ? geldOhneSymbol(p.betragCent) : '', p.einheit, datumText(p.gueltigAb), p.notiz])),
     Aktivitaeten: tab(['Datum', 'Firma', 'Art', 'Ansprechpartner', 'Text'], alle('aktivitaeten').sort((a, b) => b.datum.localeCompare(a.datum)).map(a => [datumText(a.datum), name(a.firmaId), AKTIVITAET_ART[a.art] || '', a.kontakt, a.text])),
+    Verkaufschancen: tab(['Firma', 'Verkaufschance', 'Phase', 'Wert (EUR)', 'Entscheidung bis', 'Notiz'], alle('chancen').sort(nach).map(c => [name(c.firmaId), c.titel,
+      (CHANCEN_PHASE[c.phase] || CHANCEN_PHASE.ANFRAGE)[0], c.wertCent != null ? geldOhneSymbol(c.wertCent) : '', datumText(c.erwartetAm), c.notiz])),
     Wiedervorlagen: tab(['Fällig am', 'Firma', 'Aufgabe', 'Ansprechpartner', 'Erledigt'], alle('aufgaben').sort((a, b) => (a.erledigt - b.erledigt) || String(a.faelligAm || '9').localeCompare(String(b.faelligAm || '9')))
       .map(a => [datumText(a.faelligAm), name(a.firmaId), a.text, a.kontakt, a.erledigt ? 'ja' : 'nein'])),
   };
@@ -1420,16 +1482,24 @@ $('#liste').addEventListener('click', e => {
   const b = e.target.closest('[data-bereich]'), st = e.target.closest('[data-firmen-status]'), firma = e.target.closest('[data-firma]'), erl = e.target.closest('[data-erledigt]');
   if (b) { ANSICHT.bereich = b.dataset.bereich; try { localStorage.setItem('crm-bereich', ANSICHT.bereich); } catch {} zeichneListe(); return; }
   if (st) { ANSICHT.firmenStatus = st.dataset.firmenStatus; zeichneListe(); return; }
+  const sw = e.target.closest('[data-schlagwort]');
+  if (sw) { ANSICHT.schlagwort = (ANSICHT.schlagwort || '').toLowerCase() === sw.dataset.schlagwort.toLowerCase() ? '' : sw.dataset.schlagwort; zeichneListe(); return; }
+  const versch = e.target.closest('[data-verschieben]');
+  if (versch) { const a = S.aufgaben[versch.dataset.verschieben]; if (a) Aktionen.crmSpeichern('aufgaben', { ...a, faelligAm: plusTage(heute(), Number(versch.dataset.tage)) }); return; }
   if (erl) { const a = S.aufgaben[erl.dataset.erledigt]; if (a) Aktionen.crmSpeichern('aufgaben', { ...a, erledigt: erl.checked }); return; }
   if (e.target.closest('[data-neue-firma]')) { crmDialog('auftraggeber', null, null, id => gehe('#/firma/' + id)); return; }
   if (firma && formularSchliessen()) { formularStand = $('#fall-form') ? formularWerte() : ''; gehe('#/firma/' + firma.dataset.firma); }
 });
-$('#liste').addEventListener('input', e => { if (e.target.id === 'firmen-suche') { ANSICHT.firmenSuche = e.target.value; zeichneListe(); } });
+$('#liste').addEventListener('input', e => {
+  if (e.target.id === 'firmen-suche') { ANSICHT.firmenSuche = e.target.value; zeichneListe(); }
+  if (e.target.id === 'postfach-suche') { ANSICHT.postfachSuche = e.target.value; zeichneListe(); const f = $('#postfach-suche'); f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+});
 $('#detail').addEventListener('click', e => {
   const r = route(); if (r.art !== 'firma') return;
   const firma = S.auftraggeber[r.id]; if (!firma) return;
   const neu = e.target.closest('[data-crm-neu]'), x = e.target.closest('[data-crm]'), erl = e.target.closest('[data-erledigt]'), oeffnen = e.target.closest('[data-oeffne]'), fall = e.target.closest('[data-fall]');
   if (e.target.closest('[data-firma-bearbeiten]')) { crmDialog('auftraggeber', firma, null); return; }
+  if (e.target.closest('[data-preise-teilen]')) { teile('Preise ' + firma.name, preislisteText(firma)); return; }
   if (neu) { if (neu.dataset.crmNeu === 'faelle') { ANSICHT.firmaFuerNeuenFall = firma.id; gehe('#/neu'); } else crmDialog(neu.dataset.crmNeu, null, firma.id); return; }
   if (erl) { const a = S.aufgaben[erl.dataset.erledigt]; if (a) Aktionen.crmSpeichern('aufgaben', { ...a, erledigt: erl.checked }); return; }
   if (oeffnen) {
@@ -1607,8 +1677,12 @@ function zuordnungText(m) {
 function zeichnePostfach(r) {
   const filter = ANSICHT.postfachFilter || 'OFFEN';
   const alleMails = mailListe(), offen = alleMails.filter(m => !istZugeordnet(m)).length;
-  const liste = alleMails.filter(m => (filter === 'OFFEN' ? !istZugeordnet(m) : filter === 'FAELLE' ? !!m.fallId : filter === 'FIRMEN' ? !!m.firmaId : true));
+  const such = String(ANSICHT.postfachSuche || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const liste = alleMails.filter(m => (such.length
+    ? such.every(b => [m.von, m.an, m.betreff, m.text, m.kundeRef, (m.anhaenge || []).join(' '), (S.auftraggeber[m.firmaId] || {}).name].join('\n').toLowerCase().includes(b))
+    : filter === 'OFFEN' ? !istZugeordnet(m) : filter === 'FAELLE' ? !!m.fallId : filter === 'FIRMEN' ? !!m.firmaId : true));
   return `<div class="zeile" style="margin-bottom:8px"><button class="knopf" data-postfach-abrufen>⟳ Abrufen</button><button class="knopf voll" data-neue-mail>＋ Neue E-Mail</button></div>
+    <input class="suche" id="postfach-suche" type="search" placeholder="Mails durchsuchen (Absender, Betreff, Text …)" value="${esc(ANSICHT.postfachSuche || '')}">
     <div class="chips" role="group" aria-label="Postfach">${Object.entries(POSTFACH_FILTER).map(([k, l]) =>
       `<button class="chip" data-postfach-filter="${k}" aria-pressed="${filter === k}">${l}${k === 'OFFEN' ? ` (${offen})` : ''}</button>`).join('')}</div>
     <div id="postfach">${liste.map(m => `<button class="karte klickbar ${r.art === 'mail' && decodeURIComponent(r.id) === m.id ? 'gewaehlt' : ''}" data-mail="${esc(encodeURIComponent(m.id))}">
@@ -1651,6 +1725,13 @@ function zuordnenDialog(id) {
   };
 }
 
+const FIRMEN_VORLAGEN = {
+  ANGEBOT: ['Angebot', 'Angebot Auslieferung und Montage', 'vielen Dank für Ihre Anfrage. Gern bieten wir Ihnen Auslieferung und Montage zu folgenden Konditionen an:\n\n{PREISE}\n\nAlle Preise zzgl. MwSt. Das Angebot gilt 30 Tage. Für Rückfragen stehen wir Ihnen gern zur Verfügung.'],
+  TERMIN: ['Terminbestätigung', 'Terminbestätigung', 'hiermit bestätigen wir den Termin am [Datum] um [Uhrzeit] Uhr.\n\nBitte geben Sie uns kurz Bescheid, falls sich etwas ändert.'],
+  NACHFASSEN: ['Nachfassen', 'Nachfrage zu unserem Angebot', 'vor einiger Zeit haben wir Ihnen ein Angebot geschickt. Konnten Sie es schon prüfen?\n\nGern besprechen wir offene Punkte auch telefonisch.'],
+  ABRECHNUNG: ['Rückfrage Abrechnung', 'Rückfrage zur Abrechnung', 'zu unserer Abrechnung [Rechnungsnummer / Zeitraum] haben wir eine Rückfrage:\n\n[Rückfrage]\n\nVielen Dank für eine kurze Rückmeldung.'],
+};
+
 /** Schreibfenster ohne Fall: an eine Firma, einen Ansprechpartner oder als Antwort auf eine Mail aus dem Postfach. */
 function mailAnFirma({ firmaId = '', an = '', antwortAuf = '' } = {}) {
   const alt = antwortAuf && mails()[antwortAuf];
@@ -1668,11 +1749,20 @@ function mailAnFirma({ firmaId = '', an = '', antwortAuf = '' } = {}) {
     <p class="fehlertext" id="mail-fehler" hidden></p>
     ${konten.length > 1 ? `<label class="feld">Von<select name="konto">${konten.map(a => `<option value="${a}" ${a === art ? 'selected' : ''}>${esc(MAIL.konten[a].adresse)} (${MAIL_KONTEN[a]})</option>`).join('')}</select></label>`
       : `<p class="leise">Von: ${esc(MAIL.konten[art].adresse)}</p><input type="hidden" name="konto" value="${art}">`}
+    ${alt ? '' : `<div class="chips">${Object.entries(FIRMEN_VORLAGEN).map(([k, [l]]) => `<button type="button" class="chip" data-firmenvorlage="${k}">${l}</button>`).join('')}</div>`}
     <label class="feld">An<input name="an" value="${esc(empfaenger)}"></label>
     <label class="feld">Betreff<input name="betreff" value="${esc(betreff)}"></label>
     <label class="feld">Nachricht<textarea name="text" style="min-height:260px">${esc(text)}</textarea></label>
     <label class="knopf" style="margin-top:6px">📎 Datei vom Rechner anhängen<input type="file" id="mail-datei" multiple hidden></label><div id="mail-dateien" class="leise"></div>
     <div class="dialog-knoepfe"><button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll" id="mail-senden">Senden</button></div></form>`);
+  $('#mail-form').addEventListener('click', ev => {
+    const v = ev.target.closest('[data-firmenvorlage]'); if (!v) return;
+    const [, betr, inhalt] = FIRMEN_VORLAGEN[v.dataset.firmenvorlage];
+    const liste = firma && vonFirma('preise', firma.id).length ? preislisteText(firma).split('\n').slice(1).join('\n') : '[Leistungen und Preise]';
+    const n = kontaktZuAdressen(firma ? firma.id : '', $('#mail-form [name=an]').value);
+    $('#mail-form [name=betreff]').value = betr;
+    $('#mail-form [name=text]').value = `${n ? `Guten Tag ${n},` : 'Sehr geehrte Damen und Herren,'}\n\n${inhalt.replace('{PREISE}', liste)}\n\n${gruss}`;
+  });
   let dateien = [];
   $('#mail-datei').onchange = ev => { dateien = dateien.concat([...ev.target.files]); $('#mail-dateien').textContent = dateien.map(d => d.name).join(', '); ev.target.value = ''; };
   $('#mail-form').onsubmit = async ev => {

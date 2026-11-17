@@ -89,6 +89,7 @@ enum class PostfachFilter(val label: String) { OFFEN("Nicht zugeordnet"), ALLE("
 data class PostfachZustand(
     val mails: List<MailNachricht> = emptyList(),
     val filter: PostfachFilter = PostfachFilter.OFFEN,
+    val suche: String = "",
     val anzahlOffen: Int = 0,
     val firmen: Map<String, AuftraggeberEintrag> = emptyMap(),
     val faelle: Map<Long, Schadensfall> = emptyMap(),
@@ -111,15 +112,23 @@ class PostfachViewModel(
     mailEingerichtet: Flow<Boolean>,
 ) : ViewModel() {
     private val filter = MutableStateFlow(PostfachFilter.OFFEN)
+    private val suche = MutableStateFlow("")
     val eingerichtet: StateFlow<Boolean> = mailEingerichtet.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     var ruftAb by mutableStateOf(false)
         private set
     private val meldungsKanal = Channel<String>(Channel.BUFFERED)
     val meldungen: Flow<String> = meldungsKanal.receiveAsFlow()
 
-    val zustand: StateFlow<PostfachZustand> = combine(crmDao.beobachteAlleMails(), filter, firmen, faelle) { mails, f, fi, fa ->
+    val zustand: StateFlow<PostfachZustand> = combine(crmDao.beobachteAlleMails(), filter, firmen, faelle, suche) { mails, f, fi, fa, such ->
+        val firmenNamen = fi.associate { it.uuid to it.name }
+        val begriffe = such.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
         PostfachZustand(
             mails = mails.filter {
+                // Mit Suchbegriff wird in allen Mails gesucht, sonst im gewählten Reiter.
+                if (begriffe.isNotEmpty()) {
+                    val text = listOf(it.von, it.an, it.betreff, it.text, it.kundeRef, it.anhaenge, firmenNamen[it.auftraggeberUuid].orEmpty()).joinToString("\n").lowercase()
+                    return@filter begriffe.all { b -> b in text }
+                }
                 when (f) {
                     PostfachFilter.OFFEN -> !it.istZugeordnet
                     PostfachFilter.ALLE -> true
@@ -128,6 +137,7 @@ class PostfachViewModel(
                 }
             },
             filter = f,
+            suche = such,
             anzahlOffen = mails.count { !it.istZugeordnet },
             firmen = fi.associateBy { it.uuid },
             faelle = fa.associateBy { it.id },
@@ -136,6 +146,7 @@ class PostfachViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PostfachZustand())
 
     fun setzeFilter(f: PostfachFilter) { filter.value = f }
+    fun setzeSuche(text: String) { suche.value = text }
 
     fun abrufen() {
         if (ruftAb) return
@@ -217,6 +228,14 @@ fun PostfachScreen(
                 }
             }
             item {
+                OutlinedTextField(
+                    value = zustand.suche, onValueChange = viewModel::setzeSuche, singleLine = true,
+                    placeholder = { Text("Mails durchsuchen (Absender, Betreff, Text …)") },
+                    shape = MaterialTheme.shapes.extraLarge,
+                    modifier = Modifier.fillMaxWidth().testTag("postfach-suche"),
+                )
+            }
+            if (zustand.suche.isBlank()) item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     PostfachFilter.entries.forEach { f ->
                         FilterChip(

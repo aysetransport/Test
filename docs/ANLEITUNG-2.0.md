@@ -131,6 +131,26 @@ Firmen und Ansprechpartner (✉ in der Firma). Installer: GitHub → Actions →
 grüner Lauf → *Artifacts* `Schadensfaelle-Windows-Setup` → `Schadensfaelle-Setup-2.0.0.exe` ausführen
 (installiert über die bisherige Version, Daten und Konto bleiben).
 
+## Neu in 2.1
+
+- **Verkaufschancen** je Firma (Anfrage → Angebot → Verhandlung → Gewonnen/Verloren, mit Wert und Termin)
+- **Schlagworte** für Firmen (z. B. Möbel, Elektro, Küchen) mit Filter in der Firmenliste
+- **Kennzahlen** im Firmen-Detail: Schadensfälle offen/gesamt, offene Forderungen, gezahlte Vergleiche,
+  offene und gewonnene Chancen, letzter Kontakt
+- **Letzter Kontakt** in der Firmenliste und Filter **„Lange kein Kontakt“** (aktive Firmen, 60 Tage)
+- **Kontakt festhalten mit Folgetermin**: legt gleich eine Wiedervorlage an
+- **Wiedervorlagen verschieben** in „Termine“: Morgen / +1 Woche
+- **Mail-Vorlagen für Firmen**: Angebot (mit der Preisliste der Firma), Terminbestätigung, Nachfassen,
+  Rückfrage zur Abrechnung
+- **Preisliste teilen** (Android) bzw. kopieren (Web/Windows)
+- **Ansprechpartner ins Telefonbuch** und **Wiedervorlage in den Kalender** (Android)
+- **Firmen zusammenführen** (doppelt angelegte Auftraggeber) im Bearbeiten-Dialog der Firma
+- **Suche im Postfach**
+- CSV-Export zusätzlich mit Verkaufschancen
+
+Für 2.1 braucht es wieder die **aktuelle `Code.gs`** (Version 5) – wie in Schritt 2 bereitstellen
+(„Neue Version“). Ohne sie meldet die App „Cloud-Skript veraltet“.
+
 ## Bekannte Grenzen
 
 - Mails ohne Fall liegen nur auf dem Gerät, das sie abgerufen hat. Mails zu Firmen erscheinen über

@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -65,6 +67,9 @@ import de.aysetransport.schaden.data.model.Kontaktperson
 import de.aysetransport.schaden.data.model.MailNachricht
 import de.aysetransport.schaden.data.model.Preis
 import de.aysetransport.schaden.data.model.Schadensfall
+import de.aysetransport.schaden.domain.Crm
+import de.aysetransport.schaden.domain.FirmenKennzahlen
+import de.aysetransport.schaden.data.model.Chance
 import de.aysetransport.schaden.domain.Datum
 import de.aysetransport.schaden.domain.Geld
 import de.aysetransport.schaden.domain.faelligkeit
@@ -79,6 +84,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -107,6 +113,8 @@ data class FirmaZustand(
     val historie: List<Historie> = emptyList(),
     val dokumente: List<Dokument> = emptyList(),
     val faelle: List<Schadensfall> = emptyList(),
+    val chancen: List<Chance> = emptyList(),
+    val kennzahlen: FirmenKennzahlen = FirmenKennzahlen(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -114,10 +122,15 @@ class FirmaViewModel(private val uuid: String, private val crm: CrmRepository, m
 
     val mailEingerichtet: StateFlow<Boolean> = mailEingerichtet.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** Alle anderen Firmen – zum Zusammenführen doppelt angelegter Auftraggeber. */
+    val andereFirmen: StateFlow<List<AuftraggeberEintrag>> = crm.beobachteFirmen()
+        .map { liste -> liste.filter { it.uuid != uuid } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val zustand: StateFlow<FirmaZustand?> = crm.beobachteFirma(uuid).flatMapLatest { firma ->
         if (firma == null) return@flatMapLatest flowOf(FirmaZustand(geloescht = true))
-        val teil1 = combine(crm.beobachteKontakte(uuid), crm.beobachteAdressen(uuid), crm.beobachtePreise(uuid), crm.beobachteAufgaben(uuid)) { k, a, p, au ->
-            FirmaZustand(firma, kontakte = k, adressen = a, preise = p, aufgaben = au)
+        val teil1 = combine(crm.beobachteKontakte(uuid), crm.beobachteAdressen(uuid), crm.beobachtePreise(uuid), crm.beobachteAufgaben(uuid), crm.beobachteChancen(uuid)) { k, a, p, au, ch ->
+            FirmaZustand(firma, kontakte = k, adressen = a, preise = p, aufgaben = au, chancen = ch)
         }
         combine(teil1, crm.beobachteAktivitaeten(uuid), crm.beobachteMails(firma), crm.beobachteDokumente(uuid), crm.beobachteFaelle(firma)) { z, akt, mails, dok, faelle ->
             val nummern = faelle.associate { it.id to it.fallnummer }
@@ -133,12 +146,15 @@ class FirmaViewModel(private val uuid: String, private val crm: CrmRepository, m
                 },
                 dokumente = dok,
                 faelle = faelle,
+                kennzahlen = Crm.kennzahlen(faelle, z.chancen, akt.maxOfOrNull { it.datum }),
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun firmaSpeichern(f: AuftraggeberEintrag) = viewModelScope.launch { crm.firmaSpeichern(f) }
     fun firmaLoeschen(f: AuftraggeberEintrag) = viewModelScope.launch { crm.firmaLoeschen(f) }
+    fun zusammenfuehren(weg: AuftraggeberEintrag, ziel: AuftraggeberEintrag, danach: (String) -> Unit) =
+        viewModelScope.launch { crm.zusammenfuehren(weg, ziel); danach(ziel.uuid) }
     fun speichern(e: CrmEintrag) = viewModelScope.launch { crm.speichern(e) }
     fun loeschen(e: CrmEintrag) = viewModelScope.launch { crm.loeschen(e) }
     fun erledigt(a: Aufgabe, wert: Boolean) = viewModelScope.launch { crm.aufgabeErledigt(a, wert) }
@@ -159,6 +175,7 @@ private sealed interface Bearbeitung {
     data class Termin(val a: Aufgabe?) : Bearbeitung
     data class Kontaktvermerk(val a: Aktivitaet?) : Bearbeitung
     data class Unterlage(val d: Dokument?) : Bearbeitung
+    data class Geschaeft(val c: Chance?) : Bearbeitung
 }
 
 @Composable
@@ -170,8 +187,12 @@ fun FirmaScreen(
     /** Schreibfenster öffnen; leer = Adresse der Firma. */
     onMailSchreiben: (an: String) -> Unit,
     onMailOeffnen: (Long) -> Unit,
+    /** Nach dem Zusammenführen zur verbleibenden Firma wechseln. */
+    onFirmaOeffnen: (String) -> Unit = {},
 ) {
     val zustand by viewModel.zustand.collectAsStateWithLifecycle()
+    val andereFirmen by viewModel.andereFirmen.collectAsStateWithLifecycle()
+    var zusammengefuehrt by remember { mutableStateOf(false) }
     val mailEingerichtet by viewModel.mailEingerichtet.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
@@ -180,7 +201,7 @@ fun FirmaScreen(
     var zeigeErledigte by remember { mutableStateOf(false) }
     val heute = LocalDate.now()
 
-    LaunchedEffect(zustand?.geloescht) { if (zustand?.geloescht == true) onZurueck() }
+    LaunchedEffect(zustand?.geloescht) { if (zustand?.geloescht == true && !zusammengefuehrt) onZurueck() }
     val z = zustand
     val firma = z?.firma
 
@@ -212,6 +233,19 @@ fun FirmaScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item(key = "stammdaten") { Stammdaten(firma, onTelefon = { anrufen(context, it, ::melde) }, onMail = { mail(it) }, onWebsite = { link(context, it, ::melde) }) }
+            item(key = "kennzahlen") { KennzahlenKarte(z.kennzahlen) }
+
+            bereich("Verkaufschancen", "chancen", onNeu = { bearbeitung = Bearbeitung.Geschaeft(null) }, leer = z.chancen.isEmpty()) {
+                z.chancen.forEach { c ->
+                    item(key = "c-${c.uuid}") {
+                        Zeile(
+                            titel = listOfNotNull(c.titel, c.wertCent?.let(Geld::format)).joinToString(" · "),
+                            unter = listOfNotNull(c.phase.label, c.erwartetAm?.let { "Entscheidung bis ${Datum.format(it)}" }, c.notiz.takeIf { it.isNotBlank() }).joinToString(" · "),
+                            onClick = { bearbeitung = Bearbeitung.Geschaeft(c) },
+                        )
+                    }
+                }
+            }
 
             bereich("Ansprechpartner", "kontakte", onNeu = { bearbeitung = Bearbeitung.Kontakt(null) }, leer = z.kontakte.isEmpty()) {
                 z.kontakte.forEach { k ->
@@ -221,6 +255,7 @@ fun FirmaScreen(
                             unter = listOf(k.thema, k.telefon, k.email).filter { it.isNotBlank() }.joinToString(" · "),
                             onClick = { bearbeitung = Bearbeitung.Kontakt(k) },
                         ) {
+                            IconButton(onClick = { insTelefonbuch(context, k, firma, ::melde) }) { Icon(Icons.Filled.Person, contentDescription = "${k.name} im Telefonbuch speichern") }
                             if (k.telefon.isNotBlank()) IconButton(onClick = { anrufen(context, k.telefon, ::melde) }) { Icon(Icons.Filled.Call, contentDescription = "${k.name} anrufen") }
                             if (k.email.isNotBlank()) IconButton(onClick = { mail(k.email) }) { Icon(Icons.Filled.Email, contentDescription = "E-Mail an ${k.name}") }
                         }
@@ -241,6 +276,11 @@ fun FirmaScreen(
             }
 
             bereich("Preise und Konditionen", "preise", onNeu = { bearbeitung = Bearbeitung.Kondition(null) }, leer = z.preise.isEmpty()) {
+                item(key = "preise-teilen") {
+                    TextButton(onClick = { teile(context, "Preise ${firma.name}", Crm.preislisteText(firma, z.preise), ::melde) }, modifier = Modifier.testTag("preise-teilen")) {
+                        Text("Preisliste teilen")
+                    }
+                }
                 z.preise.forEach { p ->
                     item(key = "p-${p.uuid}") {
                         val betrag = listOfNotNull(p.betragCent?.let(Geld::format), p.einheit.takeIf { it.isNotBlank() }).joinToString(" ")
@@ -257,7 +297,12 @@ fun FirmaScreen(
             val erledigt = z.aufgaben.filter { it.erledigt }
             bereich("Wiedervorlagen", "aufgaben", onNeu = { bearbeitung = Bearbeitung.Termin(null) }, leer = offen.isEmpty() && erledigt.isEmpty()) {
                 (offen + if (zeigeErledigte) erledigt else emptyList()).forEach { a ->
-                    item(key = "w-${a.uuid}") { AufgabenZeile(a, heute, onErledigt = { viewModel.erledigt(a, it) }, onClick = { bearbeitung = Bearbeitung.Termin(a) }) }
+                    item(key = "w-${a.uuid}") {
+                        AufgabenZeile(
+                            a, heute, onErledigt = { viewModel.erledigt(a, it) }, onClick = { bearbeitung = Bearbeitung.Termin(a) },
+                            onKalender = { inKalender(context, a, firma, ::melde) },
+                        )
+                    }
                 }
                 if (erledigt.isNotEmpty()) {
                     item(key = "w-erledigt") {
@@ -328,12 +373,23 @@ fun FirmaScreen(
             firma, onSchliessen = { bearbeitung = null },
             onSpeichern = { viewModel.firmaSpeichern(it); bearbeitung = null },
             onLoeschen = { bearbeitung = null; viewModel.firmaLoeschen(firma) },
+            andereFirmen = andereFirmen,
+            onZusammenfuehren = { ziel ->
+                bearbeitung = null
+                zusammengefuehrt = true
+                viewModel.zusammenfuehren(firma, ziel) { onFirmaOeffnen(it) }
+            },
         )
         is Bearbeitung.Kontakt -> KontaktDialog(id, b.k, { bearbeitung = null }, { viewModel.speichern(it); bearbeitung = null }, b.k?.let { k -> { viewModel.loeschen(k); bearbeitung = null } })
         is Bearbeitung.Ort -> AdresseDialog(id, b.a, { bearbeitung = null }, { viewModel.speichern(it); bearbeitung = null }, b.a?.let { a -> { viewModel.loeschen(a); bearbeitung = null } })
         is Bearbeitung.Kondition -> PreisDialog(id, b.p, { bearbeitung = null }, { viewModel.speichern(it); bearbeitung = null }, b.p?.let { p -> { viewModel.loeschen(p); bearbeitung = null } })
         is Bearbeitung.Termin -> AufgabeDialog(id, b.a, z.kontakte, heute, { bearbeitung = null }, { viewModel.speichern(it); bearbeitung = null }, b.a?.let { a -> { viewModel.loeschen(a); bearbeitung = null } })
-        is Bearbeitung.Kontaktvermerk -> AktivitaetDialog(id, b.a, z.kontakte, heute, { bearbeitung = null }, { viewModel.speichern(it); bearbeitung = null }, b.a?.let { a -> { viewModel.loeschen(a); bearbeitung = null } })
+        is Bearbeitung.Kontaktvermerk -> AktivitaetDialog(
+            id, b.a, z.kontakte, heute, { bearbeitung = null }, { viewModel.speichern(it); bearbeitung = null },
+            b.a?.let { a -> { viewModel.loeschen(a); bearbeitung = null } },
+            onFolgetermin = { viewModel.speichern(it) },
+        )
+        is Bearbeitung.Geschaeft -> ChanceDialog(id, b.c, { bearbeitung = null }, { viewModel.speichern(it); bearbeitung = null }, b.c?.let { c -> { viewModel.loeschen(c); bearbeitung = null } })
         is Bearbeitung.Unterlage -> DokumentDialog(id, b.d, { bearbeitung = null }, { viewModel.speichern(it); bearbeitung = null }, b.d?.let { d -> { viewModel.loeschen(d); bearbeitung = null } })
     }
 }
@@ -387,7 +443,7 @@ private fun Zeile(titel: String, unter: String, onClick: () -> Unit, maxZeilen: 
 }
 
 @Composable
-private fun AufgabenZeile(a: Aufgabe, heute: LocalDate, onErledigt: (Boolean) -> Unit, onClick: () -> Unit) {
+private fun AufgabenZeile(a: Aufgabe, heute: LocalDate, onErledigt: (Boolean) -> Unit, onClick: () -> Unit, onKalender: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Checkbox(checked = a.erledigt, onCheckedChange = onErledigt)
         Column(Modifier.weight(1f)) {
@@ -396,7 +452,45 @@ private fun AufgabenZeile(a: Aufgabe, heute: LocalDate, onErledigt: (Boolean) ->
             val zeile = listOfNotNull(a.faelligAm?.let { if (it == heute) "heute" else Datum.format(it) }, a.kontakt.takeIf { it.isNotBlank() }).joinToString(" · ")
             if (zeile.isNotEmpty()) Text(zeile, style = MaterialTheme.typography.bodySmall, color = if (faellig) LocalZusatzfarben.current.rot.schrift else MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        if (a.faelligAm != null && !a.erledigt) {
+            IconButton(onClick = onKalender) { Icon(Icons.Filled.DateRange, contentDescription = "In den Kalender eintragen") }
+        }
     }
+}
+
+@Composable
+private fun KennzahlenKarte(k: FirmenKennzahlen) {
+    val werte = listOfNotNull(
+        "Schadensfälle" to "${k.faelleOffen} offen / ${k.faelleGesamt}",
+        ("Offene Forderungen" to Geld.format(k.forderungenOffenCent)).takeIf { k.forderungenOffenCent > 0 },
+        ("Gezahlt / verglichen" to Geld.format(k.vergleicheCent)).takeIf { k.vergleicheCent > 0 },
+        ("Offene Chancen" to "${k.chancenOffen} · ${Geld.format(k.chancenWertCent)}").takeIf { k.chancenOffen > 0 },
+        ("Gewonnen" to Geld.format(k.gewonnenWertCent)).takeIf { k.gewonnenWertCent > 0 },
+        "Letzter Kontakt" to (k.letzterKontakt?.let(Datum::format) ?: "noch keiner"),
+    )
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), modifier = Modifier.fillMaxWidth().testTag("kennzahlen")) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            werte.forEach { (l, w) ->
+                Row {
+                    Text(l, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Text(w, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+/** Trägt eine Wiedervorlage in den Kalender des Geräts ein (ganztägig). */
+fun inKalender(context: Context, a: Aufgabe, firma: AuftraggeberEintrag, melde: (String) -> Unit) {
+    val tag = a.faelligAm ?: return
+    val beginn = tag.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+    val intent = Intent(Intent.ACTION_INSERT).setData(android.provider.CalendarContract.Events.CONTENT_URI)
+        .putExtra(android.provider.CalendarContract.Events.TITLE, "${firma.name}: ${a.text}")
+        .putExtra(android.provider.CalendarContract.Events.DESCRIPTION, listOfNotNull(a.text, a.kontakt.takeIf { it.isNotBlank() }?.let { "Ansprechpartner: $it" }).joinToString("\n"))
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_ALL_DAY, true)
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, beginn)
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, beginn + 86_400_000L)
+    oeffne(context, intent, melde)
 }
 
 private fun oeffne(context: Context, intent: Intent, melde: (String) -> Unit) {
@@ -405,6 +499,25 @@ private fun oeffne(context: Context, intent: Intent, melde: (String) -> Unit) {
     } catch (e: ActivityNotFoundException) {
         melde("Auf diesem Gerät gibt es keine passende App.")
     }
+}
+
+/** Öffnet „Kontakt anlegen“ der Telefonbuch-App mit Name, Firma, Telefon und E-Mail. */
+fun insTelefonbuch(context: Context, k: Kontaktperson, firma: AuftraggeberEintrag, melde: (String) -> Unit) {
+    val intent = Intent(android.provider.ContactsContract.Intents.Insert.ACTION).apply {
+        type = android.provider.ContactsContract.RawContacts.CONTENT_TYPE
+        putExtra(android.provider.ContactsContract.Intents.Insert.NAME, k.name)
+        putExtra(android.provider.ContactsContract.Intents.Insert.COMPANY, firma.anzeigeName)
+        if (k.thema.isNotBlank()) putExtra(android.provider.ContactsContract.Intents.Insert.JOB_TITLE, k.thema)
+        if (k.telefon.isNotBlank()) putExtra(android.provider.ContactsContract.Intents.Insert.PHONE, k.telefon)
+        if (k.email.isNotBlank()) putExtra(android.provider.ContactsContract.Intents.Insert.EMAIL, k.email)
+    }
+    oeffne(context, intent, melde)
+}
+
+/** Text über die Teilen-Funktion von Android weitergeben (WhatsApp, Mail, Notizen …). */
+fun teile(context: Context, betreff: String, text: String, melde: (String) -> Unit) {
+    val senden = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, betreff).putExtra(Intent.EXTRA_TEXT, text)
+    oeffne(context, Intent.createChooser(senden, betreff), melde)
 }
 
 fun anrufen(context: Context, nummer: String, melde: (String) -> Unit) =

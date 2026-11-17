@@ -17,6 +17,7 @@ import de.aysetransport.schaden.data.CrmVerknuepfer
 import de.aysetransport.schaden.data.model.Adresse
 import de.aysetransport.schaden.data.model.Aktivitaet
 import de.aysetransport.schaden.data.model.Aufgabe
+import de.aysetransport.schaden.data.model.Chance
 import de.aysetransport.schaden.data.model.CrmEintrag
 import de.aysetransport.schaden.data.model.Dokument
 import de.aysetransport.schaden.data.model.FirmenStatus
@@ -85,6 +86,7 @@ class CloudAbgleich(
         CrmTabelle("preise", Loeschung.Art.PREIS, Preis.serializer(), crm::offenePreise, crm::preisPerKennung, crm::speichere, crm::loeschePreis, crm::preisIstSynchron, crm::allePreiseOffen, crm::ladePreise),
         CrmTabelle("aktivitaeten", Loeschung.Art.AKTIVITAET, Aktivitaet.serializer(), crm::offeneAktivitaeten, crm::aktivitaetPerKennung, crm::speichere, crm::loescheAktivitaet, crm::aktivitaetIstSynchron, crm::alleAktivitaetenOffen, crm::ladeAktivitaeten),
         CrmTabelle("aufgaben", Loeschung.Art.AUFGABE, Aufgabe.serializer(), crm::offeneAufgaben, crm::aufgabePerKennung, crm::speichere, crm::loescheAufgabe, crm::aufgabeIstSynchron, crm::alleAufgabenOffen, crm::ladeAufgaben),
+        CrmTabelle("chancen", Loeschung.Art.CHANCE, Chance.serializer(), crm::offeneChancen, crm::chancePerKennung, crm::speichere, crm::loescheChance, crm::chanceIstSynchron, crm::alleChancenOffen, crm::ladeChancen),
         CrmTabelle("dokumente", Loeschung.Art.DOKUMENT, Dokument.serializer(), crm::offeneDokumente, crm::dokumentPerKennung, crm::speichere, crm::loescheDokument, crm::dokumentIstSynchron, crm::alleDokumenteOffen, crm::ladeDokumente),
     )
 
@@ -366,6 +368,7 @@ class CloudAbgleich(
             email = json.text("email"),
             website = json.text("website"),
             notizen = json.text("notizen"),
+            schlagworte = json.text("schlagworte"),
             geaendertAm = json.zeitpunkt("geaendertAm"),
             syncOffen = false,
         )
@@ -457,6 +460,7 @@ class CloudAbgleich(
         put("email", email)
         put("website", website)
         put("notizen", notizen)
+        put("schlagworte", schlagworte)
         put("geaendertAm", geaendertAm.toString())
     }
 
@@ -543,7 +547,7 @@ class CloudAbgleich(
 
     companion object {
         private const val MAX_DURCHLAEUFE = 3
-        const val MIN_API = 4L
+        const val MIN_API = 5L
         private const val VERSION_GILT_MS = 60 * 60 * 1000L
         const val VERALTET = "Das Cloud-Skript ist veraltet – bitte die neue Code.gs bereitstellen."
     }

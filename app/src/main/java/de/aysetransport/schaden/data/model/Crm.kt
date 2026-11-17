@@ -63,9 +63,13 @@ data class AuftraggeberEintrag(
     val email: String = "",
     @ColumnInfo(defaultValue = "''") val website: String = "",
     @ColumnInfo(defaultValue = "''") val notizen: String = "",
+    /** Schlagworte, durch Komma getrennt (z. B. „Möbel, Montage“). */
+    @ColumnInfo(defaultValue = "''") val schlagworte: String = "",
     val geaendertAm: Instant = Instant.EPOCH,
     val syncOffen: Boolean = true,
 ) {
+    val schlagwortListe: List<String> get() = schlagworte.split(',').map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
+
     val anzeigeName: String get() = listOf(name, rechtsform).filter { it.isNotBlank() }.joinToString(" ")
 }
 
@@ -154,6 +158,31 @@ data class Dokument(
     override val auftraggeberUuid: String,
     val titel: String,
     val link: String = "",
+    val notiz: String = "",
+    override val geaendertAm: Instant = Instant.EPOCH,
+    override val syncOffen: Boolean = true,
+) : CrmEintrag
+
+enum class ChancenPhase(val label: String, val offen: Boolean) {
+    ANFRAGE("Anfrage", true),
+    ANGEBOT("Angebot", true),
+    VERHANDLUNG("Verhandlung", true),
+    GEWONNEN("Gewonnen", false),
+    VERLOREN("Verloren", false),
+}
+
+/** Verkaufschance: neues Geschäft mit einer Firma (z. B. zusätzliche Touren, neue Filiale). */
+@Serializable
+@Entity(tableName = "chance", indices = [Index("auftraggeberUuid"), Index("syncOffen")])
+data class Chance(
+    @PrimaryKey override val uuid: String = neueKennung(),
+    override val auftraggeberUuid: String,
+    val titel: String,
+    /** Geschätzter Wert (z. B. Umsatz pro Jahr) in Cent. */
+    val wertCent: Long? = null,
+    val phase: ChancenPhase = ChancenPhase.ANFRAGE,
+    /** Bis wann mit einer Entscheidung zu rechnen ist. */
+    val erwartetAm: LocalDate? = null,
     val notiz: String = "",
     override val geaendertAm: Instant = Instant.EPOCH,
     override val syncOffen: Boolean = true,

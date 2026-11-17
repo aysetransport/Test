@@ -79,6 +79,10 @@ data class FirmenZustand(
     val faelle: List<Schadensfall> = emptyList(),
     val ganzLeer: Boolean = false,
     val status: FirmenStatus? = null,
+    /** Nur aktive Firmen, mit denen lange niemand gesprochen hat. */
+    val langeKeinKontakt: Boolean = false,
+    val schlagwort: String? = null,
+    val alleSchlagworte: List<String> = emptyList(),
     val suchtext: String = "",
     val heute: LocalDate = LocalDate.now(),
 )
@@ -94,13 +98,22 @@ fun bestand(crm: CrmRepository, faelle: Flow<List<Schadensfall>>): Flow<CrmBesta
 
 class FirmenViewModel(private val crm: CrmRepository, repository: SchadensfallRepository) : ViewModel() {
     private val status = MutableStateFlow<FirmenStatus?>(null)
+    private val langeKeinKontakt = MutableStateFlow(false)
+    private val schlagwort = MutableStateFlow<String?>(null)
     private val suchtext = MutableStateFlow("")
     private val heute = MutableStateFlow(LocalDate.now())
 
-    val zustand: StateFlow<FirmenZustand> = combine(bestand(crm, repository.beobachteFaelle()), status, suchtext, heute) { b, st, such, tag ->
+    val zustand: StateFlow<FirmenZustand> = combine(
+        bestand(crm, repository.beobachteFaelle()), status, suchtext, heute, combine(langeKeinKontakt, schlagwort) { a, b -> a to b },
+    ) { b, st, such, tag, (pause, wort) ->
         FirmenZustand(
             laedt = false,
-            zeilen = Crm.firmenliste(b, st, such, tag),
+            zeilen = Crm.firmenliste(b, st, such, tag)
+                .filter { !pause || Crm.langeKeinKontakt(it, tag) }
+                .filter { z -> wort == null || z.firma.schlagwortListe.any { it.equals(wort, ignoreCase = true) } },
+            langeKeinKontakt = pause,
+            schlagwort = wort,
+            alleSchlagworte = Crm.schlagworte(b.firmen),
             faelle = if (such.isBlank()) emptyList() else Fallliste.filtereUndSortiere(b.faelle, FallFilter.ALLE, such, tag),
             ganzLeer = b.firmen.isEmpty(),
             status = st,
@@ -109,7 +122,9 @@ class FirmenViewModel(private val crm: CrmRepository, repository: SchadensfallRe
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FirmenZustand())
 
-    fun setzeStatus(neu: FirmenStatus?) { status.value = neu }
+    fun setzeStatus(neu: FirmenStatus?) { status.value = neu; langeKeinKontakt.value = false }
+    fun setzeSchlagwort(wort: String?) { schlagwort.value = if (schlagwort.value == wort) null else wort }
+    fun zeigeLangeKeinKontakt() { langeKeinKontakt.value = !langeKeinKontakt.value; if (langeKeinKontakt.value) status.value = null }
     fun setzeSuchtext(neu: String) { suchtext.value = neu }
     fun aktualisiereHeute() { heute.value = LocalDate.now() }
 
@@ -174,9 +189,20 @@ fun FirmenScreen(
             }
             item(key = "status") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    FilterChip(selected = zustand.status == null, onClick = { viewModel.setzeStatus(null) }, label = { Text("Alle") })
+                    FilterChip(selected = zustand.status == null && !zustand.langeKeinKontakt, onClick = { viewModel.setzeStatus(null) }, label = { Text("Alle") })
+                    FilterChip(
+                        selected = zustand.langeKeinKontakt, onClick = viewModel::zeigeLangeKeinKontakt,
+                        label = { Text("Lange kein Kontakt") }, modifier = Modifier.testTag("filter-kein-kontakt"),
+                    )
                     FirmenStatus.entries.forEach { s ->
                         FilterChip(selected = zustand.status == s, onClick = { viewModel.setzeStatus(s) }, label = { Text(s.label) })
+                    }
+                }
+            }
+            if (zustand.alleSchlagworte.isNotEmpty()) item(key = "schlagworte") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    zustand.alleSchlagworte.forEach { w ->
+                        FilterChip(selected = zustand.schlagwort == w, onClick = { viewModel.setzeSchlagwort(w) }, label = { Text("# $w") })
                     }
                 }
             }
@@ -190,7 +216,14 @@ fun FirmenScreen(
                     )
                 }
                 zustand.zeilen.isEmpty() && zustand.faelle.isEmpty() -> item(key = "nichts") {
-                    Leer("Keine Treffer", if (zustand.suchtext.isNotBlank()) "Zu „${zustand.suchtext.trim()}“ wurde nichts gefunden." else "In dieser Ansicht gibt es keine Firmen.")
+                    Leer(
+                        "Keine Treffer",
+                        when {
+                            zustand.suchtext.isNotBlank() -> "Zu „${zustand.suchtext.trim()}“ wurde nichts gefunden."
+                            zustand.langeKeinKontakt -> "Mit allen aktiven Firmen gab es in den letzten ${Crm.KONTAKT_PAUSE_TAGE} Tagen Kontakt."
+                            else -> "In dieser Ansicht gibt es keine Firmen."
+                        },
+                    )
                 }
                 else -> {
                     items(zustand.zeilen, key = { it.firma.uuid }) { z -> FirmenKarte(z, zustand.heute, onClick = { onFirmaOeffnen(z.firma.uuid) }) }
@@ -241,9 +274,13 @@ private fun FirmenKarte(z: FirmenZeile, heute: LocalDate, onClick: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 FirmenStatusMarke(z.firma.status)
             }
+            if (z.firma.schlagwortListe.isNotEmpty()) {
+                Text(z.firma.schlagwortListe.joinToString("  ") { "#$it" }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
+            }
             z.treffer?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             val zeile = listOfNotNull(
                 z.offeneFaelle.takeIf { it > 0 }?.let { if (it == 1) "1 offener Schadensfall" else "$it offene Schadensfälle" },
+                z.letzterKontakt?.let { "letzter Kontakt ${Datum.format(it)}" },
                 z.firma.telefon.takeIf { it.isNotBlank() },
             ).joinToString(" · ")
             if (zeile.isNotEmpty()) Text(zeile, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

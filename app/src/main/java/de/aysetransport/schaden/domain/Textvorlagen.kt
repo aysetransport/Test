@@ -12,6 +12,14 @@ data class Absender(
 
 data class Nachricht(val betreff: String, val text: String)
 
+/** Vorlagen für Mails an Auftraggeber außerhalb eines Schadensfalls. */
+enum class FirmenVorlage(val label: String, val betreff: String) {
+    ANGEBOT("Angebot", "Angebot Auslieferung und Montage"),
+    TERMIN("Terminbestätigung", "Terminbestätigung"),
+    NACHFASSEN("Nachfassen", "Nachfrage zu unserem Angebot"),
+    ABRECHNUNG("Rückfrage Abrechnung", "Rückfrage zur Abrechnung"),
+}
+
 /** An wen sich eine Nachricht richtet. Jeder bekommt nur die Angaben, die ihn betreffen. */
 enum class Empfaenger(val label: String, val ueberschrift: String) {
     GESCHAEDIGTER("Geschädigter", "An den Geschädigten"),
@@ -146,6 +154,19 @@ object Textvorlagen {
         }
         val anrede = if (ansprechpartner.isNotBlank()) "Guten Tag ${ansprechpartner.trim()}," else "Sehr geehrte Damen und Herren,"
         return Nachricht(betreff = betreff(empfaenger, null, fall), text = "$anrede\n\n\n\n${grussformel(absender)}")
+    }
+
+    /** Vorlage für Mails an Firmen (ohne Fall). [preisliste] wird beim Angebot eingefügt. */
+    fun firmenVorlage(v: FirmenVorlage, name: String, absender: Absender, preisliste: String): Nachricht {
+        val anrede = if (name.isNotBlank()) "Guten Tag ${name.trim()}," else "Sehr geehrte Damen und Herren,"
+        val inhalt = when (v) {
+            FirmenVorlage.ANGEBOT -> "vielen Dank für Ihre Anfrage. Gern bieten wir Ihnen Auslieferung und Montage zu folgenden Konditionen an:\n\n" +
+                preisliste.ifBlank { "[Leistungen und Preise]" } + "\n\nAlle Preise zzgl. MwSt. Das Angebot gilt 30 Tage. Für Rückfragen stehen wir Ihnen gern zur Verfügung."
+            FirmenVorlage.TERMIN -> "hiermit bestätigen wir den Termin am [Datum] um [Uhrzeit] Uhr.\n\nBitte geben Sie uns kurz Bescheid, falls sich etwas ändert."
+            FirmenVorlage.NACHFASSEN -> "vor einiger Zeit haben wir Ihnen ein Angebot geschickt. Konnten Sie es schon prüfen?\n\nGern besprechen wir offene Punkte auch telefonisch."
+            FirmenVorlage.ABRECHNUNG -> "zu unserer Abrechnung [Rechnungsnummer / Zeitraum] haben wir eine Rückfrage:\n\n[Rückfrage]\n\nVielen Dank für eine kurze Rückmeldung."
+        }
+        return Nachricht(betreff = v.betreff, text = "$anrede\n\n$inhalt\n\n${grussformel(absender)}")
     }
 
     /** Leere Mail ohne Fall (an eine Firma oder einen Ansprechpartner) – nur Anrede und Grußformel. */

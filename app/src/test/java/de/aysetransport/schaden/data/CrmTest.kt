@@ -219,4 +219,85 @@ class CrmTest {
         val aufgaben = CsvExport.wiedervorlagen(listOf(f), listOf(Aufgabe(auftraggeberUuid = "s", text = "=SUMME()", faelligAm = heute)))
         assertTrue("Formeln werden entschärft", aufgaben.contains("'=SUMME()"))
     }
+
+    @Test
+    fun `letzter Kontakt, lange kein Kontakt und Preisliste zum Teilen`() {
+        val aktiv = AuftraggeberEintrag(uuid = "a", name = "Aktiv GmbH")
+        val ruhig = AuftraggeberEintrag(uuid = "r", name = "Ruhig AG")
+        val interessent = AuftraggeberEintrag(uuid = "i", name = "Neu KG", status = FirmenStatus.INTERESSENT)
+        val b = CrmBestand(
+            firmen = listOf(aktiv, ruhig, interessent),
+            aktivitaeten = listOf(
+                Aktivitaet(auftraggeberUuid = "a", datum = heute.minusDays(5), text = "Anruf"),
+                Aktivitaet(auftraggeberUuid = "a", datum = heute.minusDays(90), text = "alt"),
+                Aktivitaet(auftraggeberUuid = "r", datum = heute.minusDays(61), text = "Treffen"),
+            ),
+        )
+        val liste = Crm.firmenliste(b, null, "", heute)
+        assertEquals(heute.minusDays(5), liste.single { it.firma.uuid == "a" }.letzterKontakt)
+        assertEquals("nur aktive Firmen ohne Kontakt seit 60 Tagen", listOf("Ruhig AG"), liste.filter { Crm.langeKeinKontakt(it, heute) }.map { it.firma.name })
+
+        val text = Crm.preislisteText(aktiv.copy(name = "Aktiv", rechtsform = "GmbH"), listOf(
+            Preis(auftraggeberUuid = "a", bezeichnung = "Tourpauschale", betragCent = 18950, einheit = "pro Tour", gueltigAb = LocalDate.of(2026, 1, 1)),
+            Preis(auftraggeberUuid = "a", bezeichnung = "Etage", betragCent = 1250, einheit = "pro Etage", notiz = "ab 3. OG"),
+        ))
+        assertEquals("Preise und Konditionen – Aktiv GmbH\n• Etage: 12,50\u00A0€ pro Etage – ab 3. OG\n• Tourpauschale: 189,50\u00A0€ pro Tour (gültig ab 01.01.2026)", text)
+    }
+
+    @Test
+    fun `Kennzahlen, Schlagworte und Angebots-Vorlage mit Preisliste`() {
+        val faelle = listOf(
+            Schadensfall(id = 1, forderungCent = 45000, vergleichCent = 20000, status = de.aysetransport.schaden.data.model.FallStatus.ERLEDIGT),
+            Schadensfall(id = 2, forderungCent = 12000),
+        )
+        val chancen = listOf(
+            de.aysetransport.schaden.data.model.Chance(auftraggeberUuid = "a", titel = "Neue Filiale", wertCent = 500000),
+            de.aysetransport.schaden.data.model.Chance(auftraggeberUuid = "a", titel = "Montage", wertCent = 100000, phase = de.aysetransport.schaden.data.model.ChancenPhase.GEWONNEN),
+        )
+        val k = Crm.kennzahlen(faelle, chancen, heute)
+        assertEquals("2 1 12000 20000 1 500000 100000", listOf(k.faelleGesamt, k.faelleOffen, k.forderungenOffenCent, k.vergleicheCent, k.chancenOffen, k.chancenWertCent, k.gewonnenWertCent).joinToString(" "))
+
+        val firmen = listOf(AuftraggeberEintrag(name = "A", schlagworte = "Möbel, montage"), AuftraggeberEintrag(name = "B", schlagworte = "Elektro,  Montage ,"))
+        assertEquals(listOf("Elektro", "Möbel", "montage"), Crm.schlagworte(firmen))
+
+        val n = de.aysetransport.schaden.domain.Textvorlagen.firmenVorlage(
+            de.aysetransport.schaden.domain.FirmenVorlage.ANGEBOT, "Jana Krüger", de.aysetransport.schaden.domain.Absender(firma = "Ayse Transport UG", name = "Niclas"), "• Montage: 45,00 €",
+        )
+        assertEquals("Angebot Auslieferung und Montage", n.betreff)
+        assertTrue(n.text, n.text.startsWith("Guten Tag Jana Krüger,") && "• Montage: 45,00 €" in n.text && n.text.endsWith("Ayse Transport UG"))
+    }
+
+    @Test
+    fun `Verkaufschancen und Schlagworte im Backup und beim Zusammenfuehren`() = runBlocking {
+        val a = crm.firmaSpeichern(AuftraggeberEintrag(name = "Doppelt", schlagworte = "Möbel"))
+        val b = crm.firmaSpeichern(AuftraggeberEintrag(name = "Richtig", schlagworte = "möbel, Küchen"))
+        crm.speichern(de.aysetransport.schaden.data.model.Chance(auftraggeberUuid = a, titel = "Mehr Touren", wertCent = 250000, erwartetAm = heute))
+        crm.zusammenfuehren(crm.ladeFirma(a)!!, crm.ladeFirma(b)!!)
+        val firma = crm.ladeFirmen().single()
+        assertEquals("möbel, Küchen", firma.schlagworte)
+        assertEquals(listOf("Mehr Touren"), crm.alleDaten().chancen.filter { it.auftraggeberUuid == b }.map { it.titel })
+
+        val backup = BackupManager(db, AnlagenSpeicher(context), context.cacheDir)
+        val zip = ByteArrayOutputStream().also { backup.exportiere(it) }.toByteArray()
+        crm.firmaLoeschen(firma)
+        assertTrue(crm.alleDaten().chancen.isEmpty())
+        backup.stelleWiederHer(ByteArrayInputStream(zip))
+        assertEquals(250000L, crm.alleDaten().chancen.single().wertCent)
+    }
+
+    @Test
+    fun `Firmen von Hand zusammenfuehren`() = runBlocking {
+        val doppelt = crm.firmaSpeichern(AuftraggeberEintrag(name = "MediaMarkt RS"))
+        val richtig = crm.firmaSpeichern(AuftraggeberEintrag(name = "Media Markt Remscheid"))
+        crm.speichern(Kontaktperson(auftraggeberUuid = doppelt, name = "Herr Ott"))
+        val fallId = repository.anlegen(Schadensfall(kundeName = "Anna", auftraggeber = "MediaMarkt RS"))
+
+        crm.zusammenfuehren(crm.ladeFirma(doppelt)!!, crm.ladeFirma(richtig)!!)
+
+        assertEquals(listOf("Media Markt Remscheid"), crm.ladeFirmen().map { it.name })
+        assertEquals(listOf("Herr Ott"), crm.ladeKontakte(richtig).map { it.name })
+        val fall = repository.ladeFall(fallId)!!
+        assertEquals(richtig, fall.auftraggeberUuid)
+        assertEquals("Name im Fall wird angepasst", "Media Markt Remscheid", fall.auftraggeber)
+    }
 }

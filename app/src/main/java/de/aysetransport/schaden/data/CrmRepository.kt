@@ -6,6 +6,7 @@ import de.aysetransport.schaden.data.model.Adresse
 import de.aysetransport.schaden.data.model.Aktivitaet
 import de.aysetransport.schaden.data.model.Aufgabe
 import de.aysetransport.schaden.data.model.AuftraggeberEintrag
+import de.aysetransport.schaden.data.model.Chance
 import de.aysetransport.schaden.data.model.CrmEintrag
 import de.aysetransport.schaden.data.model.Dokument
 import de.aysetransport.schaden.data.model.Kontaktperson
@@ -37,6 +38,8 @@ class CrmRepository(
     fun beobachteAktivitaeten(firma: String) = crm.beobachteAktivitaeten(firma)
     fun beobachteAufgaben(firma: String) = crm.beobachteAufgaben(firma)
     fun beobachteDokumente(firma: String) = crm.beobachteDokumente(firma)
+    fun beobachteChancen(firma: String) = crm.beobachteChancen(firma)
+    fun beobachteAlleChancen() = crm.beobachteAlleChancen()
     fun beobachteFaelle(firma: AuftraggeberEintrag): Flow<List<Schadensfall>> = dao.beobachteFaelleDerFirma(firma.uuid, firma.name)
     fun beobachteMails(firma: AuftraggeberEintrag): Flow<List<MailNachricht>> = crm.beobachteMailsDerFirma(firma.uuid, firma.name)
 
@@ -52,11 +55,12 @@ class CrmRepository(
     data class AlleDaten(
         val kontakte: List<Kontaktperson>, val adressen: List<Adresse>, val preise: List<Preis>,
         val aktivitaeten: List<Aktivitaet>, val aufgaben: List<Aufgabe>, val dokumente: List<Dokument>,
+        val chancen: List<Chance> = emptyList(),
     )
 
     suspend fun alleDaten() = AlleDaten(
         crm.ladeAlleKontaktpersonen(), crm.ladeAlleAdressen(), crm.ladeAllePreise(),
-        crm.ladeAlleAktivitaeten(), crm.ladeAlleAufgaben(), crm.ladeAlleDokumente(),
+        crm.ladeAlleAktivitaeten(), crm.ladeAlleAufgaben(), crm.ladeAlleDokumente(), crm.ladeAlleChancen(),
     )
 
     /**
@@ -71,7 +75,7 @@ class CrmRepository(
         }
         val neu = firma.copy(
             name = firma.name.trim(), rechtsform = firma.rechtsform.trim(), telefon = firma.telefon.trim(), email = firma.email.trim(),
-            website = firma.website.trim(), notizen = firma.notizen.trim(), geaendertAm = uhr.instant(), syncOffen = true,
+            website = firma.website.trim(), notizen = firma.notizen.trim(), schlagworte = firma.schlagwortListe.joinToString(", "), geaendertAm = uhr.instant(), syncOffen = true,
         )
         dao.speichereAuftraggeber(neu)
         // Fälle tragen den Namen als Text – bei einer Umbenennung mitziehen.
@@ -89,6 +93,7 @@ class CrmRepository(
         crm.ladeAktivitaeten(firma.uuid).forEach { crm.loescheAktivitaet(it.uuid) }
         crm.ladeAufgaben(firma.uuid).forEach { crm.loescheAufgabe(it.uuid) }
         crm.ladeDokumente(firma.uuid).forEach { crm.loescheDokument(it.uuid) }
+        crm.ladeChancen(firma.uuid).forEach { crm.loescheChance(it.uuid) }
         crm.loeseMailsVonFirma(firma.uuid)
         dao.loeseFaelleVonFirma(firma.uuid)
         dao.loescheAuftraggeber(firma.uuid)
@@ -108,6 +113,7 @@ class CrmRepository(
             is Aktivitaet -> crm.speichere(eintrag.copy(text = eintrag.text.trim(), kontakt = eintrag.kontakt.trim(), geaendertAm = jetzt, syncOffen = true))
             is Aufgabe -> crm.speichere(eintrag.copy(text = eintrag.text.trim(), kontakt = eintrag.kontakt.trim(), geaendertAm = jetzt, syncOffen = true))
             is Dokument -> crm.speichere(eintrag.copy(titel = eintrag.titel.trim(), link = eintrag.link.trim(), notiz = eintrag.notiz.trim(), geaendertAm = jetzt, syncOffen = true))
+            is Chance -> crm.speichere(eintrag.copy(titel = eintrag.titel.trim(), notiz = eintrag.notiz.trim(), geaendertAm = jetzt, syncOffen = true))
             else -> error("Unbekannter Eintrag: $eintrag")
         }
     }
@@ -122,12 +128,21 @@ class CrmRepository(
             is Aktivitaet -> { crm.loescheAktivitaet(eintrag.uuid); Loeschung.Art.AKTIVITAET }
             is Aufgabe -> { crm.loescheAufgabe(eintrag.uuid); Loeschung.Art.AUFGABE }
             is Dokument -> { crm.loescheDokument(eintrag.uuid); Loeschung.Art.DOKUMENT }
+            is Chance -> { crm.loescheChance(eintrag.uuid); Loeschung.Art.CHANCE }
             else -> error("Unbekannter Eintrag: $eintrag")
         }
         dao.merkeLoeschung(Loeschung(eintrag.uuid, art, eintrag.auftraggeberUuid, uhr.instant()))
     }
 
     suspend fun aufgabeErledigt(aufgabe: Aufgabe, erledigt: Boolean) = speichern(aufgabe.copy(erledigt = erledigt))
+
+    /** Führt [weg] in [behalten] zusammen (doppelt angelegte Firma). */
+    suspend fun zusammenfuehren(weg: AuftraggeberEintrag, behalten: AuftraggeberEintrag) = aenderung {
+        val ziel = dao.auftraggeberPerKennung(behalten.uuid) ?: return@aenderung
+        verknuepfer.zusammenfuehren(ziel, weg)
+        // Fälle tragen den Namen als Text – auf den der verbleibenden Firma setzen.
+        for (fall in dao.faelleDerFirma(ziel.uuid)) if (fall.auftraggeber != ziel.name) dao.aktualisieren(fall.copy(auftraggeber = ziel.name, geaendertAm = uhr.instant(), syncOffen = true))
+    }
 
     /** Fälle ohne Firmenverweis verknüpfen und doppelte Firmen zusammenführen (nach Abgleich, Backup, Import). */
     suspend fun aufraeumen(): Int = db.withTransaction {

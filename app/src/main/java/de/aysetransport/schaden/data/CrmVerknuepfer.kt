@@ -97,6 +97,7 @@ class CrmVerknuepfer(private val db: SchadensfallDatenbank, private val uhr: Clo
         crm.haengeAktivitaetenUm(weg.uuid, behalten.uuid, ms)
         crm.haengeAufgabenUm(weg.uuid, behalten.uuid, ms)
         crm.haengeDokumenteUm(weg.uuid, behalten.uuid, ms)
+        crm.haengeChancenUm(weg.uuid, behalten.uuid, ms)
         crm.haengeMailsUm(weg.uuid, behalten.uuid)
         for (fall in dao.faelleDerFirma(weg.uuid)) {
             dao.aktualisieren(fall.copy(auftraggeberUuid = behalten.uuid, geaendertAm = jetzt, syncOffen = true))
@@ -108,6 +109,7 @@ class CrmVerknuepfer(private val db: SchadensfallDatenbank, private val uhr: Clo
             email = behalten.email.ifBlank { weg.email },
             website = behalten.website.ifBlank { weg.website },
             notizen = listOf(behalten.notizen.trim(), weg.notizen.trim()).filter { it.isNotEmpty() }.distinct().joinToString("\n\n"),
+            schlagworte = (behalten.schlagwortListe + weg.schlagwortListe).distinctBy { it.lowercase() }.joinToString(", "),
             geaendertAm = jetzt,
             syncOffen = true,
         )
