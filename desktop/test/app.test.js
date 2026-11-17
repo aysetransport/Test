@@ -47,7 +47,7 @@ test('Windows-App: Cloud, Fall, E-Mail senden, Antwort abrufen und beantworten, 
   // Cloud: Test-Cloud eintragen (statt der fest hinterlegten echten Adresse) und PIN festlegen.
   await s.evaluate(url => { localStorage.setItem('schadensfaelle-v1', JSON.stringify({ apiUrl: url })); localStorage.setItem('crm-bereich', 'faelle'); }, cloud.url);
   await s.reload(); await s.waitForFunction(() => window.__appBereit);
-  await s.locator('#pin1').fill(PIN); await s.locator('#pin2').fill(PIN); await s.locator('#pin-form button').click();
+  await s.locator('#pin1').fill(PIN); await s.locator('#pin2').fill(PIN); await s.locator('#pin-form button.voll').click();
   await aktuell(s);
 
   // Ohne Konto erscheint in den Einstellungen die Einrichtung; ein unerreichbarer Server wird gemeldet.

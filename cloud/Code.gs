@@ -30,7 +30,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 5; // 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
+var API_VERSION = 6; // 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
 
 /**
  * CRM-Tabellen: alle hängen über firmaId an einem Auftraggeber (Tabelle „auftraggeber“).
@@ -46,7 +46,15 @@ var CRM_TABELLEN = {
   chancen: { titel: 'text', wertCent: 'cent', phase: 'wort:ANFRAGE', erwartetAm: 'datum', notiz: 'text' },
   // Angebote und Rechnungen (bisher nur Web-/Windows-App); positionen als JSON-Text
   belege: { art: 'wort:RECHNUNG', nummer: 'text', datum: 'datum', faelligAm: 'datum', status: 'wort:OFFEN', positionen: 'text', mwstProzent: 'cent',
-    einleitung: 'text', schluss: 'text', bezahltCent: 'cent', bezahltAm: 'datum', mahnstufe: 'cent', bezug: 'text', notiz: 'text', fallId: 'text' }
+    einleitung: 'text', schluss: 'text', bezahltCent: 'cent', bezahltAm: 'datum', mahnstufe: 'cent', bezug: 'text', notiz: 'text', fallId: 'text' },
+  // Fuhrpark (ohne Firma): Fahrzeuge mit den Angaben aus dem Fahrzeugschein, Fristen und Fahrzeugakte.
+  // Zahlen (km, kg, kW, Cent, Liter × 100) als ganze Zahlen.
+  fahrzeuge: { kennzeichen: 'text', bezeichnung: 'text', art: 'wort:TRANSPORTER', status: 'wort:AKTIV', fahrer: 'text', kmStand: 'cent', wartungKm: 'cent',
+    halter: 'text', marke: 'text', modell: 'text', fin: 'text', erstzulassung: 'datum', zgg: 'cent', leergewicht: 'cent', hsn: 'text', tsn: 'text',
+    leistungKw: 'cent', kraftstoff: 'text', schadstoffklasse: 'text', achsen: 'cent', farbe: 'text', teil2Nr: 'text',
+    huBis: 'datum', spBis: 'datum', uvvBis: 'datum', tachoBis: 'datum', ladeBis: 'datum', wartungBis: 'datum', versicherungBis: 'datum', leasingBis: 'datum',
+    versicherung: 'text', versicherungsNr: 'text', leasinggeber: 'text', leasingRateCent: 'cent', notiz: 'text' },
+  fahrzeugeintraege: { fahrzeugId: 'text', art: 'wort:WARTUNG', datum: 'datum', kmStand: 'cent', betragCent: 'cent', menge: 'cent', werkstatt: 'text', text: 'text' }
 };
 /** Felder einer Firma, die nicht jede App kennt: Fehlen sie in einer Änderung, bleibt der bisherige Wert. */
 var FIRMEN_ZUSATZ = ['kundennummer', 'ustId', 'zahlungszielTage', 'schlagworte'];
@@ -161,8 +169,19 @@ function anmelden() {
 
 /** Schnelle Abfrage, ob es Neues gibt. */
 function stand() {
+  // Ohne daten.json zu lesen (die ist mit vielen Firmen und Mails groß): Kennung und Stand liegen
+  // zusätzlich in den Skript-Eigenschaften, zusammen mit der ID der Datei, zu der sie gehören.
+  var gemerkt = String(PropertiesService.getScriptProperties().getProperty('STAND') || '').split('|');
+  var datei = datenDatei_();
+  if (datei && gemerkt.length === 3 && gemerkt[0] === datei.getId()) return { kennung: gemerkt[1], rev: Number(gemerkt[2]) };
   var d = ladeDaten_();
+  merkeStand_(d);
   return { kennung: d.kennung, rev: d.rev };
+}
+
+function merkeStand_(d) {
+  var datei = datenDatei_();
+  if (datei) PropertiesService.getScriptProperties().setProperty('STAND', datei.getId() + '|' + d.kennung + '|' + d.rev);
 }
 
 /**
@@ -281,7 +300,8 @@ function uebernehmeAuftraggeber_(d, roh, zurueck) {
 /** CRM-Einträge: die spätere Änderung gewinnt; was zu einer gelöschten Firma kommt, gilt als gelöscht. */
 function uebernehmeCrm_(d, tabelle, roh, zurueck) {
   roh = roh || {};
-  var neu = { id: kennung_(roh.id), firmaId: kennung_(roh.firmaId), geaendertAm: zeitpunkt_(roh.geaendertAm) };
+  // Der Fuhrpark gehört zu keiner Firma.
+  var neu = { id: kennung_(roh.id), firmaId: roh.firmaId ? kennung_(roh.firmaId) : '', geaendertAm: zeitpunkt_(roh.geaendertAm) };
   var alt = d[tabelle][neu.id];
   var firma = d.auftraggeber[neu.firmaId];
   if (alt && alt.geloescht) { if (roh.geloescht !== true) zurueck[neu.id] = true; return; }
@@ -591,10 +611,12 @@ function speichereDaten_(d) {
   var datei = datenDatei_();
   if (!datei) {
     neueDatenDatei_(text);
+    merkeStand_(d);
     return;
   }
   sichereTaeglich_(datei);
   datei.setContent(text);
+  merkeStand_(d);
 }
 
 /** Hebt vor der ersten Änderung des Tages den bisherigen Stand auf. */

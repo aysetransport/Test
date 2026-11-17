@@ -169,6 +169,20 @@ Für 2.1 braucht es wieder die **aktuelle `Code.gs`** (Version 5) – wie in Sch
 Angebote und Rechnungen gleichen sich über die Cloud zwischen Windows-App und Web-App ab; die
 Android-App kennt sie noch nicht (sie lässt sie unverändert).
 
+## Neu in 2.3 (Windows-App und Web-App)
+
+**Wichtig:** Diese Version braucht die neue `cloud/Code.gs` (Cloud-Version 6). In Google Apps Script den Inhalt ersetzen und unter *Bereitstellen → Bereitstellungen verwalten → Bearbeiten → Version: Neue Version* neu bereitstellen. Solange das alte Skript läuft, zeigt die App „Das Cloud-Skript ist veraltet“ und gleicht nicht ab.
+
+- **Fuhrpark** (neuer Reiter): Fahrzeuge mit allen Angaben aus dem Fahrzeugschein (Halter, Marke, FIN, Erstzulassung, HSN/TSN, Gewichte, Leistung, Schadstoffklasse …), Versicherung und Leasing.
+- **Fristen:** HU (TÜV), SP, UVV, Tachograph, Ladebordwand, Wartung (nach Datum oder km), Versicherung und Leasingende. Was in den nächsten 30 Tagen fällig ist, steht farbig in der Liste, unter *Termine* und in der *Übersicht*.
+- **Dokumente:** Fahrzeugschein, Fahrzeugbrief, Versicherung, Prüfberichte, Verträge und Fotos am Fahrzeug ablegen. Sie liegen wie die Anlagen der Schadensfälle in Google Drive.
+- **Fahrzeugakte:** Wartung, Reparatur, Reifen, Tanken, Prüfungen, Schäden, Fahrerwechsel und sonstige Kosten. Daraus ergeben sich Kosten pro Jahr und pro km sowie der Durchschnittsverbrauch.
+- Schadensfälle, bei denen das Kennzeichen im Feld *Fahrzeug* steht, erscheinen beim Fahrzeug. Im Fall-Formular werden Kennzeichen und Fahrer vorgeschlagen.
+- CSV-Export für Fahrzeuge und Fahrzeugakte.
+- **Drucken** von Rechnungen und Angeboten öffnet kein eigenes Fenster mehr und wird darum nicht mehr blockiert.
+- **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
+- **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
+
 ## Bekannte Grenzen
 
 - Mails ohne Fall liegen nur auf dem Gerät, das sie abgerufen hat. Mails zu Firmen erscheinen über

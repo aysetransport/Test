@@ -409,8 +409,8 @@ function csvErstellen(faelle, anlagenJeFall) {
 
 // ============================== Daten im Browser ==============================
 const SPEICHER = 'schadensfaelle-v1', PIN_SPEICHER = 'schadensfaelle-pin';
-const CRM_TABELLEN = ['adressen', 'ansprechpartner', 'preise', 'aktivitaeten', 'aufgaben', 'dokumente', 'chancen', 'belege'];
-const LEER = () => ({ faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {}, adressen: {}, ansprechpartner: {}, preise: {}, aktivitaeten: {}, aufgaben: {}, dokumente: {}, chancen: {}, belege: {}, seit: 0, kennung: '', apiUrl: '', nurLokal: false,
+const CRM_TABELLEN = ['adressen', 'ansprechpartner', 'preise', 'aktivitaeten', 'aufgaben', 'dokumente', 'chancen', 'belege', 'fahrzeuge', 'fahrzeugeintraege'];
+const LEER = () => ({ faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {}, adressen: {}, ansprechpartner: {}, preise: {}, aktivitaeten: {}, aufgaben: {}, dokumente: {}, chancen: {}, belege: {}, fahrzeuge: {}, fahrzeugeintraege: {}, seit: 0, kennung: '', apiUrl: '', nurLokal: false,
   einstellungen: { firma: '', bearbeiter: '', funktion: '', wiedervorlageTage: 7 } });
 let S = LEER();
 try { S = Object.assign(LEER(), JSON.parse(localStorage.getItem(SPEICHER) || '{}')); } catch { /* beschädigter Stand: neu beginnen, die Cloud liefert nach */ }
@@ -442,6 +442,28 @@ function fallMerken(f) {
   return merke('faelle', f);
 }
 function nachAenderung() { speichere(); zeichne(); planeAbgleich(); }
+
+/**
+ * Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt: Alles wandert bei jedem Abgleich durch
+ * die eine Cloud-Datei – volle Mails (mit zitiertem Verlauf) machen den Abgleich sehr langsam.
+ * Die vollständige Mail bleibt im Postfach.
+ */
+const MAIL_TEXT_FIRMA = 2000, MAIL_TEXT_FALL = 6000;
+const GEKUERZT = '\n… (gekürzt – vollständig im Postfach)';
+const kuerze = (text, max) => (text.length <= max ? text : text.slice(0, max - GEKUERZT.length) + GEKUERZT);
+/** Einmalig: bereits gespeicherte, sehr lange Mail-Einträge kürzen (verkleinert die Cloud-Datei). */
+function langeMailsKuerzen() {
+  let geaendert = 0;
+  for (const a of Object.values(S.aktivitaeten || {})) {
+    if (a.geloescht || a.art !== 'EMAIL' || !a.text || a.text.length <= MAIL_TEXT_FIRMA) continue;
+    merke('aktivitaeten', { ...a, text: kuerze(a.text, MAIL_TEXT_FIRMA), geaendertAm: jetztIso() }); geaendert++;
+  }
+  for (const v of Object.values(S.verlauf || {})) {
+    if (v.geloescht || !/^EMAIL_/.test(v.typ || '') || !v.text || v.text.length <= MAIL_TEXT_FALL) continue;
+    merke('verlauf', { ...v, text: kuerze(v.text, MAIL_TEXT_FALL) }); geaendert++;
+  }
+  return geaendert;
+}
 
 const normal = t => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
 const auftraggeberListe = () => alle('auftraggeber').sort((a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'base' }));
@@ -631,7 +653,7 @@ async function api(fn, ...args) {
   return j.ok;
 }
 const TABELLEN = ['faelle', 'verlauf', 'anlagen', 'auftraggeber', ...CRM_TABELLEN];
-const CLOUD_API = 5;
+const CLOUD_API = 6;
 const VERALTET = 'Das Cloud-Skript ist veraltet – bitte die neue Code.gs bereitstellen.';
 const offeneAnzahl = () => TABELLEN.reduce((n, t) => n + offene(t).length, 0);
 const SYNC = { laeuft: false, nochmal: false, fehler: '', zuletzt: 0, timer: 0 };
@@ -680,10 +702,13 @@ async function abgleich() {
       }
     }
     if (S.kennung && r.kennung !== S.kennung) {
-      // Der Bestand in der Cloud wurde neu angelegt: alles von diesem Gerät erneut hochladen.
+      // Der Bestand in der Cloud wurde neu angelegt: alles von diesem Gerät erneut hochladen –
+      // aber nicht endlos, falls die Cloud bei jedem Aufruf einen neuen Bestand meldet.
+      SYNC.neuAngelegt = (SYNC.neuAngelegt || 0) + 1;
+      if (SYNC.neuAngelegt > 2) throw new Error('Die Cloud legt ihren Bestand ständig neu an – bitte den Ordner „Schadensfaelle“ in Google Drive und die Code.gs prüfen.');
       for (const tabelle of TABELLEN) for (const d of Object.values(S[tabelle])) { d._dirty = true; if (tabelle === 'anlagen') d.vorhanden = false; }
       S.seit = 0; SYNC.nochmal = true;
-    } else S.seit = r.rev;
+    } else { S.seit = r.rev; SYNC.neuAngelegt = 0; }
     S.kennung = r.kennung;
     speichere();
 
@@ -717,7 +742,8 @@ function zeichneSync() {
   let text, farbe = 'grau';
   if (!mitCloud()) text = 'Nur auf diesem Gerät';
   else if (!PIN) { text = 'Anmeldung nötig'; farbe = 'gelb'; }
-  else if (SYNC.laeuft) text = 'Gleiche ab …';
+  // Reine Nachfrage im Hintergrund ohne eigene Änderungen: weiter „Cloud aktuell“ zeigen.
+  else if (SYNC.laeuft && (wartend || !SYNC.zuletzt)) text = 'Gleiche ab …';
   else if (SYNC.fehler === 'offline') { text = wartend ? `Offline · ${wartend} Änderung${wartend === 1 ? '' : 'en'} wartet` : 'Offline'; farbe = 'gelb'; }
   else if (SYNC.fehler) { text = SYNC.fehler; farbe = 'rot'; }
   else if (wartend || !SYNC.zuletzt) text = 'Speichere …';
@@ -728,17 +754,22 @@ function zeichneSync() {
 // ---------- Anmeldung ----------
 let anmeldungOffen = false;
 async function anmeldung(falsch = false) {
-  if (anmeldungOffen) return; anmeldungOffen = true;
+  // Nur einmal gleichzeitig – aber nie dauerhaft gesperrt, falls ein anderes Fenster das PIN-Fenster ersetzt hat.
+  if (anmeldungOffen || ($('#dialog').open && $('#pin-form'))) return; anmeldungOffen = true;
+  zeichneSync();
   let eingerichtet = true;
   try { eingerichtet = (await api('status')).eingerichtet; }
   catch { anmeldungOffen = false; SYNC.fehler = 'offline'; zeichneSync(); return; }
+  anmeldungOffen = false;
   const neu = !eingerichtet;
   dialog(`<form method="dialog" id="pin-form"><h2>${neu ? 'PIN festlegen' : 'PIN eingeben'}</h2>
     <p class="leise">${neu ? 'Diese PIN schützt die Daten in der Cloud. Sie wird auf jedem Gerät einmal abgefragt (mindestens 4 Zeichen).' : 'Die PIN der Schadensfälle-Cloud.'}</p>
     <p class="fehlertext" id="pin-fehler" ${falsch ? '' : 'hidden'}>Die PIN war falsch.</p>
     <label class="feld">PIN<input id="pin1" type="password" autocomplete="${neu ? 'new-password' : 'current-password'}" required minlength="${neu ? 4 : 1}"></label>
     ${neu ? '<label class="feld">PIN wiederholen<input id="pin2" type="password" autocomplete="new-password" required></label>' : ''}
-    <div class="dialog-knoepfe"><button class="knopf voll" value="ok">${neu ? 'Festlegen' : 'Anmelden'}</button></div></form>`, { schliessbar: false });
+    <div class="dialog-knoepfe"><button type="button" class="knopf text" id="pin-spaeter">Später</button><button class="knopf voll" value="ok">${neu ? 'Festlegen' : 'Anmelden'}</button></div></form>`, { schliessbar: false });
+  $('#pin-spaeter').onclick = () => { $('#dialog').close(); zeichneSync(); };
+  setTimeout(() => $('#pin1') && $('#pin1').focus(), 50);
   $('#pin-form').onsubmit = async ereignis => {
     ereignis.preventDefault();
     const pin = $('#pin1').value, fehler = $('#pin-fehler');
@@ -748,7 +779,7 @@ async function anmeldung(falsch = false) {
       if (neu) await api('pinFestlegen', pin);
       await api('anmelden', pin);
       PIN = pin; try { localStorage.setItem(PIN_SPEICHER, PIN); } catch {}
-      anmeldungOffen = false; $('#dialog').close(); SYNC.fehler = ''; abgleich();
+      $('#dialog').close(); SYNC.fehler = ''; SYNC.versionOk = null; abgleich();
     } catch (e) {
       const m = String(e.message || e);
       zeige(m.includes('GESPERRT') ? m.replace(/^.*GESPERRT: /, '') : m.includes('falsch') ? 'Die PIN war falsch.' : e instanceof TypeError ? 'Keine Verbindung zur Cloud.' : m);
@@ -758,7 +789,7 @@ async function anmeldung(falsch = false) {
 
 // ============================== Oberfläche ==============================
 const ANSICHT = { filter: 'OFFEN', suche: '', notiz: '', bereich: 'firmen', firmenSuche: '', firmenStatus: '', firmaFuerNeuenFall: '' };
-try { const b = localStorage.getItem('crm-bereich'); if (b && ['uebersicht', 'firmen', 'faelle', 'termine', 'finanzen', 'postfach'].includes(b)) ANSICHT.bereich = b; } catch {}
+try { const b = localStorage.getItem('crm-bereich'); if (b && ['uebersicht', 'firmen', 'faelle', 'termine', 'finanzen', 'fuhrpark', 'postfach'].includes(b)) ANSICHT.bereich = b; } catch {}
 function route() {
   const [, art = '', id = ''] = location.hash.split('/');
   return { art, id };
@@ -789,7 +820,7 @@ function zeichneListe(r = route()) {
   if (ANSICHT.bereich !== 'faelle') {
     const el = $('#liste'), fokus = document.activeElement && document.activeElement.id === 'firmen-suche';
     if (ANSICHT.bereich === 'postfach' && !MAIL.konto) ANSICHT.bereich = 'firmen';
-    const inhalt = { termine: () => zeichneTermine(), postfach: () => zeichnePostfach(r), finanzen: () => zeichneFinanzen(r), uebersicht: () => zeichneUebersicht() }[ANSICHT.bereich];
+    const inhalt = { termine: () => zeichneTermine(), postfach: () => zeichnePostfach(r), finanzen: () => zeichneFinanzen(r), fuhrpark: () => zeichneFuhrpark(r), uebersicht: () => zeichneUebersicht() }[ANSICHT.bereich];
     el.innerHTML = bereichsReiter() + (inhalt ? inhalt() : zeichneFirmenliste(r));
     if (fokus) { const s = $('#firmen-suche'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
     return;
@@ -836,7 +867,7 @@ $('#liste').addEventListener('click', e => {
 });
 $('#zurueck').onclick = () => { if (!formularSchliessen()) return; gehe('#/'); };
 $('#einstellungen-knopf').onclick = () => gehe('#/einstellungen');
-$('#sync').onclick = () => (mitCloud() ? abgleich() : gehe('#/einstellungen'));
+$('#sync').onclick = () => (!mitCloud() ? gehe('#/einstellungen') : !PIN ? anmeldung() : abgleich());
 
 function zeichneDetail(r = route()) {
   const el = $('#detail');
@@ -844,6 +875,7 @@ function zeichneDetail(r = route()) {
   el.dataset.id = '';
   if (r.art === 'einstellungen') { zeichneEinstellungen(); return; }
   if (r.art === 'firma') { zeichneFirma(r.id); return; }
+  if (r.art === 'fahrzeug') { zeichneFahrzeug(r.id); return; }
   if (r.art === 'mail') { zeichneMail(decodeURIComponent(r.id)); return; }
   if (r.art === 'beleg') {
     // Nicht neu zeichnen, während im Formular getippt wird (z. B. bei einem Abgleich im Hintergrund).
@@ -1070,14 +1102,17 @@ function zeichneFormular(r) {
     if (art && typeof art === 'object') return `<label class="feld">${label}<select name="${name}">${Object.entries(art).map(([k, t]) => `<option value="${k}" ${String(f[name] ?? '') === k ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
     if (art === 'lang') return `<label class="feld">${label}<textarea name="${name}">${wert}</textarea></label>`;
     const typ = { date: 'type="date"', tel: 'type="tel"', email: 'type="email"', geld: 'inputmode="decimal"' }[art] || '';
-    return `<label class="feld">${label}<input name="${name}" ${typ} value="${wert}"><span class="fehlertext" data-fehler="${name}" hidden></span></label>`;
+    const liste = name === 'fahrzeug' && alle('fahrzeuge').length ? 'list="fahrzeug-liste"' : name === 'fahrer' && alle('fahrzeuge').some(z => z.fahrer) ? 'list="fahrer-liste"' : '';
+    return `<label class="feld">${label}<input name="${name}" ${typ} ${liste} value="${wert}"><span class="fehlertext" data-fehler="${name}" hidden></span></label>`;
   };
   const el = $('#detail'); el.dataset.id = r.art + r.id;
   el.innerHTML = `<form id="fall-form" novalidate>
     <div class="zeile eng" style="margin-bottom:12px"><h2 class="gross fuell">${alt ? 'Fall bearbeiten' : 'Neuer Schadensfall'}</h2>
       <button type="button" class="knopf text" id="abbrechen">Abbrechen</button><button class="knopf voll">Speichern</button></div>
     <p class="fehlertext" id="form-fehler" hidden></p>
-    ${FELDER.map(([titel, felder]) => `<div class="karte block"><h3>${titel}</h3>${titel === 'Auftraggeber' ? auftraggeberAuswahl() : ''}${felder.map(feld).join('')}</div>`).join('')}</form>`;
+    ${FELDER.map(([titel, felder]) => `<div class="karte block"><h3>${titel}</h3>${titel === 'Auftraggeber' ? auftraggeberAuswahl() : ''}${felder.map(feld).join('')}</div>`).join('')}
+    <datalist id="fahrzeug-liste">${fahrzeugListe().filter(z => z.status !== 'STILLGELEGT').map(z => `<option value="${esc(z.kennzeichen)}">${esc(z.bezeichnung || '')}</option>`).join('')}</datalist>
+    <datalist id="fahrer-liste">${[...new Set(alle('fahrzeuge').map(z => z.fahrer).filter(Boolean))].map(n => `<option value="${esc(n)}">`).join('')}</datalist></form>`;
   formularStand = formularWerte();
   const auswahl = $('#ag-auswahl');
   if (auswahl) auswahl.onchange = () => {
@@ -1177,7 +1212,7 @@ $('#detail').addEventListener('click', e => {
       }
     }
     case 'jetzt': abgleich(); break;
-    case 'abmelden': PIN = ''; try { localStorage.removeItem(PIN_SPEICHER); } catch {} toast('Abgemeldet. Beim nächsten Abgleich wird die PIN abgefragt.'); break;
+    case 'abmelden': PIN = ''; try { localStorage.removeItem(PIN_SPEICHER); } catch {} SYNC.fehler = ''; zeichneSync(); toast('Abgemeldet. Zum Anmelden oben auf „Anmeldung nötig“ tippen.'); break;
     case 'verbinden': {
       const url = $('#cloud-url').value.trim();
       if (!/^https?:\/\/.+/.test(url)) { toast('Bitte die vollständige Adresse eintragen (beginnt mit https://).'); break; }
@@ -1233,11 +1268,12 @@ function wiedervorlagen() {
     ...alle('aufgaben').filter(a => !a.erledigt && a.faelligAm).map(a => ({ art: 'aufgabe', datum: a.faelligAm, titel: a.text, zusatz: [S.auftraggeber[a.firmaId]?.name, a.kontakt].filter(Boolean).join(' · '), a })),
     ...faelle().filter(f => status(f).offen && f.wiedervorlageAm).map(f => ({ art: 'fall', datum: f.wiedervorlageAm, titel: `Fall ${f.fallnummer} · ${anzeigeName(f)}`,
       zusatz: [f.auftraggeber, f.wartetAuf && 'wartet auf ' + PARTNER[f.wartetAuf], f.wiedervorlageNotiz].filter(Boolean).join(' · '), f })),
+    ...fahrzeugTermine(),
   ].sort((a, b) => a.datum.localeCompare(b.datum) || a.titel.localeCompare(b.titel));
   return { ueberfaellig: termine.filter(x => x.datum < t), heute: termine.filter(x => x.datum === t), demnaechst: termine.filter(x => x.datum > t),
     ohneDatum: alle('aufgaben').filter(a => !a.erledigt && !a.faelligAm) };
 }
-const naechsterTermin = firma => { const w = wiedervorlagen(); return [...w.ueberfaellig, ...w.heute, ...w.demnaechst].find(x => (x.a ? x.a.firmaId === firma.id : gehoertZu(x.f, firma))); };
+const naechsterTermin = firma => { const w = wiedervorlagen(); return [...w.ueberfaellig, ...w.heute, ...w.demnaechst].find(x => (x.a ? x.a.firmaId === firma.id : x.f ? gehoertZu(x.f, firma) : false)); };
 
 /** Volltextsuche: Fundstelle oder null. */
 function firmaTreffer(e, such) {
@@ -1255,7 +1291,7 @@ function firmaTreffer(e, such) {
   return null;
 }
 
-const BEREICHE = { uebersicht: 'Übersicht', firmen: 'Firmen', faelle: 'Schäden', termine: 'Termine', finanzen: 'Finanzen', postfach: 'Postfach' };
+const BEREICHE = { uebersicht: 'Übersicht', firmen: 'Firmen', faelle: 'Schäden', termine: 'Termine', finanzen: 'Finanzen', fuhrpark: 'Fuhrpark', postfach: 'Postfach' };
 function bereichsReiter() {
   const w = wiedervorlagen(), faellig = w.ueberfaellig.length + w.heute.length;
   const offen = Object.values(mails()).filter(m => !istZugeordnet(m)).length;
@@ -1302,6 +1338,7 @@ function zeichneTermine() {
   const eintrag = x => x.art === 'aufgabe'
     ? `<div class="termin"><input type="checkbox" data-erledigt="${x.a.id}" aria-label="Erledigt"><button class="vorlage fuell" data-firma="${x.a.firmaId}"><b>${esc(x.titel)}</b><br><span class="leise">${esc([x.datum !== heute() && datumText(x.datum), x.zusatz].filter(Boolean).join(' · '))}</span></button>
       <button class="knopf text" data-verschieben="${x.a.id}" data-tage="1">Morgen</button><button class="knopf text" data-verschieben="${x.a.id}" data-tage="7">+1 Woche</button></div>`
+    : x.z ? `<div class="termin"><span class="termin-symbol">🚐</span><button class="vorlage fuell" data-fahrzeug="${x.z.id}"><b>${esc(x.titel)}</b><br><span class="leise">${esc([x.datum !== heute() && datumText(x.datum), x.zusatz].filter(Boolean).join(' · '))}</span></button></div>`
     : `<div class="termin"><span class="termin-symbol">🚚</span><button class="vorlage fuell" data-fall="${x.f.id}"><b>${esc(x.titel)}</b><br><span class="leise">${esc([x.datum !== heute() && datumText(x.datum), x.zusatz].filter(Boolean).join(' · '))}</span></button></div>`;
   const gruppe = (titel, liste, farbe) => (liste.length ? `<h3 class="abschnitt" style="${farbe}">${titel} (${liste.length})</h3>${liste.map(eintrag).join('')}` : '');
   const ohne = w.ohneDatum.length ? `<h3 class="abschnitt">Ohne Datum</h3>${w.ohneDatum.map(a => eintrag({ art: 'aufgabe', datum: '', titel: a.text, zusatz: S.auftraggeber[a.firmaId]?.name || '', a })).join('')}` : '';
@@ -1660,11 +1697,17 @@ async function belegPdf(b) {
   if (!window.desktop || !window.desktop.pdf) throw new Error('PDF gibt es in der Windows-App. Im Browser bitte „Drucken“ → „Als PDF speichern“ nutzen.');
   return window.desktop.pdf(belegHtml(b));
 }
-function belegDrucken(b) {
-  const f = window.open('', '_blank');
-  if (!f) { toast('Das Druckfenster wurde blockiert.'); return; }
-  f.document.write(belegHtml(b)); f.document.close(); f.focus(); setTimeout(() => f.print(), 300);
+/** Druckt HTML über einen unsichtbaren Rahmen – kein neues Fenster, das ein Popup-Blocker (oder die Windows-App) sperren könnte. */
+function druckeHtml(html) {
+  const alt = $('#druckrahmen'); if (alt) alt.remove();
+  const r = document.createElement('iframe');
+  r.id = 'druckrahmen'; r.setAttribute('aria-hidden', 'true');
+  r.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  r.onload = () => setTimeout(() => { try { r.contentWindow.focus(); r.contentWindow.print(); } catch { toast('Drucken ist hier nicht möglich – bitte „PDF“ verwenden.'); } }, 200);
+  r.srcdoc = html;
+  document.body.appendChild(r);
 }
+function belegDrucken(b) { druckeHtml(belegHtml(b)); }
 
 // ---------- Übersicht und Finanzen (Liste) ----------
 function finanzKennzahlen() {
@@ -1725,9 +1768,10 @@ function zeichneUebersicht() {
     ${kachel(`${chancen.length} · ${geld(chancen.reduce((n, c) => n + (c.wertCent || 0), 0))}`, 'Offene Verkaufschancen', 'firmen')}
     ${kachel(geld(k.angebote), 'Offene Angebote (netto)', 'finanzen')}
     ${kachel(kz.offen, 'Offene Schadensfälle', 'faelle', kz.faellig)}
-    ${kachel(pause.length, 'Firmen lange ohne Kontakt', 'firmen')}</div>
+    ${kachel(pause.length, 'Firmen lange ohne Kontakt', 'firmen')}
+    ${kachel(fahrzeugTermine().length, `Fahrzeug-Fristen (${FRIST_VORLAUF} Tage)`, 'fuhrpark', fahrzeugTermine().some(x => x.datum < heute()))}</div>
     ${w.ueberfaellig.length + w.heute.length ? `<h3 class="abschnitt">Heute zu tun</h3>${[...w.ueberfaellig, ...w.heute].slice(0, 8).map(x =>
-      `<button class="vorlage" ${x.a ? `data-firma="${x.a.firmaId}"` : `data-fall="${x.f.id}"`}><b>${esc(x.titel)}</b><br><span class="leise">${esc([datumText(x.datum), x.zusatz].filter(Boolean).join(' · '))}</span></button>`).join('')}` : ''}
+      `<button class="vorlage" ${x.a ? `data-firma="${x.a.firmaId}"` : x.z ? `data-fahrzeug="${x.z.id}"` : `data-fall="${x.f.id}"`}><b>${esc(x.titel)}</b><br><span class="leise">${esc([datumText(x.datum), x.zusatz].filter(Boolean).join(' · '))}</span></button>`).join('')}` : ''}
     ${k.ueberfaelligAnzahl ? `<h3 class="abschnitt">Überfällige Rechnungen</h3>${alle('belege').filter(istUeberfaellig).map(b => belegKarte(b)).join('')}` : ''}`;
 }
 
@@ -1867,6 +1911,283 @@ $('#liste').addEventListener('input', e => {
   if (e.target.id === 'beleg-suche') { ANSICHT.belegSuche = e.target.value; zeichneListe(); const f = $('#beleg-suche'); f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
 });
 
+// ============================== Fuhrpark ==============================
+const FAHRZEUG_ART = { TRANSPORTER: 'Transporter', LKW: 'LKW', PKW: 'PKW', ANHAENGER: 'Anhänger', SONSTIGES: 'Sonstiges' };
+const FAHRZEUG_STATUS = { AKTIV: ['Im Einsatz', 'gruen'], WERKSTATT: ['In der Werkstatt', 'gelb'], RESERVE: ['Reserve', 'grau'], STILLGELEGT: ['Abgemeldet / verkauft', 'grau'] };
+const FRISTEN = [['huBis', 'HU (TÜV)'], ['spBis', 'SP (Sicherheitsprüfung)'], ['uvvBis', 'UVV-Prüfung'], ['tachoBis', 'Tachograph-Prüfung'], ['ladeBis', 'Ladebordwand-Prüfung'],
+  ['wartungBis', 'Wartung / Inspektion'], ['versicherungBis', 'Versicherung läuft ab'], ['leasingBis', 'Leasing / Finanzierung endet']];
+const FAHRZEUG_EINTRAG = { WARTUNG: ['Wartung / Inspektion', '🔧'], REPARATUR: ['Reparatur', '🛠'], REIFEN: ['Reifen', '⭕'], TANKEN: ['Tanken', '⛽'], PRUEFUNG: ['Prüfung (HU, SP, UVV …)', '✅'],
+  SCHADEN: ['Schaden', '⚠'], KM: ['Kilometerstand', '📍'], FAHRER: ['Fahrerwechsel / Übergabe', '👤'], KOSTEN: ['Sonstige Kosten (Steuer, Maut …)', '€'] };
+const FAHRZEUG_DOKUMENTE = ['Fahrzeugschein (Teil I)', 'Fahrzeugbrief (Teil II)', 'Versicherung', 'HU-/SP-Bericht', 'UVV-Prüfung', 'Leasing-/Kaufvertrag', 'Rechnung', 'Foto', 'Sonstiges'];
+/** Ab so vielen Tagen vorher erscheint eine Frist unter „Termine“. */
+const FRIST_VORLAUF = 30;
+const FAHRZEUG_FELDER = [
+  ['Fahrzeug', [['kennzeichen', 'Kennzeichen', 'pflicht'], ['bezeichnung', 'Interne Bezeichnung (z. B. Sprinter 3)'], ['art', 'Art', FAHRZEUG_ART],
+    ['status', 'Status', Object.fromEntries(Object.entries(FAHRZEUG_STATUS).map(([k, [l]]) => [k, l]))], ['fahrer', 'Fester Fahrer'], ['kmStand', 'Kilometerstand', 'zahl'], ['wartungKm', 'Nächste Wartung bei km', 'zahl']]],
+  ['Fristen', FRISTEN.map(([k, l]) => [k, l, 'date'])],
+  ['Fahrzeugschein (Zulassungsbescheinigung Teil I)', [['halter', 'Halter (C.1)'], ['marke', 'Marke (D.1)'], ['modell', 'Typ / Handelsbezeichnung (D.2/D.3)'], ['fin', 'Fahrzeug-Ident.-Nr. FIN (E)'],
+    ['erstzulassung', 'Erstzulassung (B)', 'date'], ['zgg', 'Zul. Gesamtmasse in kg (F.2)', 'zahl'], ['leergewicht', 'Leergewicht in kg (G)', 'zahl'], ['hsn', 'Herstellerschlüssel HSN (2.1)'], ['tsn', 'Typschlüssel TSN (2.2)'],
+    ['leistungKw', 'Leistung in kW (P.2)', 'zahl'], ['kraftstoff', 'Kraftstoff (P.3)'], ['schadstoffklasse', 'Schadstoff-/Emissionsklasse (14 / V.9)'], ['achsen', 'Achsen (L)', 'zahl'],
+    ['farbe', 'Farbe (R)'], ['teil2Nr', 'Nummer Zulassungsbescheinigung Teil II']]],
+  ['Versicherung und Finanzierung', [['versicherung', 'Versicherung'], ['versicherungsNr', 'Versicherungsschein-Nr.'], ['leasinggeber', 'Leasinggeber / Bank'], ['leasingRate', 'Monatliche Rate in Euro', 'geld'], ['notiz', 'Notizen', 'lang']]],
+];
+const ZAHL_FELDER = ['kmStand', 'wartungKm', 'zgg', 'leergewicht', 'leistungKw', 'achsen'];
+
+const fahrzeugListe = () => alle('fahrzeuge').sort((a, b) => (a.status === 'STILLGELEGT') - (b.status === 'STILLGELEGT') || String(a.kennzeichen).localeCompare(String(b.kennzeichen), 'de'));
+const fahrzeugName = z => [z.kennzeichen, z.bezeichnung || [z.marke, z.modell].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+const fahrzeugStatus = z => FAHRZEUG_STATUS[z.status] || FAHRZEUG_STATUS.AKTIV;
+const eintraegeVon = id => alle('fahrzeugeintraege').filter(x => x.fahrzeugId === id).sort((a, b) => String(b.datum).localeCompare(String(a.datum)) || (b.kmStand || 0) - (a.kmStand || 0));
+const kzNormal = t => String(t || '').toUpperCase().replace(/[^A-Z0-9ÄÖÜ]/g, '');
+/** Schadensfälle, in deren Feld „Fahrzeug / Kennzeichen“ dieses Kennzeichen steht. */
+const faelleVonFahrzeug = z => { const kz = kzNormal(z.kennzeichen); return kz ? faelle().filter(f => kzNormal(f.fahrzeug).includes(kz)) : []; };
+const zahlText = (n, einheit = '') => (n == null || n === '' ? '' : Number(n).toLocaleString('de-DE') + (einheit ? ' ' + einheit : ''));
+
+/** Alle Fristen eines Fahrzeugs (ohne abgemeldete Fahrzeuge), sortiert nach Datum. */
+function fristenVon(z) {
+  if (z.status === 'STILLGELEGT') return [];
+  return FRISTEN.filter(([k]) => z[k]).map(([k, l]) => ({ feld: k, label: l, datum: z[k], tage: Math.round((new Date(z[k]) - new Date(heute())) / 86400000) }))
+    .sort((a, b) => a.datum.localeCompare(b.datum));
+}
+const fristFarbe = f => (f.tage < 0 ? 'rot' : f.tage <= FRIST_VORLAUF ? 'gelb' : 'grau');
+const fristText = f => (f.tage < 0 ? `seit ${datumText(f.datum)} überfällig` : f.tage === 0 ? 'heute fällig' : f.tage <= FRIST_VORLAUF ? `in ${f.tage} Tag${f.tage === 1 ? '' : 'en'} (${datumText(f.datum)})` : datumText(f.datum));
+const wartungKmFaellig = z => z.status !== 'STILLGELEGT' && z.wartungKm != null && z.kmStand != null && z.kmStand >= z.wartungKm - 1000;
+/** Fristen, die in den nächsten FRIST_VORLAUF Tagen fällig sind (oder überfällig) – für Termine und Übersicht. */
+function fahrzeugTermine() {
+  const bis = plusTage(heute(), FRIST_VORLAUF);
+  return fahrzeugListe().flatMap(z => fristenVon(z).filter(f => f.datum <= bis).map(f => ({ art: 'fahrzeug', datum: f.datum, titel: `${f.label} · ${z.kennzeichen}`,
+    zusatz: [z.bezeichnung, z.fahrer].filter(Boolean).join(' · '), z })));
+}
+
+function fahrzeugKosten(z) {
+  const e = eintraegeVon(z.id), jahr = String(new Date().getFullYear());
+  const summe = l => l.reduce((n, x) => n + (x.betragCent || 0), 0);
+  const tanken = e.filter(x => x.art === 'TANKEN' && x.menge && x.kmStand).sort((a, b) => a.kmStand - b.kmStand);
+  // Durchschnittsverbrauch: getankte Liter nach der ersten Tankung ÷ gefahrene km dazwischen
+  let verbrauch = null;
+  if (tanken.length >= 2) {
+    const km = tanken[tanken.length - 1].kmStand - tanken[0].kmStand, liter = tanken.slice(1).reduce((n, x) => n + x.menge, 0) / 100;
+    if (km > 0) verbrauch = liter / km * 100;
+  }
+  const kmWerte = e.filter(x => x.kmStand).map(x => x.kmStand);
+  return { jahr: summe(e.filter(x => String(x.datum).startsWith(jahr))), gesamt: summe(e), tankenJahr: summe(e.filter(x => x.art === 'TANKEN' && String(x.datum).startsWith(jahr))),
+    werkstattJahr: summe(e.filter(x => ['WARTUNG', 'REPARATUR', 'REIFEN', 'PRUEFUNG'].includes(x.art) && String(x.datum).startsWith(jahr))), verbrauch,
+    proKm: kmWerte.length >= 2 && Math.max(...kmWerte) > Math.min(...kmWerte) ? summe(e) / (Math.max(...kmWerte) - Math.min(...kmWerte)) : null };
+}
+
+const FuhrparkAktionen = {
+  speichern(z) { const x = merke('fahrzeuge', { ...z, id: z.id || uuid(), firmaId: '', kennzeichen: String(z.kennzeichen || '').trim().toUpperCase(), geaendertAm: jetztIso() }); nachAenderung(); return x.id; },
+  loeschen(z) {
+    const jetzt = jetztIso();
+    for (const x of eintraegeVon(z.id)) entferne('fahrzeugeintraege', x, { firmaId: '', fahrzeugId: z.id, geaendertAm: jetzt });
+    for (const a of anlagenVon(z.id)) { entferne('anlagen', a, { fallId: a.fallId }); Dateien.loesche(a.id); }
+    entferne('fahrzeuge', z, { firmaId: '', geaendertAm: jetzt }); nachAenderung();
+  },
+  eintragSpeichern(x) {
+    merke('fahrzeugeintraege', { ...x, id: x.id || uuid(), firmaId: '', geaendertAm: jetztIso() });
+    // Ein höherer Kilometerstand im Eintrag wird ins Fahrzeug übernommen, ein Fahrerwechsel ebenso.
+    const z = S.fahrzeuge[x.fahrzeugId];
+    if (z && !z.geloescht) {
+      const neu = { ...z };
+      if (x.kmStand != null && (z.kmStand == null || x.kmStand > z.kmStand)) neu.kmStand = x.kmStand;
+      if (x.art === 'FAHRER' && x.werkstatt) neu.fahrer = x.werkstatt;
+      if (neu.kmStand !== z.kmStand || neu.fahrer !== z.fahrer) merke('fahrzeuge', { ...neu, geaendertAm: jetztIso() });
+    }
+    nachAenderung();
+  },
+  eintragLoeschen(x) { entferne('fahrzeugeintraege', x, { firmaId: '', fahrzeugId: x.fahrzeugId, geaendertAm: jetztIso() }); nachAenderung(); },
+  async dokument(fahrzeugId, art, datei) {
+    const blob = await verkleinere(datei);
+    if (blob.size > 25 * 1024 * 1024) { toast(`„${datei.name}“ ist größer als 25 MB und wurde nicht übernommen`); return; }
+    const name = `${art} – ` + (blob === datei ? datei.name : datei.name.replace(/\.[^.]+$/, '') + '.jpg');
+    const a = merke('anlagen', { id: uuid(), fallId: fahrzeugId, anzeigename: name, mimeType: blob.type || 'application/octet-stream', groesseBytes: blob.size, hinzugefuegtAm: jetztIso(), vorhanden: false });
+    await Dateien.lege(a.id, blob);
+    nachAenderung();
+  },
+};
+
+function zeichneFuhrpark(r) {
+  const such = (ANSICHT.fuhrparkSuche || '').trim().toLowerCase(), st = ANSICHT.fuhrparkStatus || '';
+  const liste = fahrzeugListe().filter(z => (st === 'FRIST' ? fristenVon(z).some(f => f.tage <= FRIST_VORLAUF) || wartungKmFaellig(z) : !st || z.status === st))
+    .filter(z => !such || [z.kennzeichen, z.bezeichnung, z.marke, z.modell, z.fahrer, z.fin, z.halter, z.notiz].some(t => String(t || '').toLowerCase().includes(such)));
+  const faellig = fahrzeugListe().filter(z => fristenVon(z).some(f => f.tage <= FRIST_VORLAUF) || wartungKmFaellig(z)).length;
+  const kosten = fahrzeugListe().reduce((n, z) => n + fahrzeugKosten(z).jahr, 0);
+  const karten = liste.map(z => {
+    const f = fristenVon(z)[0];
+    return `<button class="karte klickbar ${r && r.art === 'fahrzeug' && r.id === z.id ? 'gewaehlt' : ''}" data-fahrzeug="${z.id}">
+      <div class="zeile eng"><span class="titel fuell">${esc(z.kennzeichen || '(ohne Kennzeichen)')}</span><span class="marke ${fahrzeugStatus(z)[1]}">${esc(fahrzeugStatus(z)[0])}</span></div>
+      <div class="leise">${esc([FAHRZEUG_ART[z.art], z.bezeichnung || [z.marke, z.modell].filter(Boolean).join(' '), z.fahrer && 'Fahrer: ' + z.fahrer, z.kmStand != null && zahlText(z.kmStand, 'km')].filter(Boolean).join(' · '))}</div>
+      ${f ? `<div class="zeile eng" style="margin-top:6px"><span class="marke ${fristFarbe(f)}">⏱ ${esc(f.label)}: ${esc(fristText(f))}</span></div>` : ''}
+      ${wartungKmFaellig(z) ? `<div class="zeile eng" style="margin-top:4px"><span class="marke gelb">🔧 Wartung bei ${esc(zahlText(z.wartungKm, 'km'))}</span></div>` : ''}</button>`;
+  }).join('');
+  return `<div class="kennzahlen">
+      <button class="kennzahl" data-fuhrpark-status="AKTIV"><b>${fahrzeugListe().filter(z => z.status !== 'STILLGELEGT').length}</b><span>Fahrzeuge</span></button>
+      <button class="kennzahl ${faellig ? 'rot' : ''}" data-fuhrpark-status="FRIST"><b>${faellig}</b><span>Fristen in ${FRIST_VORLAUF} Tagen</span></button>
+      <button class="kennzahl" data-fuhrpark-status=""><b>${geld(kosten)}</b><span>Kosten dieses Jahr</span></button></div>
+    <input class="suche" id="fuhrpark-suche" type="search" placeholder="Kennzeichen, Fahrer, Marke, FIN …" aria-label="Fahrzeuge durchsuchen" value="${esc(ANSICHT.fuhrparkSuche || '')}">
+    <div class="chips" role="group" aria-label="Status"><button class="chip" data-fuhrpark-status="" aria-pressed="${!st}">Alle</button>
+      <button class="chip" data-fuhrpark-status="FRIST" aria-pressed="${st === 'FRIST'}">Frist fällig</button>${Object.entries(FAHRZEUG_STATUS).map(([k, [l]]) =>
+      `<button class="chip" data-fuhrpark-status="${k}" aria-pressed="${st === k}">${l}</button>`).join('')}</div>
+    <div class="zeile"><button class="knopf voll fab" data-neues-fahrzeug>＋ Neues Fahrzeug</button><button class="knopf" data-fuhrpark-csv>CSV</button></div>
+    <div id="fahrzeuge">${karten || `<div class="leer">🚐<b>${alle('fahrzeuge').length ? 'Keine Treffer' : 'Noch keine Fahrzeuge'}</b>${alle('fahrzeuge').length ? 'In dieser Ansicht gibt es keine Fahrzeuge.' : 'Lege deine Fahrzeuge an – mit Fahrzeugschein, TÜV-, SP- und UVV-Fristen, Werkstatt, Tanken und Kosten.'}</div>`}</div>`;
+}
+
+function zeichneFahrzeug(id) {
+  const z = S.fahrzeuge[id], el = $('#detail');
+  if (!z || z.geloescht) { gehe('#/'); return; }
+  const dl = paare => { const p = paare.filter(([, w]) => w != null && String(w).trim()); return p.length ? `<dl>${p.map(([l, w]) => `<dt>${l}</dt><dd>${esc(String(w))}</dd>`).join('')}</dl>` : ''; };
+  const k = fahrzeugKosten(z), fr = fristenVon(z), dok = anlagenVon(z.id), akte = eintraegeVon(z.id), schaeden = faelleVonFahrzeug(z);
+  el.innerHTML = `
+    <div class="karte">
+      <div class="zeile eng"><h2 class="gross fuell">${esc(z.kennzeichen)}</h2><button class="symbol" data-fz="bearbeiten" aria-label="Fahrzeug bearbeiten">✎</button></div>
+      <p class="leise">${esc([FAHRZEUG_ART[z.art], z.bezeichnung, [z.marke, z.modell].filter(Boolean).join(' ')].filter(Boolean).join(' · '))}</p>
+      <div class="zeile" style="margin-top:10px"><span class="marke ${fahrzeugStatus(z)[1]}">${esc(fahrzeugStatus(z)[0])}</span>
+        ${z.fahrer ? `<span class="leise">Fahrer: ${esc(z.fahrer)}</span>` : ''}<span class="fuell"></span>${z.kmStand != null ? `<b>${esc(zahlText(z.kmStand, 'km'))}</b>` : ''}</div>
+      <div class="zeile" style="margin-top:10px"><button class="knopf voll" data-fz="eintrag">＋ Eintrag (Werkstatt, Tanken, km …)</button>
+        <button class="knopf" data-fz="tanken">⛽ Tanken</button><button class="knopf" data-fz="km">📍 km-Stand</button></div>
+    </div>
+    <div class="karte block"><h3>Fristen</h3>
+      ${fr.length || wartungKmFaellig(z) ? `<div id="fristen">${fr.map(f => `<div class="zeile eng" style="margin:4px 0"><span class="fuell">${esc(f.label)}</span><span class="marke ${fristFarbe(f)}">${esc(fristText(f))}</span></div>`).join('')}
+        ${z.wartungKm != null ? `<div class="zeile eng" style="margin:4px 0"><span class="fuell">Wartung nach km</span><span class="marke ${wartungKmFaellig(z) ? 'gelb' : 'grau'}">bei ${esc(zahlText(z.wartungKm, 'km'))}</span></div>` : ''}</div>`
+        : '<p class="leise">Keine Fristen eingetragen – über ✎ HU, SP, UVV, Tacho und Wartung eintragen.</p>'}</div>
+    <div class="karte block"><h3>Kosten</h3>
+      <div class="kennzahlen" style="margin:0"><div class="kennzahl"><b>${geld(k.jahr)}</b><span>dieses Jahr</span></div><div class="kennzahl"><b>${geld(k.tankenJahr)}</b><span>Tanken (Jahr)</span></div>
+        <div class="kennzahl"><b>${geld(k.werkstattJahr)}</b><span>Werkstatt (Jahr)</span></div></div>
+      ${dl([['Kosten gesamt', geld(k.gesamt)], ['Kosten pro km', k.proKm != null ? geld(Math.round(k.proKm)) : ''], ['Ø Verbrauch', k.verbrauch != null ? k.verbrauch.toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' l / 100 km' : ''],
+        ['Leasing-/Kreditrate', z.leasingRateCent != null ? geld(z.leasingRateCent) + ' im Monat' : '']])}</div>
+    <div class="karte block"><h3>Fahrzeugschein</h3>
+      ${dl([['Halter', z.halter], ['Marke / Typ', [z.marke, z.modell].filter(Boolean).join(' ')], ['FIN', z.fin], ['Erstzulassung', datumText(z.erstzulassung)], ['HSN / TSN', [z.hsn, z.tsn].filter(Boolean).join(' / ')],
+        ['Zul. Gesamtmasse', zahlText(z.zgg, 'kg')], ['Leergewicht', zahlText(z.leergewicht, 'kg')], ['Leistung', z.leistungKw ? `${zahlText(z.leistungKw, 'kW')} (${Math.round(z.leistungKw * 1.35962)} PS)` : ''],
+        ['Kraftstoff', z.kraftstoff], ['Schadstoffklasse', z.schadstoffklasse], ['Achsen', zahlText(z.achsen)], ['Farbe', z.farbe], ['Nr. Teil II', z.teil2Nr]]) || '<p class="leise">Noch keine Angaben aus dem Fahrzeugschein.</p>'}
+      ${dl([['Versicherung', [z.versicherung, z.versicherungsNr].filter(Boolean).join(' · ')], ['Leasing / Bank', z.leasinggeber], ['Notizen', z.notiz]])}</div>
+    <div class="karte block"><h3>Dokumente${dok.length ? ` (${dok.length})` : ''}</h3>
+      ${dok.length ? `<div class="anlagen">${dok.map(a => `<div class="anlage"><button class="anlage" data-fz-dok="${a.id}" title="${esc(a.anzeigename)}">
+        <div class="bild" data-bild="${a.id}">${a.mimeType.startsWith('image/') ? '🖼' : '📄'}</div><span>${esc(a.anzeigename)}</span></button>
+        <button class="symbol weg" data-fz-dok-weg="${a.id}" aria-label="Dokument ${esc(a.anzeigename)} entfernen">✕</button></div>`).join('')}</div>` : '<p class="leise">Fahrzeugschein, Fahrzeugbrief, Versicherung, Prüfberichte … als Foto oder PDF ablegen.</p>'}
+      <div class="zeile" style="margin-top:8px"><select id="fz-dok-art" aria-label="Art des Dokuments">${FAHRZEUG_DOKUMENTE.map(d => `<option>${esc(d)}</option>`).join('')}</select>
+        <label class="knopf">📎 Datei oder Foto hinzufügen<input type="file" id="fz-datei" multiple hidden></label></div></div>
+    <div class="karte block"><h3>Fahrzeugakte${akte.length ? ` (${akte.length})` : ''}</h3>
+      ${akte.length ? `<ul class="verlauf" id="fahrzeugakte">${akte.map(x => `<li><span class="rund">${(FAHRZEUG_EINTRAG[x.art] || FAHRZEUG_EINTRAG.KOSTEN)[1]}</span>
+        <button class="vorlage fuell" data-fz-eintrag="${x.id}" style="margin:0"><span class="leise">${esc([(FAHRZEUG_EINTRAG[x.art] || FAHRZEUG_EINTRAG.KOSTEN)[0], datumText(x.datum), x.kmStand != null && zahlText(x.kmStand, 'km')].filter(Boolean).join(' · '))}</span><br>
+        <b>${esc([x.betragCent != null && geld(x.betragCent), x.menge && (x.menge / 100).toLocaleString('de-DE') + ' l', x.werkstatt].filter(Boolean).join(' · '))}</b>${x.text ? `<br><span style="white-space:pre-wrap">${esc(x.text)}</span>` : ''}</button></li>`).join('')}</ul>`
+        : '<p class="leise">Noch keine Einträge. Hier landen Werkstatt, Reifen, Tanken, Prüfungen, Schäden und Fahrerwechsel.</p>'}</div>
+    <div class="karte block"><h3>Schadensfälle mit diesem Fahrzeug${schaeden.length ? ` (${schaeden.length})` : ''}</h3>
+      ${schaeden.length ? schaeden.map(f => `<button class="vorlage" data-fall-oeffnen="${f.id}"><b>${esc(anzeigeName(f))}</b><br><span class="leise">${esc([f.fallnummer, status(f).label, f.schadensdatum && datumText(f.schadensdatum), f.fahrer].filter(Boolean).join(' · '))}</span></button>`).join('')
+        : '<p class="leise">Keine Fälle, in denen dieses Kennzeichen eingetragen ist.</p>'}</div>
+    <div class="zeile" style="margin:12px 0"><button class="knopf text gefahr" data-fz="loeschen">Fahrzeug löschen</button></div>`;
+  for (const a of dok.filter(a => a.mimeType.startsWith('image/'))) {
+    Dateien.adresse(a).then(u => { const ziel = el.querySelector(`[data-bild="${a.id}"]`); if (u && ziel) ziel.innerHTML = `<img src="${u}" alt="">`; }).catch(() => {});
+  }
+}
+
+/** Formular für ein Fahrzeug (Stammdaten, Fristen, Fahrzeugschein, Versicherung). */
+function fahrzeugDialog(z) {
+  const neu = !z, e = z ? { ...z, leasingRate: z.leasingRateCent != null ? geldOhneSymbol(z.leasingRateCent) : '' } : { art: 'TRANSPORTER', status: 'AKTIV' };
+  const feld = ([name, label, art = '']) => {
+    const wert = esc(e[name] ?? '');
+    if (typeof art === 'object') return `<label class="feld">${label}<select name="${name}">${Object.entries(art).map(([k, t]) => `<option value="${k}" ${String(e[name] ?? '') === k ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+    if (art.includes('lang')) return `<label class="feld">${label}<textarea name="${name}">${wert}</textarea></label>`;
+    const typ = art.includes('date') ? 'type="date"' : art.includes('zahl') ? 'inputmode="numeric"' : art.includes('geld') ? 'inputmode="decimal"' : '';
+    return `<label class="feld">${label}<input name="${name}" ${typ} ${art.includes('pflicht') ? 'required' : ''} value="${wert}"><span class="fehlertext" data-fehler="${name}" hidden></span></label>`;
+  };
+  dialog(`<form method="dialog" id="fahrzeug-form"><h2>${neu ? 'Neues Fahrzeug' : 'Fahrzeug bearbeiten'}</h2>
+    ${FAHRZEUG_FELDER.map(([titel, felder], i) => `<h3>${titel}</h3>${i === 2 ? '<p class="leise">Die Angaben stehen im Fahrzeugschein – die Buchstaben in Klammern zeigen das Feld.</p>' : ''}${felder.map(feld).join('')}`).join('')}
+    <div class="dialog-knoepfe"><button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll">Speichern</button></div></form>`);
+  $('#fahrzeug-form').onsubmit = ev => {
+    ev.preventDefault();
+    const w = Object.fromEntries([...new FormData(ev.target)].map(([k, v]) => [k, String(v).trim()]));
+    const zeige = (name, text) => { const s = $(`#fahrzeug-form [data-fehler="${name}"]`); if (s) { s.textContent = text; s.hidden = !text; } return !text; };
+    for (const n of ZAHL_FELDER) {
+      const roh = w[n].replace(/[.\s]/g, '').replace(',', '.');
+      if (!zeige(n, roh && !(Number(roh) >= 0) ? 'Bitte eine Zahl eingeben.' : '')) return;
+      w[n] = roh ? Math.round(Number(roh)) : null;
+    }
+    if (!zeige('leasingRate', w.leasingRate && geldLesen(w.leasingRate) == null ? 'Bitte einen Betrag wie 499,00 eingeben.' : '')) return;
+    w.leasingRateCent = w.leasingRate ? geldLesen(w.leasingRate) : null; delete w.leasingRate;
+    for (const [k] of FRISTEN) w[k] = w[k] || null;
+    w.erstzulassung = w.erstzulassung || null;
+    $('#dialog').close();
+    const id = FuhrparkAktionen.speichern({ ...(z || {}), ...w });
+    if (neu) gehe('#/fahrzeug/' + id);
+  };
+}
+
+/** Eintrag in der Fahrzeugakte. */
+function fahrzeugEintragDialog(z, x, vorgabeArt = 'WARTUNG') {
+  const neu = !x, e = x || { art: vorgabeArt, datum: heute(), kmStand: z.kmStand ?? '' };
+  const v = { betrag: e.betragCent != null ? geldOhneSymbol(e.betragCent) : '', menge: e.menge ? String(e.menge / 100).replace('.', ',') : '' };
+  dialog(`<form method="dialog" id="fz-eintrag-form"><h2>${neu ? 'Neuer Eintrag' : 'Eintrag'} · ${esc(z.kennzeichen)}</h2>
+    <label class="feld">Art<select name="art">${Object.entries(FAHRZEUG_EINTRAG).map(([k, [l]]) => `<option value="${k}" ${e.art === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+    <label class="feld">Datum<input name="datum" type="date" value="${esc(e.datum || '')}" required></label>
+    <label class="feld">Kilometerstand<input name="kmStand" inputmode="numeric" value="${esc(e.kmStand ?? '')}"><span class="fehlertext" data-fehler="kmStand" hidden></span></label>
+    <label class="feld">Betrag in Euro (brutto)<input name="betrag" inputmode="decimal" value="${esc(v.betrag)}"><span class="fehlertext" data-fehler="betrag" hidden></span></label>
+    <label class="feld" id="fz-menge">Liter (beim Tanken)<input name="menge" inputmode="decimal" value="${esc(v.menge)}"><span class="fehlertext" data-fehler="menge" hidden></span></label>
+    <label class="feld">Werkstatt / Tankstelle / neuer Fahrer<input name="werkstatt" value="${esc(e.werkstatt || '')}"></label>
+    <label class="feld">Was wurde gemacht?<textarea name="text">${esc(e.text || '')}</textarea></label>
+    <div class="dialog-knoepfe">${neu ? '' : '<button type="button" class="knopf text gefahr" id="fz-eintrag-loeschen">Löschen</button>'}<span class="fuell"></span>
+      <button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll">Speichern</button></div></form>`);
+  if (!neu) $('#fz-eintrag-loeschen').onclick = () => { $('#dialog').close(); FuhrparkAktionen.eintragLoeschen(x); };
+  $('#fz-eintrag-form').onsubmit = ev => {
+    ev.preventDefault();
+    const w = Object.fromEntries([...new FormData(ev.target)].map(([k, val]) => [k, String(val).trim()]));
+    const zeige = (name, text) => { const s = $(`#fz-eintrag-form [data-fehler="${name}"]`); if (s) { s.textContent = text; s.hidden = !text; } return !text; };
+    const km = w.kmStand.replace(/[.\s]/g, ''), liter = w.menge.replace(',', '.');
+    if (!zeige('kmStand', km && !(Number(km) >= 0) ? 'Bitte eine Zahl eingeben.' : '')) return;
+    if (!zeige('betrag', w.betrag && geldLesen(w.betrag) == null ? 'Bitte einen Betrag wie 89,50 eingeben.' : '')) return;
+    if (!zeige('menge', liter && !(Number(liter) > 0) ? 'Bitte die Liter wie 62,5 eingeben.' : '')) return;
+    $('#dialog').close();
+    FuhrparkAktionen.eintragSpeichern({ ...(x || {}), fahrzeugId: z.id, art: w.art, datum: w.datum || heute(), kmStand: km ? Math.round(Number(km)) : null,
+      betragCent: w.betrag ? geldLesen(w.betrag) : null, menge: liter ? Math.round(Number(liter) * 100) : null, werkstatt: w.werkstatt, text: w.text });
+  };
+}
+
+function fuhrparkCsv() {
+  const tab = (kopf, zeilen) => '﻿' + [kopf, ...zeilen].map(z => z.map(csvZelle).join(';')).join('\r\n') + '\r\n';
+  const kz = id => S.fahrzeuge[id]?.kennzeichen || '';
+  return {
+    Fahrzeuge: tab(['Kennzeichen', 'Bezeichnung', 'Art', 'Status', 'Fahrer', 'km-Stand', 'Marke', 'Typ', 'FIN', 'Erstzulassung', 'Halter', ...FRISTEN.map(([, l]) => l), 'Versicherung', 'Vers.-Nr.', 'Rate (EUR)', 'Kosten dieses Jahr (EUR)'],
+      fahrzeugListe().map(z => [z.kennzeichen, z.bezeichnung, FAHRZEUG_ART[z.art] || '', fahrzeugStatus(z)[0], z.fahrer, z.kmStand ?? '', z.marke, z.modell, z.fin, datumText(z.erstzulassung), z.halter,
+        ...FRISTEN.map(([k]) => datumText(z[k])), z.versicherung, z.versicherungsNr, z.leasingRateCent != null ? geldOhneSymbol(z.leasingRateCent) : '', geldOhneSymbol(fahrzeugKosten(z).jahr)])),
+    Fahrzeugakte: tab(['Datum', 'Kennzeichen', 'Art', 'km-Stand', 'Betrag (EUR)', 'Liter', 'Werkstatt / Tankstelle', 'Text'],
+      alle('fahrzeugeintraege').sort((a, b) => String(b.datum).localeCompare(String(a.datum))).map(x => [datumText(x.datum), kz(x.fahrzeugId), (FAHRZEUG_EINTRAG[x.art] || FAHRZEUG_EINTRAG.KOSTEN)[0],
+        x.kmStand ?? '', x.betragCent != null ? geldOhneSymbol(x.betragCent) : '', x.menge ? String(x.menge / 100).replace('.', ',') : '', x.werkstatt, x.text])),
+  };
+}
+
+$('#liste').addEventListener('input', e => { if (e.target.id === 'fuhrpark-suche') { ANSICHT.fuhrparkSuche = e.target.value; zeichneListe(); const s = $('#fuhrpark-suche'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); } });
+$('#liste').addEventListener('click', e => {
+  const z = e.target.closest('[data-fahrzeug]'), st = e.target.closest('[data-fuhrpark-status]');
+  if (z) { gehe('#/fahrzeug/' + z.dataset.fahrzeug); return; }
+  if (st) { ANSICHT.fuhrparkStatus = st.dataset.fuhrparkStatus; zeichneListe(); return; }
+  if (e.target.closest('[data-neues-fahrzeug]')) { fahrzeugDialog(null); return; }
+  if (e.target.closest('[data-fuhrpark-csv]')) { const d = fuhrparkCsv(); ladeHerunter(`Fahrzeuge_${heute()}.csv`, d.Fahrzeuge); setTimeout(() => ladeHerunter(`Fahrzeugakte_${heute()}.csv`, d.Fahrzeugakte), 400); }
+});
+$('#detail').addEventListener('change', async e => {
+  if (e.target.id !== 'fz-datei') return;
+  const id = route().id, art = $('#fz-dok-art').value;
+  for (const datei of e.target.files) await FuhrparkAktionen.dokument(id, art, datei);
+});
+$('#detail').addEventListener('click', async e => {
+  if (route().art !== 'fahrzeug') return;
+  const z = S.fahrzeuge[route().id]; if (!z) return;
+  const akt = e.target.closest('[data-fz]'), dok = e.target.closest('[data-fz-dok]'), dokWeg = e.target.closest('[data-fz-dok-weg]'), eintrag = e.target.closest('[data-fz-eintrag]'), fall = e.target.closest('[data-fall-oeffnen]');
+  if (fall) { gehe('#/fall/' + fall.dataset.fallOeffnen); return; }
+  if (eintrag) { fahrzeugEintragDialog(z, S.fahrzeugeintraege[eintrag.dataset.fzEintrag]); return; }
+  if (dokWeg) { const a = S.anlagen[dokWeg.dataset.fzDokWeg]; bestaetige('Dokument entfernen?', `„${a.anzeigename}“ wird gelöscht.`, 'Entfernen', () => { entferne('anlagen', a, { fallId: a.fallId }); Dateien.loesche(a.id); nachAenderung(); }); return; }
+  if (dok) {
+    const a = S.anlagen[dok.dataset.fzDok];
+    try {
+      const u = await Dateien.adresse(a);
+      if (!u) toast('Die Datei wurde noch nicht in die Cloud übertragen.');
+      else if (window.desktop) await window.desktop.oeffneDatei(a.anzeigename, new Uint8Array(await (await Dateien.hole(a.id)).arrayBuffer()));
+      else window.open(u, '_blank');
+    } catch { toast('Die Datei konnte nicht geladen werden.'); }
+    return;
+  }
+  if (!akt) return;
+  ({ bearbeiten: () => fahrzeugDialog(z), eintrag: () => fahrzeugEintragDialog(z, null), tanken: () => fahrzeugEintragDialog(z, null, 'TANKEN'), km: () => fahrzeugEintragDialog(z, null, 'KM'),
+    loeschen: () => bestaetige('Fahrzeug löschen?', `${z.kennzeichen} wird mit Fahrzeugakte und Dokumenten gelöscht. Ist es nur verkauft, besser den Status „Abgemeldet / verkauft“ wählen.`, 'Löschen', () => { FuhrparkAktionen.loeschen(z); gehe('#/'); }) })[akt.dataset.fz]();
+});
+
 function ladeHerunter(name, inhalt, typ = 'text/csv;charset=utf-8') {
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([inhalt], { type: typ })), download: name });
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -1886,7 +2207,7 @@ function termineIcs() {
   const t = s => String(s || '').replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
   const ereignisse = [...w.ueberfaellig, ...w.heute, ...w.demnaechst].map((x, i) => {
     const tag = x.datum.replace(/-/g, ''), folgetag = plusTage(x.datum, 1).replace(/-/g, '');
-    return ['BEGIN:VEVENT', `UID:${x.a ? x.a.id : 'fall-' + x.f.id}@ayse-crm`, `DTSTAMP:${stempel}`, `DTSTART;VALUE=DATE:${tag}`, `DTEND;VALUE=DATE:${folgetag}`,
+    return ['BEGIN:VEVENT', `UID:${x.a ? x.a.id : x.z ? 'fahrzeug-' + x.z.id + '-' + x.datum : 'fall-' + x.f.id}@ayse-crm`, `DTSTAMP:${stempel}`, `DTSTART;VALUE=DATE:${tag}`, `DTEND;VALUE=DATE:${folgetag}`,
       `SUMMARY:${t(x.titel)}`, `DESCRIPTION:${t(x.zusatz)}`, 'END:VEVENT'].join('\r\n');
   });
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Ayse Transport//CRM//DE', 'CALSCALE:GREGORIAN', ...ereignisse, 'END:VCALENDAR'].join('\r\n') + '\r\n';
@@ -1966,7 +2287,7 @@ function ablegen(messageId, m, text) {
   const eintrag = { ...m, verlaufId: '', aktivitaetId: '', fallId: m.fallId || '', firmaId: m.fallId ? '' : m.firmaId || '' };
   const f = eintrag.fallId && S.faelle[eintrag.fallId];
   if (f && !f.geloescht) {
-    const v = merke('verlauf', { id: uuid(), fallId: f.id, zeitpunkt: m.zeitpunkt || jetztIso(), typ: m.eingehend ? 'EMAIL_EINGANG' : 'EMAIL_AUSGANG', text: text.slice(0, 15000) });
+    const v = merke('verlauf', { id: uuid(), fallId: f.id, zeitpunkt: m.zeitpunkt || jetztIso(), typ: m.eingehend ? 'EMAIL_EINGANG' : 'EMAIL_AUSGANG', text: kuerze(text, MAIL_TEXT_FALL) });
     eintrag.verlaufId = v.id;
     const neu = { ...f };
     // Eine Antwort soll nicht untergehen: Wiedervorlage rückt auf heute.
@@ -1974,7 +2295,7 @@ function ablegen(messageId, m, text) {
     fallMerken(neu);
   } else if (eintrag.firmaId && S.auftraggeber[eintrag.firmaId]) {
     const a = merke('aktivitaeten', { id: uuid(), firmaId: eintrag.firmaId, datum: isoTag(new Date(m.zeitpunkt || Date.now())), art: 'EMAIL',
-      text: ((m.eingehend ? 'E-Mail erhalten' : 'E-Mail gesendet') + '\n' + text).slice(0, 15000),
+      text: kuerze((m.eingehend ? 'E-Mail erhalten' : 'E-Mail gesendet') + '\n' + text, MAIL_TEXT_FIRMA),
       kontakt: kontaktZuAdressen(eintrag.firmaId, m.eingehend ? m.von : m.an), geaendertAm: jetztIso() });
     eintrag.aktivitaetId = a.id;
   }
@@ -2033,7 +2354,7 @@ async function postfachAbrufen(sichtbar = false) {
         setzeMailStand(art, { ...mailStand(art), fehler: e.message }); fehler.push(e.message);
       }
     }
-    nachAenderung();
+    if (neu.length) nachAenderung(); else { speichere(); zeichneSync(); }
     const wohin = n => (n.ziel.fallId ? 'Fall ' + (S.faelle[n.ziel.fallId] || {}).fallnummer : n.ziel.firmaId ? (S.auftraggeber[n.ziel.firmaId] || {}).name : 'Nicht zugeordnet');
     if (neu.length) {
       const titel = neu.length === 1 ? `Neue E-Mail · ${wohin(neu[0])}` : `${neu.length} neue E-Mails`;
@@ -2374,6 +2695,7 @@ window.addEventListener('beforeunload', e => { if ($('#fall-form') && formularWe
 window.addEventListener('online', () => abgleich());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { zeichne(); pruefeStand(); } });
 setInterval(pruefeStand, 45000);
+if (langeMailsKuerzen()) speichere();
 zeichne();
 if (mitCloud()) abgleich();
 mailStart();

@@ -36,7 +36,7 @@ async function geraet(cloudUrl, optionen = {}) {
 async function melde(s, pin = PIN, neu = false) {
   await s.locator('#pin1').fill(pin);
   if (neu) await s.locator('#pin2').fill(pin);
-  await s.locator('#pin-form button').click();
+  await s.locator('#pin-form button.voll').click();
 }
 const aktuell = s => s.waitForFunction(() => document.querySelector('#sync').dataset.zustand === 'aktuell' && document.querySelector('#sync').textContent === 'Cloud aktuell');
 const abgleich = async s => { await s.evaluate(() => abgleich()); await aktuell(s); };
@@ -129,7 +129,7 @@ test('mit der Cloud verbinden: PIN festlegen, Fälle landen in Google Drive', as
   await s.locator('#verbinden').click();
   await s.getByRole('heading', { name: 'PIN festlegen' }).waitFor();
   await s.locator('#pin1').fill(PIN); await s.locator('#pin2').fill('anders');
-  await s.locator('#pin-form button').click();
+  await s.locator('#pin-form button.voll').click();
   await s.getByText('Die beiden Eingaben stimmen nicht überein.').waitFor();
   await melde(s, PIN, true);
   await aktuell(s);
@@ -170,6 +170,30 @@ test('zwei Geräte: Änderungen wandern in beide Richtungen, falsche PIN wird ab
   await abgleich(a);
   await a.locator('.verlauf').getByText('Notiz vom zweiten Gerät').waitFor();
   assert.equal(await a.locator('#notiz').inputValue(), 'Halb getippte Not');
+  await cloud.schliessen();
+});
+
+test('abmelden und wieder anmelden; lange Mail-Texte werden gekürzt', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'firmen' });
+  await melde(a, PIN, true); await aktuell(a);
+  await a.evaluate(() => { location.hash = '#/einstellungen'; });
+  await a.locator('#abmelden').click();
+  await a.waitForFunction(() => document.querySelector('#sync').textContent === 'Anmeldung nötig');
+  await a.locator('#sync').click();
+  await a.getByRole('heading', { name: 'PIN eingeben' }).waitFor();
+  await a.locator('#pin-spaeter').click(); // „Später“ – danach muss die Anmeldung trotzdem wieder gehen
+  await a.evaluate(() => dialog('<p>anderes Fenster</p>'));
+  await a.evaluate(() => $('#dialog').close());
+  await a.locator('#sync').click();
+  await melde(a); await aktuell(a);
+  // Bereits gespeicherte, sehr lange Mail in der Kontakthistorie wird beim Start gekürzt
+  const lang = await a.evaluate(() => {
+    const f = merke('auftraggeber', { id: uuid(), name: 'Lang GmbH', status: 'AKTIV', geaendertAm: jetztIso() });
+    merke('aktivitaeten', { id: uuid(), firmaId: f.id, art: 'EMAIL', datum: heute(), text: 'x'.repeat(20000), geaendertAm: jetztIso() });
+    speichere(); return langeMailsKuerzen() && Object.values(S.aktivitaeten).find(x => x.firmaId === f.id).text.length;
+  });
+  assert.ok(lang <= 2000, 'gekürzt auf höchstens 2000 Zeichen');
   await cloud.schliessen();
 });
 
@@ -337,7 +361,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 5;
+  cloud.umgebung.kontext.API_VERSION = 6;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
@@ -595,5 +619,68 @@ test('Finanzen: Rechnung aus der Preisliste, Summen, Zahlung, Überfällig, Ange
   assert.equal(await a.evaluate(() => { S.einstellungen.rechnung = { ...rechnungsDaten(), startRechnung: 1 }; return naechsteBelegNummer('RECHNUNG'); }), `R${jahr}-0001`);
   await aktuell(a);
   assert.ok(Object.values(cloudDaten(cloud).belege).every(b => b.geloescht), 'auch in der Cloud gelöscht');
+  await cloud.schliessen();
+});
+
+test('Fuhrpark: Fahrzeug mit Fahrzeugschein und Fristen, Tanken, Dokument, Termine, Abgleich und Drucken ohne Popup', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'fuhrpark' });
+  await melde(a, PIN, true); await aktuell(a);
+  await a.locator('[data-neues-fahrzeug]').click();
+  await a.locator('#fahrzeug-form [name=kennzeichen]').fill('kr-at 123');
+  await a.locator('#fahrzeug-form [name=bezeichnung]').fill('Sprinter 3');
+  await a.locator('#fahrzeug-form [name=fahrer]').fill('M. Yilmaz');
+  await a.locator('#fahrzeug-form [name=kmStand]').fill('120.000');
+  await a.locator('#fahrzeug-form [name=marke]').fill('Mercedes-Benz');
+  await a.locator('#fahrzeug-form [name=fin]').fill('WDB9066331S123456');
+  await a.locator('#fahrzeug-form [name=leistungKw]').fill('120');
+  const bald = await a.evaluate(() => plusTage(heute(), 10)), vorbei = await a.evaluate(() => plusTage(heute(), -3));
+  await a.locator('#fahrzeug-form [name=huBis]').fill(bald);
+  await a.locator('#fahrzeug-form [name=uvvBis]').fill(vorbei);
+  await a.locator('#fahrzeug-form button.voll').click();
+  await a.locator('#detail h2', { hasText: 'KR-AT 123' }).waitFor();
+  await a.locator('#fristen').getByText('seit').waitFor(); // UVV überfällig
+  await a.locator('#detail').getByText('120 kW (163 PS)').waitFor();
+
+  // Zweimal tanken → Verbrauch; der höhere km-Stand landet im Fahrzeug
+  for (const [km, liter, betrag] of [['120000', '60', '100'], ['120800', '80', '140,50']]) {
+    await a.locator('[data-fz=tanken]').click();
+    await a.locator('#fz-eintrag-form [name=kmStand]').fill(km);
+    await a.locator('#fz-eintrag-form [name=menge]').fill(liter);
+    await a.locator('#fz-eintrag-form [name=betrag]').fill(betrag);
+    await a.locator('#fz-eintrag-form button.voll').click();
+  }
+  await a.locator('#detail').getByText('10 l / 100 km').waitFor();
+  await a.locator('#detail').getByText('120.800 km').first().waitFor();
+  assert.equal(await a.evaluate(() => alle('fahrzeuge')[0].kmStand), 120800);
+
+  // Fahrzeugschein als Datei
+  await a.locator('#fz-dok-art').selectOption('Fahrzeugschein (Teil I)');
+  await a.locator('#fz-datei').setInputFiles({ name: 'schein.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') });
+  await a.locator('#detail').getByText('Fahrzeugschein (Teil I) – schein.pdf').waitFor();
+
+  // Schadensfall mit dem Kennzeichen erscheint beim Fahrzeug
+  await a.evaluate(() => { fallMerken({ id: uuid(), fallnummer: '2026-900', status: 'NEU', kundeName: 'Kundin Test', fahrzeug: 'KR AT 123', erstelltAm: jetztIso(), geaendertAm: jetztIso() }); nachAenderung(); });
+  await a.locator('#detail').getByText('Kundin Test').waitFor();
+
+  // Fristen unter Termine (HU in 10 Tagen, UVV überfällig)
+  await a.locator('[data-bereich=termine]').click();
+  await a.locator('#termine').getByText('UVV-Prüfung · KR-AT 123').waitFor();
+  await a.locator('#termine').getByText('HU (TÜV) · KR-AT 123').waitFor();
+  await aktuell(a);
+  const d = cloudDaten(cloud);
+  assert.equal(Object.values(d.fahrzeuge)[0].kennzeichen, 'KR-AT 123');
+  assert.equal(Object.values(d.fahrzeugeintraege).length, 2);
+
+  // Zweites Gerät bekommt Fahrzeug, Akte und Dokument
+  const b = await geraet(cloud.url, { bereich: 'fuhrpark' });
+  await melde(b); await aktuell(b);
+  await b.locator('[data-fahrzeug]', { hasText: 'KR-AT 123' }).click();
+  await b.locator('#fahrzeugakte li').nth(1).waitFor();
+  await b.locator('#detail').getByText('schein.pdf').waitFor();
+
+  // Drucken öffnet kein neues Fenster mehr (wird in der Windows-App und von Popup-Blockern gesperrt)
+  const druck = await a.evaluate(() => { let geoeffnet = false; window.open = () => { geoeffnet = true; return null; }; druckeHtml('<p>Test</p>'); return { geoeffnet, rahmen: !!document.querySelector('#druckrahmen') }; });
+  assert.deepEqual(druck, { geoeffnet: false, rahmen: true });
   await cloud.schliessen();
 });
