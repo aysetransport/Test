@@ -1,7 +1,7 @@
 {
   "name": "schadensfaelle",
   "productName": "Schadensfälle",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "description": "Schadensfälle bei Transportaufträgen nachhaken und bearbeiten",
   "main": "main.js",
   "private": true,

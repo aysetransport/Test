@@ -15,7 +15,7 @@ const { _electron: electron } = require('playwright');
     await s.waitForFunction(() => window.__appBereit, null, { timeout: 60000 });
     const titel = await s.title();
     const plattform = await s.evaluate(() => window.desktop && window.desktop.plattform);
-    if (titel !== 'Schadensfälle' || !plattform) throw new Error(`Unerwartet: Titel „${titel}“, Brücke ${plattform}`);
+    if (titel !== 'Ayse CRM' || !plattform) throw new Error(`Unerwartet: Titel „${titel}“, Brücke ${plattform}`);
     await s.screenshot({ path: path.join(__dirname, '..', 'dist', 'rauchtest.png') });
     console.log(`Installiertes Programm läuft (${plattform}): Fenster „${titel}“`);
   } finally {
