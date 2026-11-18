@@ -23,7 +23,7 @@ abstract class WebAppKopieren : DefaultTask() {
         val aus = ziel.get().asFile
         aus.deleteRecursively()
         aus.mkdirs()
-        for (name in listOf("index.html", "touren.html", "manifest.webmanifest", "icon-192.png", "icon-512.png")) {
+        for (name in listOf("index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png")) {
             quelle.get().file(name).asFile.copyTo(aus.resolve(name))
         }
     }
@@ -41,8 +41,8 @@ android {
         applicationId = "de.aysetransport.schaden"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "3.2.0"
+        versionCode = 13
+        versionName = "4.0.0"
     }
 
     // Fester Signaturschlüssel, sofern hinterlegt (Umgebungsvariablen, im Workflow aus GitHub-Secrets).

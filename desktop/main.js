@@ -74,7 +74,7 @@ behandle('datei:oeffnen', async (name, bytes) => {
   return true;
 });
 behandle('extern:oeffnen', adresse => {
-  if (!/^(mailto:|tel:|https:)/i.test(String(adresse))) throw new Error('Adresse nicht erlaubt');
+  if (!/^(mailto:|tel:|sms:|https:)/i.test(String(adresse))) throw new Error('Adresse nicht erlaubt');
   return shell.openExternal(adresse);
 });
 

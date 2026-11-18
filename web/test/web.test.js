@@ -361,7 +361,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 6;
+  cloud.umgebung.kontext.API_VERSION = 7;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
@@ -408,10 +408,10 @@ test('CRM: Firma mit Ansprechpartnern, Preisen und Wiedervorlagen; Fall aus der 
   assert.equal(await a.evaluate(() => alle('ansprechpartner').length), 1, 'kein doppelter Ansprechpartner');
 
   // Termine: die überfällige Wiedervorlage der Firma und der Fall
-  await a.locator('[data-bereich=termine]').click();
+  await a.locator('#navi [data-bereich=termine]:visible').click();
   await a.locator('#termine').getByText('Überfällig (1)').waitFor();
   await a.locator('#termine').getByText('Preise 2027 verhandeln').waitFor();
-  await a.locator('[data-bereich=firmen]').click();
+  await a.locator('#navi [data-bereich=firmen]:visible').click();
   await a.locator('#firmen-suche').fill('krüger');
   await a.locator('#firmen').getByText('Ansprechpartner: Jana Krüger').waitFor();
 
@@ -468,9 +468,9 @@ test('CRM: Sicherung des Browser-CRM importieren und als CSV exportieren', async
 
 /** Legt über den Reiter „Schäden“ einen Fall mit Auftraggeber an (die Firma entsteht dabei automatisch). */
 async function legeFallAnUeberSchaeden(s) {
-  await s.locator('[data-bereich=faelle]').click();
+  await s.locator('#navi [data-bereich=faelle]:visible').click();
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Seats and Sofas Krefeld', auftraggeberKontakt: 'Tim Berg' });
-  await s.locator('[data-bereich=firmen]').click();
+  await s.locator('#navi [data-bereich=firmen]:visible').click();
 }
 
 test('CRM: Chancen, Schlagworte, Kennzahlen, Folgetermin, Verschieben und Zusammenführen', async () => {
@@ -498,16 +498,16 @@ test('CRM: Chancen, Schlagworte, Kennzahlen, Folgetermin, Verschieben und Zusamm
   await a.locator('#crm-form [name=text]').fill('Angebot besprochen');
   await a.locator('#crm-form [name=folgeAm]').fill('2020-01-01');
   await a.locator('#crm-form button.voll').click();
-  await a.locator('#detail').getByText('Nachfassen: Angebot besprochen').waitFor();
+  await a.locator('#detail').getByText('Nachfassen: Angebot besprochen').first().waitFor();
 
   // Termine: überfällige Wiedervorlage auf morgen schieben.
-  await a.locator('[data-bereich=termine]').click();
+  await a.locator('#navi [data-bereich=termine]:visible').click();
   await a.locator('#termine').getByText('Überfällig (1)').waitFor();
   await a.locator('#termine [data-tage="1"]').click();
   await a.locator('#termine').getByText('Demnächst (1)').waitFor();
 
   // Schlagwort-Filter und „Lange kein Kontakt“
-  await a.locator('[data-bereich=firmen]').click();
+  await a.locator('#navi [data-bereich=firmen]:visible').click();
   await firma('Media Markt', 'Elektro');
   await a.locator('[data-schlagwort="Elektro"]').click();
   assert.deepEqual(await a.locator('#firmen .titel').allInnerTexts(), ['Media Markt']);
@@ -583,7 +583,7 @@ test('Finanzen: Rechnung aus der Preisliste, Summen, Zahlung, Überfällig, Ange
     BelegAktionen.neu('ANGEBOT', f, { positionen: JSON.stringify([{ bez: 'Etage', menge: 3, einzelCent: 1250 }]), status: 'OFFEN' });
     return id;
   });
-  await a.locator('[data-bereich=finanzen]').click();
+  await a.locator('#navi [data-bereich=finanzen]:visible').click();
   await a.locator('[data-beleg-filter=UEBERFAELLIG]').first().click();
   await a.locator('#belege').getByText(`R${jahr}-0002`).waitFor();
   await a.locator('[data-beleg-filter=ANGEBOTE]').last().click();
@@ -600,8 +600,8 @@ test('Finanzen: Rechnung aus der Preisliste, Summen, Zahlung, Überfällig, Ange
   assert.deepEqual(nummern, [`R${jahr}-1001`, `R${jahr}-0004`, `A${jahr}-0002`], 'Startnummer ist Untergrenze, belegte Nummern zählen weiter');
 
   // Übersicht
-  await a.locator('[data-bereich=uebersicht]').click();
-  await a.locator('#liste').getByText('Überfällig (1)').waitFor();
+  await a.locator('#navi [data-bereich=uebersicht]:visible').click();
+  await a.locator('#liste').getByText('überfällig (1)').waitFor();
   const csv = await a.evaluate(() => belegeCsv());
   assert.ok(csv.startsWith('﻿Nummer;Art;Firma') && csv.includes(`R${jahr}-0001;Rechnung;Seats and Sofas`) && csv.includes(';Bezahlt;379,00;72,01;451,01;451,01;'), csv);
   const ics = await a.evaluate(() => termineIcs());
@@ -664,7 +664,7 @@ test('Fuhrpark: Fahrzeug mit Fahrzeugschein und Fristen, Tanken, Dokument, Termi
   await a.locator('#detail').getByText('Kundin Test').waitFor();
 
   // Fristen unter Termine (HU in 10 Tagen, UVV überfällig)
-  await a.locator('[data-bereich=termine]').click();
+  await a.locator('#navi [data-bereich=termine]:visible').click();
   await a.locator('#termine').getByText('UVV-Prüfung · KR-AT 123').waitFor();
   await a.locator('#termine').getByText('HU (TÜV) · KR-AT 123').waitFor();
   await aktuell(a);
@@ -687,7 +687,7 @@ test('Fuhrpark: Fahrzeug mit Fahrzeugschein und Fristen, Tanken, Dokument, Termi
   const datei = { name: 'fuhrpark.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({
     fahrzeuge: [{ kennzeichen: 'RS-FK 4204', art: 'TRANSPORTER', marke: 'Mercedes-Benz', huBis: '2028-01-31', zgg: 3500 }, { kennzeichen: 'KR AT 123', marke: 'Andere Marke', farbe: 'Weiß' }],
     dokumente: [{ kennzeichen: 'RS-FK 4204', art: 'Fahrzeugschein (Teil I)', name: 'Schein.pdf', mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.4').toString('base64') }] })) };
-  await a.locator('[data-bereich=fuhrpark]').click();
+  await a.locator('#navi [data-bereich=fuhrpark]:visible').click();
   await a.locator('#fuhrpark-import').setInputFiles(datei);
   await a.locator('#toast', { hasText: '1 Fahrzeuge neu, 1 ergänzt, 1 Dokumente' }).waitFor();
   await a.locator('#fuhrpark-import').setInputFiles(datei); // ein zweites Mal: nichts doppelt
@@ -736,11 +736,12 @@ test('Android-App: Brücke (android.js) – Postfach, Speichern, Drucken, PDF un
   await s.locator('#konto-form [name=adresse]').fill('schaden@ayse.example');
   await s.locator('#konto-form [name=passwort]').fill('geheim');
   await s.locator('#konto-form button.voll').click();
-  await s.locator('[data-bereich=postfach]').waitFor();
+  await s.locator('#navi .nav-gross [data-bereich=postfach]').waitFor({ state: 'attached' });
   assert.ok(await s.evaluate(() => window.__aufrufe.some(([n, a]) => n === 'mail:einrichten' && a[1] === 'geheim' && a[2] === 'SCHADEN')));
 
   // CSV-Download landet über die Brücke im Download-Ordner
-  await s.locator('[data-bereich=fuhrpark]').click();
+  await s.locator('[data-nav-mehr]').click();
+  await s.locator('[data-mehr-bereich=fuhrpark]').click();
   await s.evaluate(() => FuhrparkAktionen.speichern({ kennzeichen: 'RS-FK 4204' }));
   await s.locator('[data-fuhrpark-csv]').click();
   await s.locator('#toast', { hasText: 'Gespeichert: Download/Ayse CRM/Fahrze' }).waitFor();
@@ -767,106 +768,247 @@ test('Android-App: Brücke (android.js) – Postfach, Speichern, Drucken, PDF un
   await kontext.close();
 });
 
-test('Tourenplanung: Reiter „Touren“ und Querverbindungen zu Fahrzeugen, Firmen, Mitarbeitern und Schadensfällen', async () => {
-  const s = await geraet(null, { bereich: 'fuhrpark' });
-  const tag = await s.evaluate(() => heute());
-  const tp = {
-    fahrzeuge: [{ Kennzeichen: 'RS-AT 100', zGG_kg: '3500' }, { Kennzeichen: 'RS-AT 200', zGG_kg: '7490', Bemerkung: 'Plane' }],
-    auftraggeber: [{ Auftraggeber: 'Möbel Krause' }],
-    personal: [{ Name: 'Ali Demir', Rolle: 'Fahrer', Telefon: '0171 111' }, { Name: 'Ben Ott', Rolle: 'Monteur' }],
-    abwesenheiten: [{ Name: 'Ben Ott', Von: tag, Bis: tag, Grund: 'Urlaub' }],
-    tours: [{ Kennzeichen: 'RS-AT 100', TourNr: '7', Auftraggeber: 'Möbel Krause', Name: 'Küche Lennep', Uhrzeit: '07:00', Einsatzart: 'Montage', Fahrer: 'Ali Demir', Beifahrer1: 'Ben Ott' }],
-    einsatzarten: [{ Einsatzart: 'Montage' }], verlauf: [],
-    spalten: { Fahrzeuge: ['Kennzeichen', 'zGG_kg', 'Bemerkung'], Personal: ['Name', 'Rolle', 'Telefon'], Einsatzarten: ['Einsatzart'], Auftraggeber: ['Auftraggeber'] }, auswahl: {},
+test('Tourenplanung im CRM: Übernahme aus der alten Tourenplanung, Tagesplan, Hinweise, Auffüllen, Personal, Rechnung, Schaden aus Tour, Abgleich', async () => {
+  const cloud = await starteCloud();
+  const s = await geraet(cloud.url, { bereich: 'touren' });
+  await melde(s, PIN, true);
+  await aktuell(s);
+  const tag = await s.evaluate(() => heute()), gestern = await s.evaluate(() => plusTage(heute(), -1));
+  // Die bisherige Tourenplanung (Google-Skript) als Attrappe
+  const alt = {
+    fahrzeuge: [{ Kennzeichen: 'RS-AT 100', zGG_kg: '3500' }, { Kennzeichen: 'RS-AT 200', zGG_kg: '7490', Leihfahrzeug: 'nein' }],
+    personal: [{ Name: 'Ali Demir', Rolle: 'Fahrer', Telefon: '0171 111', Monteur: 'nein', Aktiv: 'ja' }, { Name: 'Ben Ott', Rolle: 'Beifahrer', Monteur: 'ja' },
+      { Name: 'Cem Kaya', Rolle: 'Beides', Monteur: 'nein' }, { Name: 'Dana Roth', Rolle: 'Fahrer', Aktiv: 'nein' }],
+    einsatzarten: [{ Einsatzart: 'Montage', Beifahrer: '1', Monteur_noetig: 'ja' }, { Einsatzart: 'Lieferung', Beifahrer: '1', Monteur_noetig: 'nein' }],
+    auftraggeber: [{ Auftraggeber: 'Möbel Krause', Adresse: 'Hauptstr. 1, 42853 Remscheid' }],
+    abwesenheiten: [{ Name: 'Cem Kaya', Von: tag, Bis: tag, Grund: 'Krank' }],
   };
-  const aufrufe = [];
+  const tage = { [gestern]: [{ Kennzeichen: 'RS-AT 100', TourNr: '7', Auftraggeber: 'Möbel Krause', Name: 'Küche Lennep', Uhrzeit: '07:00', Einsatzart: 'Montage', Fahrer: 'Ali Demir', Beifahrer1: 'Ben Ott' },
+    { Kennzeichen: 'RS-AT 200', TourNr: '8', Auftraggeber: 'Möbel Krause', Name: 'Sofa', Einsatzart: 'Lieferung', Fahrer: 'Cem Kaya', Beifahrer1: 'Neu Mann' }] };
   await s.context().route('https://script.google.com/macros/s/AKfycby5KUa5VlCeza6mLZCDt1hajWjMGLXFjD_fW847ERpWn12DC2xZZfOlezVpBUv63WTG2g/exec', async route => {
     const { pin, name, args } = JSON.parse(route.request().postData());
-    aufrufe.push([name, args]);
-    const antwort = pin !== '4711' ? { error: 'Falsche PIN' }
-      : name === 'getDay' ? { ok: tp }
-      : name === 'saveTable' ? { ok: args[1] }
-      : name === 'getAuftragsBericht' ? { ok: { 'Möbel Krause': { arten: { Montage: { [tag]: 3 }, Lieferung: { [tag]: 1 } } } } }
-      : { error: 'unbekannt' };
-    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(antwort) });
+    const ok = v => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: v }) });
+    if (pin !== '4711') return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ error: 'PIN falsch' }) });
+    if (name === 'getDay') return ok({ ...alt, tours: [], verlauf: [], spalten: {}, auswahl: {} });
+    if (name === 'getTag') return ok(tage[args[0]] || []);
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ error: 'unbekannt' }) });
   });
+  await s.evaluate(() => tpImportDialog());
+  await s.locator('#tp-import [name=pin]').fill('0000');
+  await s.locator('#tp-import [name=von]').fill(gestern);
+  await s.locator('#tp-import [name=bis]').fill(tag);
+  await s.locator('#tpi-los').click();
+  await s.locator('#tpi-fehler', { hasText: 'PIN' }).waitFor();
+  await s.locator('#tp-import [name=pin]').fill('4711');
+  await s.locator('#tpi-los').click();
+  await s.locator('#toast', { hasText: 'Übernommen: 2 Fahrzeuge, 4 Mitarbeiter, 2 Einsatzarten, 1 Firmen, 1 Abwesenheiten, 2 Touren' }).waitFor();
+  const nachImport = await s.evaluate(() => ({ ma: mitarbeiterListe().map(m => [m.name, m.rolle, maAktiv(m)]), touren: tourenAm(plusTage(heute(), -1)).map(t => [t.kennzeichen, maName(t.fahrerId), beifahrerVon(t).map(maName).join()]),
+    adresse: adresseText(vonFirma('adressen', firmaZumNamen('Möbel Krause').id)[0]) }));
+  assert.deepEqual(nachImport.ma, [['Ali Demir', 'FAHRER', true], ['Ben Ott', 'BEIFAHRER', true], ['Cem Kaya', 'BEIDES', true], ['Dana Roth', 'FAHRER', false], ['Neu Mann', 'BEIDES', true]]);
+  assert.deepEqual(nachImport.touren, [['RS-AT 100', 'Ali Demir', 'Ben Ott'], ['RS-AT 200', 'Cem Kaya', 'Neu Mann']]);
+  assert.equal(nachImport.adresse, 'Hauptstr. 1, 42853 Remscheid');
+  // Zweite Übernahme legt nichts doppelt an
+  await s.evaluate(() => tpImportDialog());
+  await s.locator('#tp-import [name=pin]').fill('4711');
+  await s.locator('#tp-import [name=von]').fill(gestern);
+  await s.locator('#tp-import [name=bis]').fill(tag);
+  await s.locator('#tpi-los').click();
+  await s.locator('#toast', { hasText: 'Übernommen: 0 Fahrzeuge, 0 Mitarbeiter, 0 Einsatzarten, 0 Firmen, 0 Abwesenheiten, 2 Touren' }).waitFor();
+  assert.equal(await s.evaluate(() => alle('touren').length), 2);
 
-  // Reiter „Touren“ zeigt die eingebettete Tourenplanung und behält sie beim Wechseln
-  await s.locator('[data-bereich=touren]').click();
-  await s.locator('#touren-frame').waitFor();
-  assert.match(await s.locator('#touren-frame').getAttribute('src'), /touren\.html$/);
-  await s.locator('[data-bereich=fuhrpark]').click();
-  assert.ok(await s.locator('#touren-rahmen').isHidden());
+  // Heute: von gestern übernehmen (mit Team) – Cem ist krank und bleibt draußen
+  await s.locator('#navi [data-bereich=touren]:visible').click();
+  await s.locator(`[data-tp-kopie="${gestern}"]`).click();
+  await s.locator('#tourplan .tour').nth(1).waitFor();
+  let heuteT = await s.evaluate(() => tourenAm(heute()).map(t => [t.kennzeichen, maName(t.fahrerId), beifahrerVon(t).map(maName).join()]));
+  assert.deepEqual(heuteT, [['RS-AT 100', 'Ali Demir', 'Ben Ott'], ['RS-AT 200', '', 'Neu Mann']]);
+  // Hinweise aus Personal und Fuhrpark
+  await s.evaluate(() => { const z = fahrzeugZumKz('RS-AT 200'); FuhrparkAktionen.speichern({ ...z, status: 'WERKSTATT' }); });
+  await s.locator('#tourplan .tour').nth(1).getByText('Fahrzeug in der Werkstatt').waitFor();
+  await s.locator('#tourplan .tour').nth(1).getByText('Fahrer fehlt').waitFor();
+  // Fahrer eintippen: Cem ist krank → Hinweis
+  const fahrer2 = s.locator('#tourplan .tour').nth(1).locator('[data-feld=fahrer]');
+  await fahrer2.fill('Cem Kaya'); await fahrer2.press('Tab');
+  await s.locator('#tourplan .tour').nth(1).getByText('Cem: Krank').waitFor();
+  // Rückgängig, dann Teams auffüllen: Dana ist inaktiv, Cem krank, Ali/Ben/Neu verplant → niemand frei
+  await s.locator('[data-tp=rueckgaengig]').click();
+  await s.waitForFunction(() => !tourenAm(heute())[1].fahrerId);
+  await s.evaluate(() => PersonalAktionen.speichern({ name: 'Eva Licht', rolle: 'FAHRER', fuehrerschein: 'B' }));
+  await s.evaluate(() => PersonalAktionen.speichern({ name: 'Fritz Lang', rolle: 'FAHRER', fuehrerschein: 'C1, CE' }));
+  await s.locator('[data-tp=auffuellen]').click();
+  await s.locator('#auffuellen-form button.voll').click();
+  await s.locator('#toast', { hasText: 'eingeteilt' }).waitFor();
+  heuteT = await s.evaluate(() => tourenAm(heute()).map(t => maName(t.fahrerId)));
+  assert.deepEqual(heuteT, ['Ali Demir', 'Fritz Lang'], 'für 7,49 t nur mit passendem Führerschein');
+  // Neue Tour per Eingabe: neuer Auftraggeber wird Firma, neuer Name wird Mitarbeiter
+  await s.locator('[data-tp=neu]').first().click();
+  const neu = s.locator('#tourplan .tour').nth(2);
+  await neu.locator('[data-feld=kennzeichen]').fill('RS-XY 1'); await neu.locator('[data-feld=kennzeichen]').press('Tab');
+  await s.locator('#tourplan .tour').nth(2).locator('[data-feld=auftraggeber]').fill('Küchen Nord'); await s.locator('#tourplan .tour').nth(2).locator('[data-feld=auftraggeber]').press('Tab');
+  await s.locator('#toast', { hasText: 'Küchen Nord' }).waitFor();
+  assert.ok(await s.evaluate(() => !!firmaZumNamen('Küchen Nord') && tourenAm(heute())[2].auftraggeberId === firmaZumNamen('Küchen Nord').id));
+  await s.locator('#tourplan .tour').nth(2).getByText('nicht im Fuhrpark').waitFor();
 
-  // Abgleich: erst PIN (falsch, dann richtig), dann Vorschau, dann übernehmen
-  await s.evaluate(() => FuhrparkAktionen.speichern({ kennzeichen: 'RS-NEU 1', art: 'TRANSPORTER', status: 'AKTIV', zgg: 3500 }));
-  await s.locator('[data-tp-abgleich]').click();
-  await s.locator('#tp-pin').fill('0000');
-  await s.locator('#tp-form button.voll').click();
-  await s.locator('#tp-fehler', { hasText: 'PIN war falsch' }).waitFor();
-  await s.locator('#tp-pin').fill('4711');
-  await s.locator('#tp-form button.voll').click();
-  await s.locator('#tp-abgleich').waitFor();
-  const vorschau = await s.locator('#tp-abgleich').textContent();
-  assert.ok(vorschau.includes('RS-AT 100, RS-AT 200') && vorschau.includes('RS-NEU 1') && vorschau.includes('Möbel Krause'));
-  await s.locator('#tp-abgleich button.voll').click();
-  await s.locator('#toast', { hasText: 'Abgeglichen: 3 ins CRM, 1 in die Tourenplanung' }).waitFor();
-  const crm = await s.evaluate(() => ({ fz: alle('fahrzeuge').map(z => [z.kennzeichen, z.art]).sort(), firmen: auftraggeberListe().map(f => f.name) }));
-  assert.deepEqual(crm.fz, [['RS-AT 100', 'TRANSPORTER'], ['RS-AT 200', 'LKW'], ['RS-NEU 1', 'TRANSPORTER']]);
-  assert.deepEqual(crm.firmen, ['Möbel Krause']);
-  const gespeichert = aufrufe.find(([n]) => n === 'saveTable')[1];
-  assert.equal(gespeichert[0], 'Fahrzeuge');
-  assert.deepEqual(gespeichert[1].at(-1), { Kennzeichen: 'RS-NEU 1', zGG_kg: '3500', Bemerkung: '' });
-  assert.equal(gespeichert[2].length, 2);
+  // Personal: Mitarbeiter mit Abwesenheit und Auswertung
+  await s.evaluate(() => { bereichWechseln('personal'); gehe('#/mitarbeiter/' + maZumNamen('Ali Demir').id); });
+  await s.locator('#detail h2', { hasText: 'Ali Demir' }).waitFor();
+  assert.ok((await s.locator('#detail').textContent()).includes('Möbel Krause (2)'));
+  await s.locator('[data-ma=abwesenheit]').first().click();
+  await s.locator('#abwesenheit-form [name=von]').fill(tag); await s.locator('#abwesenheit-form [name=bis]').fill(tag);
+  await s.locator('#abw-hinweis', { hasText: 'Tour(en) eingeplant' }).waitFor();
+  await s.locator('#abwesenheit-form button.voll').click();
+  assert.ok(await s.evaluate(() => tourHinweise(tourenAm(heute())[0]).some(([, x]) => x === 'Ali: Urlaub')));
 
-  // Fahrzeugakte zeigt die heutige Tour
-  await s.evaluate(() => { location.hash = '#/fahrzeug/' + alle('fahrzeuge').find(z => z.kennzeichen === 'RS-AT 100').id; });
-  await s.locator('#fz-touren', { hasText: 'Tour 7 · Möbel Krause · Küche Lennep' }).waitFor();
-  assert.ok((await s.locator('#fz-touren').textContent()).includes('Ali Demir, Ben Ott'));
+  // Schaden aus der Tour melden → Fall mit Tour, Team und Fahrzeug verknüpft
+  await s.evaluate(() => schadenAusTour(tourenAm(heute())[0]));
+  await s.locator('#fall-form').waitFor();
+  assert.equal(await s.locator('#fall-form [name=fahrer]').inputValue(), 'Ali Demir');
+  await s.locator('#fall-form [name=kundeName]').fill('Anna Becker');
+  await s.locator('#fall-form button.voll').click();
+  await s.waitForFunction(() => location.hash.startsWith('#/fall/'));
+  const fall = await s.evaluate(() => { const f = S.faelle[location.hash.split('/')[2]]; return { tourId: f.tourId === tourenAm(heute())[0].id, fahrer: maName(f.fahrerId), fz: S.fahrzeuge[f.fahrzeugId]?.kennzeichen, ma: schaedenVon(maZumNamen('Ben Ott')).length }; });
+  assert.deepEqual(fall, { tourId: true, fahrer: 'Ali Demir', fz: 'RS-AT 100', ma: 1 });
 
-  // Mitarbeiter: eingeteilt, abwesend, Telefon
-  await s.evaluate(() => { location.hash = '#/'; });
-  await s.locator('[data-tp-mitarbeiter]').click();
-  const personal = await s.locator('#tp-personal').textContent();
-  assert.ok(personal.includes('RS-AT 100 · Tour 7') && personal.includes('Urlaub') && personal.includes('0171 111'));
-  await s.evaluate(() => $('#dialog').close());
-
-  // Firma zeigt die Touren aus dem Auftraggeber-Bericht
-  await s.evaluate(() => { location.hash = '#/firma/' + auftraggeberListe()[0].id; });
-  await s.locator('#firma-touren', { hasText: '4 Touren' }).waitFor();
-  assert.ok((await s.locator('#firma-touren').textContent()).includes('3× Montage'));
-
-  // Rechnung aus Touren: Zeitraum wählen, Preise der Firma werden zugeordnet
-  await s.evaluate(() => {
-    const f = auftraggeberListe()[0];
-    Aktionen.crmSpeichern('preise', { firmaId: f.id, bezeichnung: 'Montage', betragCent: 25000, einheit: 'pro Einsatz', gueltigAb: null, notiz: '' });
-    Aktionen.crmSpeichern('preise', { firmaId: f.id, bezeichnung: 'Montage', betragCent: 99900, einheit: 'pro Einsatz', gueltigAb: '2999-01-01', notiz: '' });
-    Aktionen.crmSpeichern('preise', { firmaId: f.id, bezeichnung: 'Tourpauschale', betragCent: 18000, einheit: 'pro Tour', gueltigAb: null, notiz: '' });
-  });
-  await s.locator('#firma-touren ~ [data-rechnung-touren]').click();
+  // Rechnung aus Touren: Preise der Firma, Touren werden als abgerechnet markiert, kein zweites Mal
+  await s.evaluate(() => { const f = firmaZumNamen('Möbel Krause'); Aktionen.crmSpeichern('preise', { firmaId: f.id, bezeichnung: 'Montage', betragCent: 25000, einheit: 'pro Einsatz' }); Aktionen.crmSpeichern('preise', { firmaId: f.id, bezeichnung: 'Lieferung', betragCent: 9000 }); });
+  await s.evaluate(([v, b]) => rechnungAusTouren(firmaZumNamen('Möbel Krause').id, v, b), [gestern, tag]);
   await s.locator('#tpr-form button.voll').click();
-  await s.locator('#tpr-summe', { hasText: '930,00' }).waitFor();
+  await s.locator('#tpr-summe', { hasText: '680,00' }).waitFor();
   await s.locator('#tpr-vorschau button.voll').click();
   await s.waitForFunction(() => location.hash.startsWith('#/beleg/'));
-  const rechnung = await s.evaluate(() => { const b = S.belege[location.hash.split('/')[2]]; return { pos: positionen(b), notiz: b.notiz, netto: belegSummen(b).netto }; });
-  assert.equal(rechnung.netto, 93000);
-  assert.deepEqual(rechnung.pos.map(p => [p.bez, p.menge, p.einzelCent]), [['Tourpauschale – Lieferung', 1, 18000], ['Montage', 3, 25000]]);
-  assert.match(rechnung.notiz, /^Aus der Tourenplanung: /);
-  // Ein zweites Mal für denselben Zeitraum: Hinweis auf die vorhandene Rechnung
-  await s.evaluate(() => rechnungAusTouren(auftraggeberListe()[0].id));
+  assert.equal(await s.evaluate(() => alle('touren').filter(t => t.belegId).length), 4);
+  await s.evaluate(([v, b]) => rechnungAusTouren(firmaZumNamen('Möbel Krause').id, v, b), [gestern, tag]);
   await s.locator('#tpr-form button.voll').click();
-  await s.locator('#tpr-vorschau .fehlertext', { hasText: 'gibt es schon' }).waitFor();
+  await s.locator('#tpr-vorschau', { hasText: 'Keine gefahrenen, offenen Touren' }).waitFor();
   await s.evaluate(() => $('#dialog').close());
 
-  // Schadensfall: Tour des Schadenstags übernehmen, Fahrer werden vorgeschlagen
-  await s.locator('[data-bereich=faelle]').click();
-  await s.locator('[data-neu]').first().click();
-  await s.locator('#fall-form [name="schadensdatum"]').fill(tag);
-  await s.locator('#aus-touren').click();
-  await s.locator('#toast', { hasText: 'Aus der Tourenplanung übernommen' }).waitFor();
-  const wert = n => s.locator(`#fall-form [name="${n}"]`).inputValue();
-  assert.deepEqual([await wert('fahrzeug'), await wert('tour'), await wert('fahrer'), await wert('beifahrer1'), await wert('auftraggeber')],
-    ['RS-AT 100', '7 – Küche Lennep', 'Ali Demir', 'Ben Ott', 'Möbel Krause']);
-  assert.ok((await s.locator('#fahrer-liste option').evaluateAll(o => o.map(x => x.value))).includes('Ali Demir'));
+  // Globale Suche findet Mitarbeiter, Tour und Firma
+  await s.locator('#globale-suche').fill('lennep');
+  await s.locator('#suchtreffer .treffer').first().waitFor();
+  assert.ok((await s.locator('#suchtreffer').textContent()).includes('Touren'));
+  await s.locator('#suchtreffer .treffer', { hasText: 'RS-AT 100' }).first().click();
+  await s.waitForFunction(() => ANSICHT.bereich === 'touren' && !location.hash.slice(2));
+
+  // Auswertung und Abgleich in die Cloud
+  await s.evaluate(() => bereichWechseln('auswertung'));
+  await s.locator('#auswertung').getByText('Ali Demir').waitFor();
+  await aktuell(s);
+  const d = cloudDaten(cloud);
+  assert.equal(Object.values(d.touren).filter(t => !t.geloescht).length, 5);
+  assert.equal(Object.values(d.mitarbeiter).length, 7);
+  assert.equal(Object.values(d.einsatzarten).length, 2);
+  assert.ok(Object.values(d.faelle).some(f => f.tourId && f.fahrerId));
+  // Zweites Gerät bekommt alles
+  const b = await geraet(cloud.url, { bereich: 'touren' });
+  await melde(b);
+  await aktuell(b);
+  assert.equal(await b.evaluate(() => tourenAm(heute()).length), 3);
+  await b.context().close(); await s.context().close(); await cloud.schliessen();
+});
+
+test('Personal-Import (Lohnabrechnungen) und Akquise: Anruf-Ergebnis legt Wiedervorlage und Chance an', async () => {
+  const s = await geraet(null, { bereich: 'personal' });
+  const datei = JSON.stringify({ mitarbeiter: [{ name: 'Demir, Ali', personalnummer: '17', eintritt: '2024-03-01', urlaubstage: 28, anstellung: 'VOLLZEIT' }, { name: 'Ben Ott', personalnummer: '18' }],
+    lohn: [{ personalnummer: '17', monat: '2026-10', bruttoCent: 310000, nettoCent: 215000, kostenCent: 380000, stunden: 168 }, { name: 'Ben Ott', monat: '2026-10', bruttoCent: 250000 }] });
+  await s.evaluate(() => PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER' }));
+  await s.locator('#personal-import').setInputFiles({ name: 'personal.json', mimeType: 'application/json', buffer: Buffer.from(datei) });
+  await s.locator('#toast', { hasText: 'Import: 1 neu, 1 ergänzt, 2 Lohnabrechnungen' }).waitFor();
+  await s.locator('#personal-import').setInputFiles({ name: 'personal.json', mimeType: 'application/json', buffer: Buffer.from(datei) });
+  await s.locator('#toast', { hasText: 'Import: 0 neu, 0 ergänzt, 2 Lohnabrechnungen' }).waitFor();
+  const r = await s.evaluate(() => { const m = maZumNamen('Ali Demir'); return [m.personalnummer, m.urlaubstage, alle('personaleintraege').length, maAuswertung(m, '2026-10-01', '2026-10-31').kostenCent]; });
+  assert.deepEqual(r, ['17', 28, 2, 380000]);
+
+  // Akquise: Interessent erfassen, Anruf mit Ergebnis „Angebot gewünscht“
+  await s.evaluate(() => interessentDialog());
+  await s.locator('#lead-form [name=name]').fill('Küchen Nord');
+  await s.locator('#lead-form [name=telefon]').fill('0211 123');
+  await s.locator('#lead-form [name=kontakt]').fill('Frau Nord');
+  await s.locator('#lead-form button.voll').click();
+  await s.locator('#toast', { hasText: 'Akquise-Ablauf mit 4 Wiedervorlagen' }).waitFor();
+  await s.locator('[data-akquise=anruf]').click();
+  await s.locator('#anruf-form [name=ergebnis]').selectOption('ANGEBOT');
+  await s.locator('#anruf-form [name=text]').fill('Will Preise für Montage');
+  await s.locator('#anruf-form button.voll').click();
+  await s.locator('#toast', { hasText: 'Festgehalten: Angebot gewünscht' }).waitFor();
+  const f = await s.evaluate(() => { const x = firmaZumNamen('Küchen Nord'); return { status: x.status, chancen: vonFirma('chancen', x.id).map(c => c.phase), aufgaben: vonFirma('aufgaben', x.id).length, anrufe: vonFirma('aktivitaeten', x.id).filter(a => a.art === 'ANRUF').length }; });
+  assert.deepEqual(f, { status: 'INTERESSENT', chancen: ['ANGEBOT'], aufgaben: 5, anrufe: 1 });
   await s.context().close();
+});
+
+test('Postfach: ungelesen, Stern, Archiv, Erinnerung in Termine, Entwurf, geplantes Senden, Weiterleiten, Serienmail, Fall und Firma aus Mail', async () => {
+  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1300, height: 900 } });
+  await kontext.route('https://script.google.com/**', r => r.abort());
+  await kontext.addInitScript(() => {
+    if (!localStorage.getItem('schadensfaelle-v1')) { localStorage.setItem('schadensfaelle-v1', JSON.stringify({ nurLokal: true })); localStorage.setItem('crm-bereich', 'postfach'); }
+    window.__gesendet = [];
+    const konto = { adresse: 'info@ayse.example', benutzer: 'info@ayse.example' };
+    let abgeholt = false;
+    window.desktop = { plattform: 'test', beiZiel() {}, benachrichtige: async () => true, oeffneExtern: async a => { window.__extern = a; }, oeffneDatei: async () => true,
+      mail: { anbieter: async () => ({}), konto: async () => konto, trennen: async () => true,
+        sende: async (e, art) => { window.__gesendet.push(e); return 'gesendet-' + window.__gesendet.length + '@ayse.example'; },
+        hole: async () => { if (abgeholt) return { mails: [], letzteUid: 3, uidValidity: 1 }; abgeholt = true;
+          return { letzteUid: 3, uidValidity: 1, mails: [
+            { messageId: 'a1@x', von: 'dispo@krause.example', vonName: 'Dispo Krause', an: 'info@ayse.example', betreff: 'Touren nächste Woche', text: 'Hallo, bitte drei Touren einplanen.', zeitpunkt: '2026-11-17T08:00:00Z', anhaenge: [], antwortAuf: [] },
+            { messageId: 'a2@x', von: 'dispo@krause.example', an: 'info@ayse.example', betreff: 'Re: Touren nächste Woche', text: 'Und eine Montage.', zeitpunkt: '2026-11-17T09:00:00Z', anhaenge: [], antwortAuf: [] },
+            { messageId: 'a3@x', von: 'kunde@gmail.com', vonName: 'Anna Becker', an: 'info@ayse.example', betreff: 'Schaden am Sofa', text: 'Das Sofa ist zerkratzt.', zeitpunkt: '2026-11-17T10:00:00Z', anhaenge: [], antwortAuf: [] }] }; } } };
+  });
+  const s = await kontext.newPage();
+  s.on('pageerror', f => { throw f; });
+  await s.goto(seite.url); await s.waitForFunction(() => window.__appBereit);
+  await s.evaluate(() => Aktionen.firmaSpeichern({ name: 'Möbel Krause', email: 'dispo@krause.example', status: 'AKTIV' }));
+  await s.evaluate(() => postfachAbrufen(true));
+  await s.evaluate(() => bereichWechseln('postfach'));
+  // Posteingang zeigt Unterhaltungen gebündelt, drei ungelesen
+  await s.locator('#postfach .mail-karte').nth(1).waitFor();
+  assert.equal(await s.locator('#postfach .mail-karte').count(), 2);
+  assert.equal(await s.locator('#postfach .mail-karte.ungelesen').count(), 2);
+  assert.ok((await s.locator('[data-postfach-filter=UNGELESEN]').textContent()).includes('(3)'));
+  // Öffnen = gelesen; Unterhaltung sichtbar; Stern; Erinnerung → Termine
+  await s.locator('#postfach .mail-karte', { hasText: 'Re: Touren' }).click();
+  await s.locator('#detail', { hasText: 'Unterhaltung (2 Mails)' }).waitFor();
+  await s.locator('[data-mail-akt=stern]').click();
+  await s.locator('[data-mail-akt=erinnern]').click();
+  await s.locator('[data-erinnern]').first().click();
+  assert.ok(await s.evaluate(() => mails()['a2@x'].gelesen && mails()['a2@x'].stern && wiedervorlagen().demnaechst.some(x => x.mailId === 'a2@x')));
+  // Archivieren, Papierkorb, wiederherstellen
+  await s.locator('[data-mail-akt=archiv]').click();
+  await s.locator('[data-postfach-filter=ARCHIV]').click();
+  await s.locator('#postfach .mail-karte', { hasText: 'Re: Touren' }).waitFor();
+  // Fall aus der Mail des Kunden → Mail hängt am Fall
+  await s.locator('[data-postfach-filter=EINGANG]').click();
+  await s.locator('#postfach .mail-karte', { hasText: 'Schaden am Sofa' }).click();
+  await s.locator('[data-mail-akt=fall]').click();
+  await s.locator('#fall-form').waitFor();
+  assert.equal(await s.locator('#fall-form [name=kundeEmail]').inputValue(), 'kunde@gmail.com');
+  assert.equal(await s.locator('#fall-form [name=kundeName]').inputValue(), 'Anna Becker');
+  await s.locator('#fall-form button.voll').click();
+  await s.waitForFunction(() => location.hash.startsWith('#/fall/'));
+  await s.waitForFunction(() => !!mails()['a3@x'].fallId);
+  // Weiterleiten mit Adressbuch, Entwurf, geplantes Senden
+  await s.evaluate(() => gehe('#/mail/' + encodeURIComponent('a1@x')));
+  await s.locator('[data-mail-akt=weiterleiten]').click();
+  assert.ok((await s.locator('#mail-adressbuch option').evaluateAll(o => o.map(x => x.value))).includes('dispo@krause.example'));
+  assert.equal(await s.locator('#mail-form [name=betreff]').inputValue(), 'WG: Touren nächste Woche');
+  await s.locator('#mail-form [name=an]').fill('chef@ayse.example');
+  await s.locator('#mail-entwurf').click();
+  await s.evaluate(() => { ANSICHT.postfachFilter = 'ENTWUERFE'; gehe('#/'); });
+  await s.locator('[data-entwurf]').first().click();
+  assert.equal(await s.locator('#mail-form [name=an]').inputValue(), 'chef@ayse.example');
+  await s.locator('#mail-form [name=sendeAm]').selectOption({ index: 1 });
+  await s.locator('#mail-senden').click();
+  await s.locator('#toast', { hasText: 'Wird gesendet' }).waitFor();
+  assert.equal(await s.evaluate(() => [Object.keys(entwuerfe()).length, Object.keys(geplanteMails()).length].join()), '0,1');
+  await s.evaluate(() => { for (const x of Object.values(geplanteMails())) x.sendeAm = '2000-01-01T00:00:00Z'; return geplanteSenden(); });
+  assert.equal(await s.evaluate(() => [Object.keys(geplanteMails()).length, window.__gesendet.length].join()), '0,1');
+  // Serienmail: je Firma eine Mail mit eigener Anrede, in der Kontakthistorie
+  await s.evaluate(() => { const id = Aktionen.firmaSpeichern({ name: 'Küchen Nord', email: 'info@nord.example', status: 'INTERESSENT' }); Aktionen.crmSpeichern('ansprechpartner', { firmaId: id, name: 'Frau Nord', email: 'nord@nord.example' }); });
+  await s.evaluate(() => serienmailDialog());
+  await s.locator('#serie-form [name=vorlage]').selectOption('KAPAZITAET');
+  await s.locator('#serie-alle').click();
+  await s.locator('#serie-los').click();
+  await s.locator('#toast', { hasText: '2 Mails gesendet' }).waitFor();
+  const serie = await s.evaluate(() => window.__gesendet.slice(1).map(e => [e.an, e.text.split('\n')[0]]));
+  assert.deepEqual(serie.sort(), [['dispo@krause.example', 'Sehr geehrte Damen und Herren,'], ['nord@nord.example', 'Guten Tag Frau Nord,']]);
+  assert.ok(await s.evaluate(() => vonFirma('aktivitaeten', firmaZumNamen('Küchen Nord').id).some(a => a.art === 'EMAIL')));
+  await kontext.close();
 });

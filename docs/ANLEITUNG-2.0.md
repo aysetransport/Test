@@ -184,6 +184,55 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 3.0 (Windows-App 3.0, Android-App 4.0, Web-App) – alles in einer App
+
+**Wichtig:** Diese Version braucht die neue `cloud/Code.gs` (Cloud-Version 7). In Google Apps Script den Inhalt ersetzen und unter *Bereitstellen → Bereitstellungen verwalten → Bearbeiten → Version: Neue Version* neu bereitstellen. Vorher zeigt die App „Das Cloud-Skript ist veraltet“.
+
+**Neues Layout**
+- Am PC links eine feste Leiste mit allen Bereichen, am Handy unten fünf feste Knöpfe (vier Bereiche + „Mehr“). Nichts muss mehr seitlich gewischt werden. Welche vier unten stehen: ⚙ → Bedienung.
+- Oben: **Suche über alles** (Firmen, Ansprechpartner, Fälle, Touren, Personal, Fahrzeuge, Rechnungen, Mails; am PC Strg+K) und **＋ Neu** (Fall, Tour, Firma, Interessent, Mitarbeiter, Abwesenheit, Fahrzeug, Rechnung, Angebot, Rechnung aus Touren, E-Mail).
+- **Übersicht** als Tagesstart: Touren und Personal heute, Probleme im Plan, Heute zu tun, Schäden, Finanzen, Vertrieb, Fristen, Postfach.
+
+**Tourenplanung – jetzt fester Teil des CRM**
+- Tagesplan mit Fahrzeug, Tour-Nr., Auftraggeber, Tour/Ziel, Ladezeit, Einsatzart, Fahrer und Beifahrern; jede Eingabe wird sofort gespeichert und auf alle Geräte abgeglichen.
+- **Hinweise** direkt an der Tour: doppelt eingeplant, abwesend (Urlaub/Krank), inaktiv, „nicht bei“ diesem Auftraggeber, Führerschein reicht nicht für das Gewicht, Führerschein/Fahrerkarte/Modul 95 abgelaufen, Fahrzeug in der Werkstatt oder abgemeldet, HU/SP abgelaufen, Beifahrer oder Monteur fehlt.
+- **Teams auffüllen:** schlägt freie, passende Leute vor (fester Fahrer des Fahrzeugs, wer Fahrzeug und Auftraggeber kennt, Monteur wo nötig, wer zuletzt weniger gearbeitet hat).
+- Übernehmen von einem anderen Tag (mit Team, Abwesende bleiben draußen), Rückgängig (auch Strg+Z), Reihenfolge ▲▼, Tour duplizieren oder auf einen anderen Tag kopieren.
+- Freies Personal und freie Fahrzeuge (nach Gewicht), Abwesende, Fahrzeuge in der Werkstatt.
+- Drucken (A4 quer), „Für Fahrer“ (schmales PDF fürs Handy), WhatsApp oder SMS je Person, „An alle“ und CSV für Sammel-SMS.
+- Berichte: Auftraggeber-Bericht, Anwesenheitsliste, Touren als CSV, Rechnung aus Touren.
+- **Übernahme der bisherigen Tourenplanung:** ⚙ → Tourenplanung und Personal → „Aus der bisherigen Tourenplanung übernehmen“ (PIN der alten Tourenplanung, Zeitraum). Fahrzeuge, Personal, Einsatzarten, Auftraggeber (mit Adresse), Abwesenheiten und alle Touren kommen ins CRM. Wiederholen ist gefahrlos – bis zum Umstieg einfach erneut ausführen.
+
+**Personal**
+- Mitarbeiter mit Rolle, Monteur, Führerscheinklassen, „nicht einplanen bei“, Anstellung, Personalnummer, Wochenstunden, Stundenlohn, Urlaubsanspruch, Kontakt- und Notfalldaten.
+- Fristen (Führerschein, Fahrerkarte, Modul 95, Führerscheinkontrolle, Unterweisung, Arbeitsmedizin) und Geburtstage erscheinen unter „Termine“ und in der Übersicht.
+- Abwesenheiten mit Monatskalender (Tag antippen = eintragen), Urlaubskonto (Anspruch, genommen, geplant, Rest), Warnung bei bereits eingeplanten Touren.
+- Personalakte (Gespräche, Schulungen, Unterweisungen, Ausrüstung, Abmahnungen, Lohnabrechnungen mit Brutto/Netto/Kosten) und Dokumente.
+- **Auswertung je Mitarbeiter:** Arbeitstage, davon als Fahrer, Touren, Urlaub, Krank, Einsatzarten, Auftraggeber, Fahrzeuge, Lohnkosten je Arbeitstag, Schadensfälle.
+- **Import der Lohnabrechnungen:** Personal → „Import (Lohnabrechnungen)“ liest eine Personal-Datei (wird aus den eingelesenen Abrechnungen erstellt). Gleiche Personalnummer bzw. gleicher Name = gleiche Person, vorhandene Angaben bleiben, je Monat eine Abrechnung.
+
+**Auswertungen** (eigener Bereich): Personal, Auftraggeber (Touren, nicht abgerechnet, Umsatz je Tour) und Fahrzeuge (Einsatztage, Kosten je Einsatztag, Schäden, Fahrer) für Monat, Jahr oder freien Zeitraum – mit Drucken und CSV.
+
+**Querverbindungen**
+- Tour → „Schaden melden“ legt einen Fall mit Datum, Fahrzeug, Team und Auftraggeber an; der Fall zeigt Tour, Fahrzeug und Mitarbeiter als Links, die Tour zeigt den Fall.
+- „Rechnung aus Touren“ rechnet nur noch nicht abgerechnete Touren ab und markiert sie mit der Rechnungsnummer – keine Doppelabrechnung.
+- Firma: Touren dieses/letzten Monats, geplante Touren, nicht abgerechnete Touren, Umsatz je Tour, eingesetztes Personal.
+- Fahrzeug: heutige Tour, Einsatztage, letzte Einsätze, fester Fahrer als Link, Leihfahrzeug.
+- Mitarbeiter: Einsätze, Fahrzeuge, Schadensfälle, Auftraggeber.
+
+**Firmen und Akquise**
+- „＋ Interessent“ mit Akquise-Ablauf (Mail heute, Anruf nach 3 Tagen, Nachfassen nach 10 und 30 Tagen).
+- „📞 Anruf festhalten“ mit Gesprächsleitfaden und Ergebnis (nicht erreicht, Rückruf, Infos, Termin, Angebot, Auftrag, kein Bedarf, kein Interesse) – legt Kontakt, Wiedervorlage, Verkaufschance an und ändert den Status.
+- „📞 Anrufliste“: fällige Interessenten nacheinander anrufen.
+- Standard-Mails: Erstkontakt, Nach dem Telefonat, Freie Kapazitäten, Angebot, Nachfassen, Terminbestätigung, Danke für den Auftrag, Wieder in Kontakt, Preisanpassung, Bitte um Empfehlung, Feiertagsgrüße, Rückfrage Abrechnung. Leistungstext und Leitfaden unter ⚙ → Akquise.
+- **Serienmail:** dieselbe Vorlage einzeln an ausgewählte Firmen, mit persönlicher Anrede und Eintrag in der Kontakthistorie.
+
+**Postfach (Windows- und Android-App)**
+- Posteingang mit Unterhaltungen, Ungelesen, Markiert (★), Erinnerung, Gesendet, Entwürfe, Geplant, Archiv, Papierkorb.
+- Antworten, Allen antworten, Weiterleiten (mit Anhängen), BCC, Adressbuch-Vorschläge aus dem ganzen CRM, Textbausteine und Signatur (⚙ → E-Mail).
+- Entwürfe speichern, **später senden** (in 1 Stunde, morgen 8:00, Montag 8:00 – die App muss dann laufen).
+- Aus einer Mail: Schadensfall anlegen (Mail hängt am Fall), Firma aus Absender anlegen, Absender als Ansprechpartner speichern, Wiedervorlage bei der Firma, Erinnerung (erscheint unter „Termine“), Drucken.
+
 ## Neu in 2.5 (Windows-App 2.5, Android-App 3.2, Web-App)
 
 - **Rechnung aus Touren** (Finanzen → *Rechnung aus Touren* oder in der Firma unter *Touren*): Firma und Zeitraum wählen, die App zählt die gefahrenen Touren aus der Tourenplanung und setzt die Preise aus der Preisliste der Firma ein.

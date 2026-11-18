@@ -55,7 +55,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
 
     /** Öffnet Telefon, E-Mail-Programm oder Browser. */
     fun oeffneExtern(adresse: String) {
-        if (!Regex("^(mailto:|tel:|https:)", RegexOption.IGNORE_CASE).containsMatchIn(adresse)) throw IOException("Adresse nicht erlaubt")
+        if (!Regex("^(mailto:|tel:|sms:|https:)", RegexOption.IGNORE_CASE).containsMatchIn(adresse)) throw IOException("Adresse nicht erlaubt")
         try {
             activity.startActivity(Intent(Intent.ACTION_VIEW, adresse.toUri()))
         } catch (e: ActivityNotFoundException) {

@@ -217,7 +217,7 @@ test('Windows-App: zweites Postfach, Zuordnung zur Firma, Eingang „Nicht zugeo
     assert.deepEqual(ergebnis.historie, ['EMAIL'], 'die Mail steht in der Kontakthistorie der Firma');
 
     // Postfach: „Nicht zugeordnet“ und von Hand dem Fall zuordnen – der Anhang wird Anlage des Falls.
-    await s.locator('[data-bereich=postfach]').click();
+    await s.locator('#navi [data-bereich=postfach]:visible').click();
     await s.locator('[data-postfach-filter=OFFEN]', { hasText: 'Nicht zugeordnet (1)' }).waitFor();
     await s.locator('#postfach').getByText('Anfrage Umzug').click();
     await s.locator('[data-mail-zuordnen]').click();
