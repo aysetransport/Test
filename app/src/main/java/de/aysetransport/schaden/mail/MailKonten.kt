@@ -3,6 +3,7 @@ package de.aysetransport.schaden.mail
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import androidx.core.content.edit
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -82,11 +83,11 @@ class MailKonten(context: Context, private val tresor: Tresor, private val postf
     fun einrichten(konfig: JsonObject, passwort: String, a: String?): JsonObject {
         postfach.pruefe(MailKonfig.aus(konfig), passwort)
         val ohne = JsonObject(konfig - "passwort")
-        speicher.edit().putString(art(a), JsonObject(ohne + ("passwort" to JsonPrimitive(tresor.verschluessele(passwort)))).toString()).apply()
+        speicher.edit { putString(art(a), JsonObject(ohne + ("passwort" to JsonPrimitive(tresor.verschluessele(passwort)))).toString()) }
         return ohne
     }
 
-    fun trennen(a: String?): Boolean { speicher.edit().remove(art(a)).apply(); return true }
+    fun trennen(a: String?): Boolean { speicher.edit { remove(art(a)) }; return true }
 
     fun sende(entwurf: JsonObject, a: String?): String = zugang(a).let { (k, pw) -> postfach.sende(k, pw, entwurf) }
 

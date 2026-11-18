@@ -766,3 +766,85 @@ test('Android-App: Brücke (android.js) – Postfach, Speichern, Drucken, PDF un
   assert.equal(await s.evaluate(() => window.__androidZurueck()), false);
   await kontext.close();
 });
+
+test('Tourenplanung: Reiter „Touren“ und Querverbindungen zu Fahrzeugen, Firmen, Mitarbeitern und Schadensfällen', async () => {
+  const s = await geraet(null, { bereich: 'fuhrpark' });
+  const tag = await s.evaluate(() => heute());
+  const tp = {
+    fahrzeuge: [{ Kennzeichen: 'RS-AT 100', zGG_kg: '3500' }, { Kennzeichen: 'RS-AT 200', zGG_kg: '7490', Bemerkung: 'Plane' }],
+    auftraggeber: [{ Auftraggeber: 'Möbel Krause' }],
+    personal: [{ Name: 'Ali Demir', Rolle: 'Fahrer', Telefon: '0171 111' }, { Name: 'Ben Ott', Rolle: 'Monteur' }],
+    abwesenheiten: [{ Name: 'Ben Ott', Von: tag, Bis: tag, Grund: 'Urlaub' }],
+    tours: [{ Kennzeichen: 'RS-AT 100', TourNr: '7', Auftraggeber: 'Möbel Krause', Name: 'Küche Lennep', Uhrzeit: '07:00', Einsatzart: 'Montage', Fahrer: 'Ali Demir', Beifahrer1: 'Ben Ott' }],
+    einsatzarten: [{ Einsatzart: 'Montage' }], verlauf: [],
+    spalten: { Fahrzeuge: ['Kennzeichen', 'zGG_kg', 'Bemerkung'], Personal: ['Name', 'Rolle', 'Telefon'], Einsatzarten: ['Einsatzart'], Auftraggeber: ['Auftraggeber'] }, auswahl: {},
+  };
+  const aufrufe = [];
+  await s.context().route('https://script.google.com/macros/s/AKfycby5KUa5VlCeza6mLZCDt1hajWjMGLXFjD_fW847ERpWn12DC2xZZfOlezVpBUv63WTG2g/exec', async route => {
+    const { pin, name, args } = JSON.parse(route.request().postData());
+    aufrufe.push([name, args]);
+    const antwort = pin !== '4711' ? { error: 'Falsche PIN' }
+      : name === 'getDay' ? { ok: tp }
+      : name === 'saveTable' ? { ok: args[1] }
+      : name === 'getAuftragsBericht' ? { ok: { 'Möbel Krause': { arten: { Montage: { [tag]: 3 }, Lieferung: { [tag]: 1 } } } } }
+      : { error: 'unbekannt' };
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(antwort) });
+  });
+
+  // Reiter „Touren“ zeigt die eingebettete Tourenplanung und behält sie beim Wechseln
+  await s.locator('[data-bereich=touren]').click();
+  await s.locator('#touren-frame').waitFor();
+  assert.match(await s.locator('#touren-frame').getAttribute('src'), /touren\.html$/);
+  await s.locator('[data-bereich=fuhrpark]').click();
+  assert.ok(await s.locator('#touren-rahmen').isHidden());
+
+  // Abgleich: erst PIN (falsch, dann richtig), dann Vorschau, dann übernehmen
+  await s.evaluate(() => FuhrparkAktionen.speichern({ kennzeichen: 'RS-NEU 1', art: 'TRANSPORTER', status: 'AKTIV', zgg: 3500 }));
+  await s.locator('[data-tp-abgleich]').click();
+  await s.locator('#tp-pin').fill('0000');
+  await s.locator('#tp-form button.voll').click();
+  await s.locator('#tp-fehler', { hasText: 'PIN war falsch' }).waitFor();
+  await s.locator('#tp-pin').fill('4711');
+  await s.locator('#tp-form button.voll').click();
+  await s.locator('#tp-abgleich').waitFor();
+  const vorschau = await s.locator('#tp-abgleich').textContent();
+  assert.ok(vorschau.includes('RS-AT 100, RS-AT 200') && vorschau.includes('RS-NEU 1') && vorschau.includes('Möbel Krause'));
+  await s.locator('#tp-abgleich button.voll').click();
+  await s.locator('#toast', { hasText: 'Abgeglichen: 3 ins CRM, 1 in die Tourenplanung' }).waitFor();
+  const crm = await s.evaluate(() => ({ fz: alle('fahrzeuge').map(z => [z.kennzeichen, z.art]).sort(), firmen: auftraggeberListe().map(f => f.name) }));
+  assert.deepEqual(crm.fz, [['RS-AT 100', 'TRANSPORTER'], ['RS-AT 200', 'LKW'], ['RS-NEU 1', 'TRANSPORTER']]);
+  assert.deepEqual(crm.firmen, ['Möbel Krause']);
+  const gespeichert = aufrufe.find(([n]) => n === 'saveTable')[1];
+  assert.equal(gespeichert[0], 'Fahrzeuge');
+  assert.deepEqual(gespeichert[1].at(-1), { Kennzeichen: 'RS-NEU 1', zGG_kg: '3500', Bemerkung: '' });
+  assert.equal(gespeichert[2].length, 2);
+
+  // Fahrzeugakte zeigt die heutige Tour
+  await s.evaluate(() => { location.hash = '#/fahrzeug/' + alle('fahrzeuge').find(z => z.kennzeichen === 'RS-AT 100').id; });
+  await s.locator('#fz-touren', { hasText: 'Tour 7 · Möbel Krause · Küche Lennep' }).waitFor();
+  assert.ok((await s.locator('#fz-touren').textContent()).includes('Ali Demir, Ben Ott'));
+
+  // Mitarbeiter: eingeteilt, abwesend, Telefon
+  await s.evaluate(() => { location.hash = '#/'; });
+  await s.locator('[data-tp-mitarbeiter]').click();
+  const personal = await s.locator('#tp-personal').textContent();
+  assert.ok(personal.includes('RS-AT 100 · Tour 7') && personal.includes('Urlaub') && personal.includes('0171 111'));
+  await s.evaluate(() => $('#dialog').close());
+
+  // Firma zeigt die Touren aus dem Auftraggeber-Bericht
+  await s.evaluate(() => { location.hash = '#/firma/' + auftraggeberListe()[0].id; });
+  await s.locator('#firma-touren', { hasText: '4 Touren' }).waitFor();
+  assert.ok((await s.locator('#firma-touren').textContent()).includes('3× Montage'));
+
+  // Schadensfall: Tour des Schadenstags übernehmen, Fahrer werden vorgeschlagen
+  await s.locator('[data-bereich=faelle]').click();
+  await s.locator('[data-neu]').first().click();
+  await s.locator('#fall-form [name="schadensdatum"]').fill(tag);
+  await s.locator('#aus-touren').click();
+  await s.locator('#toast', { hasText: 'Aus der Tourenplanung übernommen' }).waitFor();
+  const wert = n => s.locator(`#fall-form [name="${n}"]`).inputValue();
+  assert.deepEqual([await wert('fahrzeug'), await wert('tour'), await wert('fahrer'), await wert('beifahrer1'), await wert('auftraggeber')],
+    ['RS-AT 100', '7 – Küche Lennep', 'Ali Demir', 'Ben Ott', 'Möbel Krause']);
+  assert.ok((await s.locator('#fahrer-liste option').evaluateAll(o => o.map(x => x.value))).includes('Ali Demir'));
+  await s.context().close();
+});

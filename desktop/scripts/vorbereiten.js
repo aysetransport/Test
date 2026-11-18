@@ -6,7 +6,7 @@ const quelle = path.join(__dirname, '..', '..', 'web');
 const ziel = path.join(__dirname, '..', 'app');
 fs.rmSync(ziel, { recursive: true, force: true });
 fs.mkdirSync(ziel, { recursive: true });
-for (const datei of ['index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png']) {
+for (const datei of ['index.html', 'touren.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png']) {
   fs.copyFileSync(path.join(quelle, datei), path.join(ziel, datei));
 }
 console.log('Web-App übernommen nach', ziel);

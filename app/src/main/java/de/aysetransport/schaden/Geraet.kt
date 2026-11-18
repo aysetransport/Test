@@ -9,10 +9,9 @@ import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.print.PdfAusDruck
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.print.PdfAusDruck
 import android.print.PrintAttributes
 import android.print.PrintManager
 import android.provider.MediaStore
@@ -25,6 +24,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.io.IOException
@@ -57,7 +57,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
     fun oeffneExtern(adresse: String) {
         if (!Regex("^(mailto:|tel:|https:)", RegexOption.IGNORE_CASE).containsMatchIn(adresse)) throw IOException("Adresse nicht erlaubt")
         try {
-            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(adresse)))
+            activity.startActivity(Intent(Intent.ACTION_VIEW, adresse.toUri()))
         } catch (e: ActivityNotFoundException) {
             throw IOException("Keine passende App gefunden.")
         }
@@ -155,9 +155,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
             return false
         }
         val verwaltung = activity.getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            verwaltung.createNotificationChannel(NotificationChannel(kanal, "Neue E-Mails", NotificationManager.IMPORTANCE_DEFAULT))
-        }
+        verwaltung.createNotificationChannel(NotificationChannel(kanal, "Neue E-Mails", NotificationManager.IMPORTANCE_DEFAULT))
         val oeffnen = Intent(activity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(MainActivity.ZIEL, ziel)
         val pi = PendingIntent.getActivity(activity, (ziel ?: "").hashCode(), oeffnen, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val n = NotificationCompat.Builder(activity, kanal)

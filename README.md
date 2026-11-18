@@ -145,7 +145,7 @@ und funktioniert auch ohne Netz.
 
 **Veröffentlichung:** Die Web-App läuft über GitHub Pages aus dem öffentlichen Repository
 [`aysetransport/schaden`](https://github.com/aysetransport/schaden) unter
-https://aysetransport.github.io/schaden/. Nach Änderungen an `web/` die Dateien `index.html`,
+https://aysetransport.github.io/schaden/. Nach Änderungen an `web/` die Dateien `index.html`, `touren.html`,
 `sw.js`, `manifest.webmanifest` und die Symbole dorthin übernehmen. Bei Änderungen an `sw.js`
 oder an den zwischengespeicherten Dateien die Versionsnummer in `SPEICHER` erhöhen, damit
 installierte Web-Apps sie neu laden.

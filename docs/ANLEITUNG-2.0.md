@@ -184,6 +184,18 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 2.4 (Windows-App 2.4, Android-App 3.1, Web-App)
+
+Kein neues Cloud-Skript nötig. Die Tourenplanung läuft weiter mit ihrem eigenen Google-Skript und ihren eigenen Daten – nichts wurde umgezogen oder kopiert, darum fehlt auch nichts.
+
+- **Reiter „Touren“:** die komplette Tourenplanung (Tagesplan, Teams, Stammdaten, Abwesenheiten, Monatsübersicht, Auftraggeber-Bericht, PDF/Excel, WhatsApp) direkt im CRM. Anmelden mit der PIN der Tourenplanung; sie gilt, bis die App geschlossen wird.
+- **Stammdaten abgleichen** (⚙ Einstellungen → Tourenplanung oder Fuhrpark → *Mit Tourenplanung abgleichen*): Fahrzeuge der Tourenplanung kommen in den Fuhrpark, Fahrzeuge aus dem Fuhrpark in die Tourenplanung, Auftraggeber werden als Firmen angelegt (auf Wunsch auch umgekehrt). Vorher zeigt die App, was passiert; nichts wird doppelt angelegt.
+- **Mitarbeiter** (Fuhrpark → *Mitarbeiter*): wer heute auf welchem Fahrzeug und welcher Tour ist, wer abwesend ist, mit Telefonnummer zum Antippen. Die Namen werden im Fall-Formular und beim Fahrzeug als Fahrer vorgeschlagen.
+- **Fahrzeug:** zeigt die heutige Tour mit Team.
+- **Firma:** zeigt die Touren dieses und letzten Monats laut Tourenplanung.
+- **Schadensfall:** im Formular unter *Transport* „Aus der Tourenplanung übernehmen“ – Fahrzeug, Tour, Fahrer, Beifahrer und Auftraggeber vom Schadenstag werden eingetragen.
+- Aufgeräumt: doppelter Programmcode zusammengefasst, alte Kopien der Web-App aus dem Hauptordner des Repositorys entfernt.
+
 ## Android-App 3.0 – neu aufgebaut
 
 Die Android-App ist ab 3.0 neu gebaut: Sie zeigt dieselbe Oberfläche wie die Web- und die Windows-App und hat damit **alle Funktionen** – Firmen, Schäden, Termine, Finanzen (Angebote, Rechnungen, Zahlungen, Mahnungen), Fuhrpark (mit Import), Übersicht und Postfach mit zwei Mail-Konten. Der Android-Teil ergänzt, was nur die App kann: E-Mail direkt per IMAP/SMTP, Fotos mit der Kamera, Dateien öffnen und im Ordner *Download/Ayse CRM* speichern, PDF für Rechnungen, Drucken über Android und Benachrichtigungen bei neuen Mails.
