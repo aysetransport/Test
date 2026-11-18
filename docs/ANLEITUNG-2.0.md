@@ -184,6 +184,15 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 2.5 (Windows-App 2.5, Android-App 3.2, Web-App)
+
+- **Rechnung aus Touren** (Finanzen → *Rechnung aus Touren* oder in der Firma unter *Touren*): Firma und Zeitraum wählen, die App zählt die gefahrenen Touren aus der Tourenplanung und setzt die Preise aus der Preisliste der Firma ein.
+  - *je Einsatzart:* eine Position pro Einsatzart (Anzahl × Preis), *je Tour:* eine Position pro Tour mit den gefahrenen Tagen.
+  - Preise werden zugeordnet: gleiche Bezeichnung wie die Einsatzart, sonst die einzige Tourpauschale der Firma. Es gilt der Preis, der am Ende des Zeitraums gültig war. In der Vorschau lässt sich jeder Preis ändern; fehlt einer, wird er in der Rechnung nachgetragen.
+  - Heißt der Auftraggeber in der Tourenplanung anders als die Firma, wählt man ihn in der Vorschau aus.
+  - Gibt es für Firma und Zeitraum schon eine Rechnung, weist die Vorschau darauf hin.
+  - Die Rechnung wird als Entwurf angelegt und kann wie jede andere geändert, gedruckt und verschickt werden.
+
 ## Neu in 2.4 (Windows-App 2.4, Android-App 3.1, Web-App)
 
 Kein neues Cloud-Skript nötig. Die Tourenplanung läuft weiter mit ihrem eigenen Google-Skript und ihren eigenen Daten – nichts wurde umgezogen oder kopiert, darum fehlt auch nichts.

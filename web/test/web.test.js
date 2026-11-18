@@ -836,6 +836,28 @@ test('Tourenplanung: Reiter „Touren“ und Querverbindungen zu Fahrzeugen, Fir
   await s.locator('#firma-touren', { hasText: '4 Touren' }).waitFor();
   assert.ok((await s.locator('#firma-touren').textContent()).includes('3× Montage'));
 
+  // Rechnung aus Touren: Zeitraum wählen, Preise der Firma werden zugeordnet
+  await s.evaluate(() => {
+    const f = auftraggeberListe()[0];
+    Aktionen.crmSpeichern('preise', { firmaId: f.id, bezeichnung: 'Montage', betragCent: 25000, einheit: 'pro Einsatz', gueltigAb: null, notiz: '' });
+    Aktionen.crmSpeichern('preise', { firmaId: f.id, bezeichnung: 'Montage', betragCent: 99900, einheit: 'pro Einsatz', gueltigAb: '2999-01-01', notiz: '' });
+    Aktionen.crmSpeichern('preise', { firmaId: f.id, bezeichnung: 'Tourpauschale', betragCent: 18000, einheit: 'pro Tour', gueltigAb: null, notiz: '' });
+  });
+  await s.locator('#firma-touren ~ [data-rechnung-touren]').click();
+  await s.locator('#tpr-form button.voll').click();
+  await s.locator('#tpr-summe', { hasText: '930,00' }).waitFor();
+  await s.locator('#tpr-vorschau button.voll').click();
+  await s.waitForFunction(() => location.hash.startsWith('#/beleg/'));
+  const rechnung = await s.evaluate(() => { const b = S.belege[location.hash.split('/')[2]]; return { pos: positionen(b), notiz: b.notiz, netto: belegSummen(b).netto }; });
+  assert.equal(rechnung.netto, 93000);
+  assert.deepEqual(rechnung.pos.map(p => [p.bez, p.menge, p.einzelCent]), [['Tourpauschale – Lieferung', 1, 18000], ['Montage', 3, 25000]]);
+  assert.match(rechnung.notiz, /^Aus der Tourenplanung: /);
+  // Ein zweites Mal für denselben Zeitraum: Hinweis auf die vorhandene Rechnung
+  await s.evaluate(() => rechnungAusTouren(auftraggeberListe()[0].id));
+  await s.locator('#tpr-form button.voll').click();
+  await s.locator('#tpr-vorschau .fehlertext', { hasText: 'gibt es schon' }).waitFor();
+  await s.evaluate(() => $('#dialog').close());
+
   // Schadensfall: Tour des Schadenstags übernehmen, Fahrer werden vorgeschlagen
   await s.locator('[data-bereich=faelle]').click();
   await s.locator('[data-neu]').first().click();
