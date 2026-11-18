@@ -1694,11 +1694,13 @@ function belegHtml(b) {
 }
 const belegDateiname = b => `${BELEG_ART[b.art][0]}_${b.nummer}_${(S.auftraggeber[b.firmaId] || {}).name || ''}.pdf`.replace(/\s+/g, '_');
 async function belegPdf(b) {
-  if (!window.desktop || !window.desktop.pdf) throw new Error('PDF gibt es in der Windows-App. Im Browser bitte „Drucken“ → „Als PDF speichern“ nutzen.');
+  if (!window.desktop || !window.desktop.pdf) throw new Error('PDF gibt es in der Windows- und der Android-App. Im Browser bitte „Drucken“ → „Als PDF speichern“ nutzen.');
   return window.desktop.pdf(belegHtml(b));
 }
 /** Druckt HTML über einen unsichtbaren Rahmen – kein neues Fenster, das ein Popup-Blocker (oder die Windows-App) sperren könnte. */
 function druckeHtml(html) {
+  // Android: Druckdialog des Geräts (eine WebView kann nicht selbst drucken)
+  if (window.desktop && window.desktop.drucke) { window.desktop.drucke(html).catch(e => toast('Drucken nicht möglich: ' + e.message)); return; }
   const alt = $('#druckrahmen'); if (alt) alt.remove();
   const r = document.createElement('iframe');
   r.id = 'druckrahmen'; r.setAttribute('aria-hidden', 'true');
@@ -2027,7 +2029,8 @@ function zeichneFuhrpark(r) {
     <div class="chips" role="group" aria-label="Status"><button class="chip" data-fuhrpark-status="" aria-pressed="${!st}">Alle</button>
       <button class="chip" data-fuhrpark-status="FRIST" aria-pressed="${st === 'FRIST'}">Frist fällig</button>${Object.entries(FAHRZEUG_STATUS).map(([k, [l]]) =>
       `<button class="chip" data-fuhrpark-status="${k}" aria-pressed="${st === k}">${l}</button>`).join('')}</div>
-    <div class="zeile"><button class="knopf voll fab" data-neues-fahrzeug>＋ Neues Fahrzeug</button><button class="knopf" data-fuhrpark-csv>CSV</button></div>
+    <div class="zeile"><button class="knopf voll fab" data-neues-fahrzeug>＋ Neues Fahrzeug</button><button class="knopf" data-fuhrpark-csv>CSV</button>
+      <label class="knopf">Importieren<input type="file" id="fuhrpark-import" accept=".json,application/json" hidden></label></div>
     <div id="fahrzeuge">${karten || `<div class="leer">🚐<b>${alle('fahrzeuge').length ? 'Keine Treffer' : 'Noch keine Fahrzeuge'}</b>${alle('fahrzeuge').length ? 'In dieser Ansicht gibt es keine Fahrzeuge.' : 'Lege deine Fahrzeuge an – mit Fahrzeugschein, TÜV-, SP- und UVV-Fristen, Werkstatt, Tanken und Kosten.'}</div>`}</div>`;
 }
 
@@ -2140,6 +2143,36 @@ function fahrzeugEintragDialog(z, x, vorgabeArt = 'WARTUNG') {
   };
 }
 
+/**
+ * Fuhrpark-Import (z. B. aus eingelesenen Fahrzeugscheinen): { fahrzeuge: [{ kennzeichen, … }], dokumente: [{ kennzeichen, art, name, mimeType, base64 }] }.
+ * Gleiches Kennzeichen = gleiches Fahrzeug: leere Felder werden ergänzt, vorhandene Angaben bleiben. Dokumente mit gleichem Namen kommen nicht doppelt.
+ */
+async function fuhrparkImportieren(text) {
+  const d = JSON.parse(text);
+  if (!d || !Array.isArray(d.fahrzeuge)) throw new Error('Das ist keine Fuhrpark-Datei.');
+  const felder = new Set(FAHRZEUG_FELDER.flatMap(([, f]) => f.map(([k]) => k)).concat(['leasingRateCent']));
+  const nachKz = new Map(alle('fahrzeuge').map(z => [kzNormal(z.kennzeichen), z]));
+  let neu = 0, ergaenzt = 0, doks = 0;
+  for (const roh of d.fahrzeuge) {
+    const kz = kzNormal(roh.kennzeichen); if (!kz) continue;
+    const sauber = Object.fromEntries(Object.entries(roh).filter(([k, v]) => felder.has(k) && v != null && v !== ''));
+    const alt = nachKz.get(kz);
+    if (!alt) { const id = FuhrparkAktionen.speichern({ art: 'TRANSPORTER', status: 'AKTIV', ...sauber }); nachKz.set(kz, S.fahrzeuge[id]); neu++; continue; }
+    const dazu = Object.fromEntries(Object.entries(sauber).filter(([k]) => alt[k] == null || alt[k] === ''));
+    if (Object.keys(dazu).length) { FuhrparkAktionen.speichern({ ...alt, ...dazu }); nachKz.set(kz, S.fahrzeuge[alt.id]); ergaenzt++; }
+  }
+  for (const dok of d.dokumente || []) {
+    const z = nachKz.get(kzNormal(dok.kennzeichen)); if (!z || !dok.base64) continue;
+    const name = `${dok.art || 'Sonstiges'} – ${dok.name}`;
+    if (anlagenVon(z.id).some(a => a.anzeigename === name)) continue;
+    const blob = blobAusBase64(dok.base64, dok.mimeType || 'application/pdf');
+    const a = merke('anlagen', { id: uuid(), fallId: z.id, anzeigename: name, mimeType: blob.type, groesseBytes: blob.size, hinzugefuegtAm: jetztIso(), vorhanden: false });
+    await Dateien.lege(a.id, blob); doks++;
+  }
+  nachAenderung();
+  return { neu, ergaenzt, doks };
+}
+
 function fuhrparkCsv() {
   const tab = (kopf, zeilen) => '﻿' + [kopf, ...zeilen].map(z => z.map(csvZelle).join(';')).join('\r\n') + '\r\n';
   const kz = id => S.fahrzeuge[id]?.kennzeichen || '';
@@ -2160,6 +2193,15 @@ $('#liste').addEventListener('click', e => {
   if (st) { ANSICHT.fuhrparkStatus = st.dataset.fuhrparkStatus; zeichneListe(); return; }
   if (e.target.closest('[data-neues-fahrzeug]')) { fahrzeugDialog(null); return; }
   if (e.target.closest('[data-fuhrpark-csv]')) { const d = fuhrparkCsv(); ladeHerunter(`Fahrzeuge_${heute()}.csv`, d.Fahrzeuge); setTimeout(() => ladeHerunter(`Fahrzeugakte_${heute()}.csv`, d.Fahrzeugakte), 400); }
+});
+$('#liste').addEventListener('change', async e => {
+  if (e.target.id !== 'fuhrpark-import' || !e.target.files[0]) return;
+  try {
+    toast('Importiere …', 60000);
+    const r = await fuhrparkImportieren(await e.target.files[0].text());
+    toast(`${r.neu} Fahrzeuge neu, ${r.ergaenzt} ergänzt, ${r.doks} Dokumente übernommen.`, 6000);
+  } catch (fehler) { toast('Import nicht möglich: ' + (fehler.message || fehler), 6000); }
+  e.target.value = ''; // dieselbe Datei kann erneut gewählt werden
 });
 $('#detail').addEventListener('change', async e => {
   if (e.target.id !== 'fz-datei') return;
@@ -2213,7 +2255,7 @@ function termineIcs() {
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Ayse Transport//CRM//DE', 'CALSCALE:GREGORIAN', ...ereignisse, 'END:VCALENDAR'].join('\r\n') + '\r\n';
 }
 
-// ============================== E-Mail (nur Windows-App) ==============================
+// ============================== E-Mail (Windows- und Android-App) ==============================
 // Die Windows-App spricht über ihren Hauptprozess direkt per IMAP/SMTP mit den Postfächern – mit
 // denselben Regeln wie die Android-App: zwei Postfächer (SCHADEN für Schadensfälle, ALLGEMEIN für
 // alles andere). Zuordnung eingehender Mails:
@@ -2651,7 +2693,7 @@ function mailKontoDialog(art = 'SCHADEN') {
         <label class="feld">SMTP-Port<input name="smtpPort" inputmode="numeric" value="${esc(werte.smtpPort || k.smtpPort || 465)}"></label>
         <label class="auswahl"><input type="checkbox" name="starttls" ${k.smtpSicherheit === 'STARTTLS' ? 'checked' : ''}> SMTP mit STARTTLS (sonst SSL)</label>`
         : `<p class="leise">Server: ${esc(a.imapHost)} (IMAP) · ${esc(a.smtpHost)} (SMTP)</p>`}
-      <p class="leise">Das Passwort wird mit deinem Windows-Konto verschlüsselt und nur auf diesem Rechner gespeichert. Die App liest den Posteingang und verändert im Postfach nichts.</p>
+      <p class="leise">Das Passwort wird verschlüsselt und nur auf diesem ${window.desktop && window.desktop.plattform === 'android' ? 'Gerät' : 'Rechner (mit deinem Windows-Konto)'} gespeichert. Die App liest den Posteingang und verändert im Postfach nichts.</p>
       <p class="fehlertext" id="konto-fehler" hidden></p>
       <div class="dialog-knoepfe"><button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll" id="konto-verbinden">Verbinden</button></div></form>`);
     $('#konto-form').onclick = e => { const c = e.target.closest('[data-anbieter]'); if (c) { wahl = c.dataset.anbieter; male(); } };
