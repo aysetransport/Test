@@ -184,6 +184,18 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 3.1 (Windows-App 3.1, Android-App 4.1, Web-App) – Statistik
+
+Kein neues Cloud-Skript nötig (bleibt Version 7). Der Bereich heißt jetzt **Statistik** (📊).
+
+- **Fertige Statistiken** (über 50), z. B. Touren je Auftraggeber/Monat/Wochentag/Fahrzeug, nicht abgerechnete Touren, Schäden je Mitarbeiter, je Tour, je Fahrzeug, je Auftraggeber und je Einsatzart – auch als **Schäden je 100 Touren**, Schadenkosten, Arbeits- und Krankheitstage, Lohnkosten je Arbeitstag, Gewinn/Verlust je Auftraggeber, Tour, Monat, Fahrzeug und Einsatzart, Umsatz je Tour, Zahlungsdauer, Fahrzeugkosten je Einsatztag, Werkstätten, Kontakte, Anruf-Ergebnisse, Verkaufschancen, E-Mails.
+- **Baukasten:** jede erfasste Zahl aus Touren, Einsätzen, Schäden, Abwesenheiten, Rechnungen, Angeboten, Fahrzeugakte, Kontakten, Verkaufschancen, Lohnabrechnungen, Personalakte, E-Mails sowie Firmen-, Personal- und Fahrzeugbestand – gruppiert nach jedem Merkmal (Mitarbeiter, Fahrzeug, Auftraggeber, Einsatzart, Tour, Monat, Quartal, Woche, Wochentag, Status …), als Kreuztabelle, mit Filter, Top 5/10/20 und **ins Verhältnis gesetzt** zu einer anderen Zahl (je 100, je 1, in %). Zeile antippen = genauer aufschlüsseln.
+- **Top & Flop:** Top- und schwächste Mitarbeiter (Gesamtwertung aus Schadenquote, Krankheitstagen, Deckungsbeitrag je Arbeitstag und Einsatztagen), wenigste/meiste Schäden je 100 Touren, beste und schlechteste Touren (Gewinn/Verlust), beste und schwächste wiederkehrende Touren, Touren mit den meisten Schäden, Gewinn und Verlust je Firma.
+- **Gewinn & Verlust:** Erlös, Personal-, Fahrzeug- und Schadenkosten je Monat, Ergebnis und Marge, dazu der Abgleich mit Rechnungen, Lohnabrechnungen und Fahrzeugakte.
+- **So wird gerechnet:** Erlös einer Tour = Anteil an der Rechnung (gewichtet nach Preisliste) bzw. Preis der Firma für die Einsatzart. Personal = Lohnabrechnung des Monats ÷ Arbeitstage, sonst Stundenlohn × Tagesstunden × Arbeitgeber-Zuschlag, sonst Tagessatz. Fahrzeug = (Fahrzeugakte + Leasingrate) des Monats ÷ Einsatztage, sonst Tagessatz. Schäden = Vergleich bzw. Forderung der verknüpften Fälle (abgelehnte nicht; bei Versicherung höchstens die Selbstbeteiligung). Tagessätze, Zuschlag, Selbstbeteiligung und Gemeinkosten unter ⚙ → Kosten.
+- Gewinn/Verlust steht auch bei jeder Tour (⋮), bei der Firma, beim Fahrzeug und beim Mitarbeiter.
+- Jede Statistik lässt sich drucken und als CSV (Excel) speichern.
+
 ## Neu in 3.0 (Windows-App 3.0, Android-App 4.0, Web-App) – alles in einer App
 
 **Wichtig:** Diese Version braucht die neue `cloud/Code.gs` (Cloud-Version 7). In Google Apps Script den Inhalt ersetzen und unter *Bereitstellen → Bereitstellungen verwalten → Bearbeiten → Version: Neue Version* neu bereitstellen. Vorher zeigt die App „Das Cloud-Skript ist veraltet“.

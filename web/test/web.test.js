@@ -890,8 +890,20 @@ test('Tourenplanung im CRM: Übernahme aus der alten Tourenplanung, Tagesplan, H
   await s.waitForFunction(() => ANSICHT.bereich === 'touren' && !location.hash.slice(2));
 
   // Auswertung und Abgleich in die Cloud
-  await s.evaluate(() => bereichWechseln('auswertung'));
+  await s.evaluate(() => { ANSICHT.statistikReiter = 'vergleich'; bereichWechseln('auswertung'); });
   await s.locator('#auswertung').getByText('Ali Demir').waitFor();
+  // Statistik: Schäden je 100 Touren je Mitarbeiter, Gewinn & Verlust, Top & Flop
+  await s.evaluate(() => { ANSICHT.statistikReiter = 'fertig'; ANSICHT.auswertungZeitraum = 'ALLES'; zeichneListe(); });
+  await s.locator('[data-fertige="Schäden je 100 Touren je Mitarbeiter"]').click();
+  const zeile = s.locator('#statistik-tabelle tr', { hasText: 'Ali Demir' });
+  assert.match(await zeile.textContent(), /Ali Demir\s*2\s*1\s*50/);
+  await s.locator('[data-statistik-reiter=guv]').click();
+  await s.locator('#guv').waitFor();
+  await s.locator('[data-statistik-reiter=bestenliste]').click();
+  await s.locator('#liste', { hasText: 'Top-Mitarbeiter' }).waitFor();
+  const r = await s.evaluate(() => { const t = tourenAm(plusTage(heute(), -1))[0]; return tourRechnung(t); });
+  assert.equal(r.erloes, 25000, 'Erlös aus der Rechnung (Montage 250 €)');
+  assert.equal(r.schaeden, 0);
   await aktuell(s);
   const d = cloudDaten(cloud);
   assert.equal(Object.values(d.touren).filter(t => !t.geloescht).length, 5);
