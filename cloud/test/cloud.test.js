@@ -255,7 +255,7 @@ test('Auftraggeber: Kontaktdaten am Fall und eigene Liste mit denselben Abgleich
   assert.deepEqual(weg.auftraggeber.map(e => [e.geloescht, e.name]), [[true, undefined]]);
   const spaeter = u.sync({ seit: weg.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Wieder da?', geaendertAm: '2026-11-12T08:00:00Z' }] });
   assert.equal(spaeter.auftraggeber[0].geloescht, true, 'gelöscht bleibt gelöscht');
-  assert.equal(u.aufruf('status').api, 9);
+  assert.equal(u.aufruf('status').api, 10);
 });
 
 test('CRM: Ansprechpartner, Preise usw. gleichen sich ab und verschwinden mit ihrer Firma', () => {
@@ -405,4 +405,28 @@ test('Benutzer-Logins: Admin legt Fahrer an, Fahrer sieht nur Eigenes und änder
   // Nach acht Fehlversuchen ist der Login gesperrt
   for (let i = 0; i < 8; i++) assert.throws(() => u.aufruf('einloggen', 'buero', 'falsch'), /falsch/);
   assert.throws(() => u.aufruf('einloggen', 'buero', 'buero-123'), /GESPERRT/);
+});
+
+test('Statuslink: Kunde sieht den Lieferstatus ohne Anmeldung und bewertet einmal', () => {
+  const u = eingerichtet();
+  const T = 'f1f1f1f1-0000-4000-8000-000000000001', F = 'f2f2f2f2-0000-4000-8000-000000000002', CODE = 'Ab12Cd34Ef56Gh78Ij90';
+  const jetzt = new Date().toISOString();
+  u.sync({ seit: 0, auftraggeber: [{ id: F, name: 'Möbel Krause', status: 'AKTIV', geaendertAm: jetzt }],
+    touren: [{ id: T, firmaId: '', datum: '2026-11-20', kennzeichen: 'RS-AT 100', auftraggeberId: F, fahrerId: 'x', zeitfenster: '8–12 Uhr', statusCode: CODE, kundeName: 'Frau Meier', kundeTelefon: '0171 9', geaendertAm: jetzt }] });
+  assert.throws(() => u.aufruf('sendungsstatus', 'kurz'), /ungültig/);
+  assert.throws(() => u.aufruf('sendungsstatus', 'Xb12Cd34Ef56Gh78Ij90'), /ungültig/);
+  const s = u.aufruf('sendungsstatus', CODE);
+  assert.deepEqual([s.statusText, s.zeitfenster, s.im_auftrag, s.bewertbar], ['Geplant', '8–12 Uhr', 'Möbel Krause', false]);
+  assert.ok(!JSON.stringify(s).includes('0171'), 'keine Telefonnummer im Status');
+  assert.throws(() => u.aufruf('bewerten', CODE, 5, 'super'), /erst nach der Lieferung/);
+  // Fahrer liefert ab
+  u.sync({ seit: 0, touren: [{ id: T, firmaId: '', datum: '2026-11-20', kennzeichen: 'RS-AT 100', auftraggeberId: F, fahrerId: 'x', zeitfenster: '8–12 Uhr', statusCode: CODE, status: 'ERLEDIGT', abgeliefertAm: jetzt, empfaenger: 'Meier', geaendertAm: new Date(Date.now() + 1000).toISOString() }] });
+  assert.equal(u.aufruf('sendungsstatus', CODE).bewertbar, true);
+  assert.throws(() => u.aufruf('bewerten', CODE, 9), /1 bis 5/);
+  u.aufruf('bewerten', CODE, 4, 'Pünktlich, freundlich');
+  assert.throws(() => u.aufruf('bewerten', CODE, 1), /schon bewertet/);
+  // Ein Gerät mit altem Stand speichert die Tour später – die Bewertung bleibt
+  u.sync({ seit: 0, touren: [{ id: T, firmaId: '', datum: '2026-11-20', kennzeichen: 'RS-AT 100', auftraggeberId: F, fahrerId: 'x', statusCode: CODE, status: 'ERLEDIGT', notiz: 'neu', geaendertAm: new Date(Date.now() + 60000).toISOString() }] });
+  const t = u.sync({ seit: 0 }).touren.find(x => x.id === T);
+  assert.deepEqual([t.bewertung, t.bewertungText, t.notiz], [4, 'Pünktlich, freundlich', 'neu']);
 });

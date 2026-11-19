@@ -184,6 +184,17 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.5 (Windows-App 4.5, Android-App 5.5, Web-App) – Gutschriften, Lieferavis, Kundenbewertung
+
+**Wichtig:** Neue `cloud/Code.gs` bereitstellen (Cloud-Version 10) – bis dahin zeigen die Apps „Cloud-Skript veraltet“.
+
+- **↩ Gutschriften** (Finanzen → Rechnung → „↩ Gutschrift“): ganze Rechnung gutschreiben (Storno) oder Teilbetrag (Preisnachlass, Reklamation). Eigener Nummernkreis G2026-…; sobald „als versendet markiert“, mindert die Gutschrift Umsatz, Gewinn & Verlust und den offenen Betrag der Rechnung (ganz gutgeschrieben = „Gutgeschrieben“). Danach „Als ausgezahlt / verrechnet markieren“. Im Buchhaltungs-Export als negative Buchung, Filter „Gutschriften“ in der Liste.
+- **Finanzen erst ab Stichtag** (⚙ → Kosten): Wenn Rechnungen, Löhne oder Fahrzeugkosten erst ab einem bestimmten Tag erfasst sind, zählen Umsatz, Gewinn & Verlust, Top & Flop und alle Geld-Statistiken erst ab diesem Tag. Touren, Schäden und Personal bleiben vollständig. Gilt je Gerät.
+- **🔁 Fahrzeuge zusammenführen**: im Fahrzeug unten „Mit anderem zusammenführen …“ oder im Fuhrpark „🔁 Doppelte“ (gleiches Kennzeichen anders geschrieben, Kennzeichen als Alias oder gleiche FIN). Touren, Fahrzeugakte, Dokumente, Schäden und Aufgaben wandern mit, das andere Kennzeichen bleibt als Alias.
+- **📦 Endkunde, Lieferavis & Statuslink** (Tour → ⋮): Name, Telefon, E-Mail, Adresse und Zeitfenster des Endkunden. Ein Tipp sendet das Lieferavis per SMS, WhatsApp oder E-Mail – mit einem **Statuslink**: Der Kunde sieht ohne Anmeldung, ob die Lieferung geplant, unterwegs oder zugestellt ist (keine Preise, keine Fahrernamen).
+- **⭐ Kundenbewertung**: Nach der Ablieferung kann der Kunde über denselben Link 1–5 Sterne und einen Kommentar abgeben (einmal je Lieferung). Für erledigte Touren sendet derselbe Knopf die Bitte um Bewertung. Die Bewertung steht an der Tour; Statistik → Touren → „Ø Kundenbewertung“ je Fahrer, Auftraggeber, Fahrzeug, Monat ….
+- **Bedienbarkeit**: sofortiger Offline-Hinweis (weiterarbeiten, Abgleich bei Netz), „Zum Inhalt springen“ für Tastatur, besserer Kontrast, scrollbare Tabellen per Tastatur erreichbar, ruhigere Darstellung bei „Bewegung reduzieren“, Tourenzeilen auf dem Tablet ohne Lücke. Geprüft mit einer automatischen Barrierefreiheitsprüfung (WCAG 2 AA) in allen Bereichen auf PC, Tablet und Handy.
+
 ## Neu in 4.4 (Windows-App 4.4, Android-App 5.4, Web-App) – Fristen-Matrix und Ausrüstung
 
 - **🎓 Fristen- und Schulungsmatrix** (Personal → Werkzeugleiste, am Handy unter ⋯): alle aktiven Mitarbeiter × Führerschein, Fahrerkarte, Modul 95, Führerscheinkontrolle, Unterweisung, Arbeitsmedizin und Fahrerkarte auslesen. Rot = überfällig, gelb = in 30 Tagen fällig, „–“ = nicht eingetragen. Überfällige stehen oben; „nur fällige“ filtert; Druck im Querformat (z. B. für die Unterweisungsmappe). Name antippen = zum Mitarbeiter.

@@ -30,7 +30,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 9; // 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
+var API_VERSION = 10; // 10: Statuslink, Lieferavis-Felder und Kundenbewertung an Touren; 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
 
 /**
  * CRM-Tabellen: alle hängen über firmaId an einem Auftraggeber (Tabelle „auftraggeber“).
@@ -67,7 +67,10 @@ var CRM_TABELLEN = {
   einsatzarten: { name: 'text', beifahrer: 'cent', monteurNoetig: 'bool', notiz: 'text' },
   touren: { datum: 'datum', reihenfolge: 'cent', kennzeichen: 'text', tourNr: 'text', auftraggeberId: 'text', auftraggeber: 'text', name: 'text', uhrzeit: 'text',
     einsatzart: 'text', fahrerId: 'text', beifahrerIds: 'text', notiz: 'text', belegId: 'text', erledigt: 'bool',
-    status: 'wort:GEPLANT', beginn: 'text', ende: 'text', kmStart: 'cent', kmEnde: 'cent', empfaenger: 'text', abgeliefertAm: 'text' },
+    status: 'wort:GEPLANT', beginn: 'text', ende: 'text', kmStart: 'cent', kmEnde: 'cent', empfaenger: 'text', abgeliefertAm: 'text',
+    // Endkunde (Lieferavis), Zeitfenster, Statuslink-Code und Bewertung durch den Kunden
+    kundeName: 'text', kundeTelefon: 'text', kundeEmail: 'text', kundeAdresse: 'text', zeitfenster: 'text', statusCode: 'text',
+    bewertung: 'cent', bewertungText: 'text', bewertetAm: 'text' },
   // Arbeitszeit je Mitarbeiter und Tag (Uhrzeiten als HH:MM, Pause in Minuten)
   // quelle: ERFASST (von Hand), STEMPEL (Fahrer-Modus), PLAN (Entwurf aus dem Tourenplan – bis zur Bestätigung kein Nachweis)
   zeiten: { mitarbeiterId: 'text', datum: 'datum', beginn: 'text', ende: 'text', pauseMin: 'cent', art: 'wort:ARBEIT', notiz: 'text', quelle: 'wort:ERFASST', bestaetigt: 'bool', bestaetigtAm: 'text' },
@@ -99,7 +102,7 @@ function doGet() {
 }
 
 /** Ohne PIN erreichbar: verrät nur, ob schon eine PIN festgelegt wurde; Anmeldung mit Benutzername und Passwort. */
-var OFFEN = { status: status, pinFestlegen: pinFestlegen, einloggen: einloggen };
+var OFFEN = { status: status, pinFestlegen: pinFestlegen, einloggen: einloggen, sendungsstatus: sendungsstatus, bewerten: bewerten };
 
 /** Nur mit gültiger PIN. Das erste Argument jedes Aufrufs ist die PIN. */
 var GESCHUETZT = {
@@ -267,6 +270,39 @@ function fahrerEingang_(d, anfrage, ich) {
 }
 
 // ============================== PIN ==============================
+
+// ============================== Statuslink für Endkunden (ohne Anmeldung) ==============================
+var STATUS_TEXT = { GEPLANT: 'Geplant', UNTERWEGS: 'Unterwegs', ANGEKOMMEN: 'Vor Ort', ERLEDIGT: 'Zugestellt', STORNIERT: 'Abgesagt', PROBLEM: 'Verzögert' };
+function tourZumCode_(d, code) {
+  code = String(code || '');
+  if (!/^[A-Za-z0-9]{16,40}$/.test(code)) throw new Error('Link ungültig');
+  var t = null;
+  Object.keys(d.touren || {}).some(function (k) { var x = d.touren[k]; if (!x.geloescht && x.statusCode === code) { t = x; return true; } return false; });
+  if (!t) throw new Error('Link ungültig oder abgelaufen');
+  return t;
+}
+/** Was der Endkunde über seinen Statuslink sieht – keine Namen von Fahrern, keine Preise. */
+function sendungsstatus(code) {
+  var d = ladeDaten_(), t = tourZumCode_(d, code), firma = d.auftraggeber[t.auftraggeberId];
+  var erledigt = t.status === 'ERLEDIGT' || !!t.abgeliefertAm;
+  return { datum: t.datum, zeitfenster: t.zeitfenster || t.uhrzeit || '', status: erledigt ? 'ERLEDIGT' : (t.status || 'GEPLANT'), statusText: STATUS_TEXT[erledigt ? 'ERLEDIGT' : t.status] || 'Geplant',
+    abgeliefertAm: t.abgeliefertAm || '', empfaenger: erledigt ? (t.empfaenger || '') : '', im_auftrag: firma && !firma.geloescht ? firma.name : (t.auftraggeber || ''),
+    kunde: t.kundeName || '', bewertbar: erledigt && !t.bewertung, bewertung: t.bewertung || null };
+}
+/** Bewertung 1–5 Sterne nach der Ablieferung – einmal je Lieferung. */
+function bewerten(code, sterne, text) {
+  var sperre = LockService.getScriptLock(); sperre.waitLock(20000);
+  try {
+    var d = ladeDaten_(), t = tourZumCode_(d, code), n = Math.round(Number(sterne));
+    if (!(t.status === 'ERLEDIGT' || t.abgeliefertAm)) throw new Error('Bewerten geht erst nach der Lieferung.');
+    if (t.bewertung) throw new Error('Diese Lieferung wurde schon bewertet. Danke!');
+    if (!(n >= 1 && n <= 5)) throw new Error('Bitte 1 bis 5 Sterne wählen.');
+    t.bewertung = n; t.bewertungText = String(text || '').slice(0, 1000); t.bewertetAm = new Date().toISOString();
+    t.geaendertAm = t.bewertetAm; t.rev = ++d.rev;
+    speichereDaten_(d);
+    return { ok: true };
+  } finally { sperre.releaseLock(); }
+}
 
 function status() {
   return {
@@ -517,6 +553,8 @@ function uebernehmeCrm_(d, tabelle, roh, zurueck) {
     if (!gleicherInhalt_(alt, neu)) zurueck[neu.id] = true;
     return;
   }
+  // Bewertungen kommen nur vom Kunden (Statuslink) – ein Gerät mit älterem Stand löscht sie nicht.
+  if (tabelle === 'touren' && alt && alt.bewertung && !neu.bewertung) { neu.bewertung = alt.bewertung; neu.bewertungText = alt.bewertungText; neu.bewertetAm = alt.bewertetAm; }
   neu.rev = ++d.rev;
   d[tabelle][neu.id] = neu;
 }

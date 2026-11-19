@@ -361,7 +361,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 9;
+  cloud.umgebung.kontext.API_VERSION = 10;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
@@ -1316,4 +1316,100 @@ test('Fristen-Matrix und Ausrüstung: fällige Fristen, Ausgabe und Rückgabe', 
   await s.locator('[data-aus-druck]').click();
   assert.ok(await s.evaluate(() => window.__druck.includes('Tankkarte DKV 12') && window.__druck.includes('Unterschrift Mitarbeiter')));
   await s.close();
+});
+
+test('Fahrzeuge zusammenführen: Touren, Akte, Schäden und Alias', async () => {
+  const s = await geraet(null, { bereich: 'fuhrpark' });
+  const ids = await s.evaluate(() => {
+    const a = FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV', bezeichnung: 'Sprinter 1', kmStand: 120000 });
+    const b = FuhrparkAktionen.speichern({ kennzeichen: 'RSAT100', status: 'AKTIV', fin: 'WDB123', huBis: '2027-05-31', kmStand: 125000 });
+    TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeber: 'X' }); TourAktionen.neu(plusTage(heute(), 1), { kennzeichen: 'RS-AT 100', auftraggeber: 'X' });
+    TourAktionen.neu(plusTage(heute(), 2), { kennzeichen: 'RSAT100', auftraggeber: 'Y' });
+    FuhrparkAktionen.eintragSpeichern({ fahrzeugId: b, art: 'WARTUNG', datum: heute(), text: 'Ölwechsel' });
+    bereichWechseln('fuhrpark'); return { a, b };
+  });
+  await s.locator('[data-fz-doppelte]', { hasText: '(1)' }).click();
+  await s.locator('[data-fz-doppelt]').click();
+  assert.equal(await s.locator('#fzz-form [name=bleibt]:checked').getAttribute('value'), ids.a);
+  assert.equal(await s.locator('#fzz-form [name=kz]').inputValue(), 'RS-AT 100');
+  await s.locator('#fzz-form button.voll').click();
+  await s.locator('#ja').click();
+  await s.locator('#toast', { hasText: 'Zusammengeführt' }).waitFor();
+  const r = await s.evaluate(id => { const z = S.fahrzeuge[id]; return { n: alle('fahrzeuge').length, kz: z.kennzeichen, alias: z.aliase, fin: z.fin, hu: z.huBis, km: z.kmStand,
+    touren: tourenVonFahrzeug(z).length, akte: eintraegeVon(id).length, perAlias: fahrzeugZumKz('RSAT 100').id === id }; }, ids.a);
+  assert.deepEqual(r, { n: 1, kz: 'RS-AT 100', alias: '', fin: 'WDB123', hu: '2027-05-31', km: 125000, touren: 3, akte: 1, perAlias: true });
+  await s.close();
+});
+
+test('Gutschrift mindert Umsatz und offenen Betrag; Finanzen erst ab Stichtag', async () => {
+  const s = await geraet(null, { bereich: 'finanzen' });
+  const ids = await s.evaluate(() => {
+    const f = Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV' });
+    const r = BelegAktionen.neu('RECHNUNG', f, { positionen: JSON.stringify([{ bez: 'Montage', menge: 2, einzelCent: 25000 }]) });
+    BelegAktionen.speichern({ ...S.belege[r], status: 'OFFEN' });
+    const alt = BelegAktionen.neu('RECHNUNG', f, { datum: '2020-01-10', positionen: JSON.stringify([{ bez: 'Alt', menge: 1, einzelCent: 99900 }]) });
+    BelegAktionen.speichern({ ...S.belege[alt], status: 'BEZAHLT' });
+    return { f, r };
+  });
+  await s.evaluate(id => { location.hash = '#/beleg/' + id; }, ids.r);
+  await s.locator('[data-beleg-akt="gutschrift"]').click();
+  await s.locator('#gs-teil').click();
+  await s.waitForFunction(() => alle('belege').some(b => b.art === 'GUTSCHRIFT'));
+  const gid = await s.evaluate(() => { const g = alle('belege').find(b => b.art === 'GUTSCHRIFT'); BelegAktionen.speichern({ ...g, positionen: JSON.stringify([{ bez: 'Preisnachlass', menge: 1, einzelCent: 10000 }]) }); return g.id; });
+  const vorher = await s.evaluate(r => offenCent(S.belege[r]), ids.r);
+  assert.equal(vorher, 59500, 'Entwurf zählt noch nicht');
+  await s.evaluate(g => { location.hash = '#/beleg/' + g; }, gid);
+  await s.locator('[data-beleg-akt="festschreiben"]').click();
+  const r = await s.evaluate(([r, g]) => ({ nr: S.belege[g].nummer.startsWith('G'), offen: offenCent(S.belege[r]), jahr: finanzKennzahlen().jahr, html: belegHtml(S.belege[g]).includes('Zu Rechnung') }), [ids.r, gid]);
+  assert.deepEqual(r, { nr: true, offen: 59500 - 11900, jahr: 50000 - 10000 + (new Date().getFullYear() === 2020 ? 99900 : 0), html: true });
+  // Rest gutschreiben: Rechnung gilt als erledigt
+  await s.evaluate(r => { const g = BelegAktionen.gutschrift(S.belege[r], false); BelegAktionen.speichern({ ...S.belege[g], status: 'OFFEN', positionen: JSON.stringify([{ bez: 'Rest', menge: 1, einzelCent: 40000 }]) }); }, ids.r);
+  assert.deepEqual(await s.evaluate(r => [offenCent(S.belege[r]), istRechnungOffen(S.belege[r]), belegMarke(S.belege[r])[0]], ids.r), [0, false, 'Gutgeschrieben']);
+  // Stichtag: alte Rechnung von 2020 fällt aus der Statistik
+  const st = await s.evaluate(() => { const ohne = statistikRechnen('rechnungen', 'netto', 'auftraggeber', null, '2019-01-01', '2099-12-31'); S.einstellungen.finanzAb = '2021-01-01';
+    const mit = statistikRechnen('rechnungen', 'netto', 'auftraggeber', null, '2019-01-01', '2099-12-31'); return [ohne.zeilen, mit.zeilen, finanzKennzahlen().jahr]; });
+  assert.deepEqual(st.slice(0, 2), [4, 3], 'Rechnung von 2020 zählt ab Stichtag nicht mehr');
+  await s.close();
+});
+
+test('Lieferavis, Statuslink für den Endkunden und Bewertung nach der Lieferung', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'touren' });
+  await melde(a, PIN, true); await aktuell(a);
+  const tid = await a.evaluate(() => {
+    FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV' });
+    const m = PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER' }), f = Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV' });
+    window.__links = []; window.oeffne = u => window.__links.push(u); window.oeffneLink = u => window.__links.push(u);
+    return TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeberId: f, auftraggeber: '', name: 'Küche', fahrerId: m });
+  });
+  await a.evaluate(id => tourKundeDialog(S.touren[id]), tid);
+  await a.locator('#kunde-form [name=kundeName]').fill('Frau Meier');
+  await a.locator('#kunde-form [name=kundeTelefon]').fill('0171 5555');
+  await a.locator('#kunde-form [name=zeitfenster]').fill('8–12 Uhr');
+  await a.locator('[data-avis="sms"]').click();
+  const sms = decodeURIComponent(await a.evaluate(() => window.__links[0]));
+  assert.ok(sms.startsWith('sms:+491715555') && sms.includes('Guten Tag Frau Meier') && sms.includes('zwischen 8 und 12 Uhr') && sms.includes('status.html?s='), sms);
+  const link = sms.match(/https?:\S+status\.html\S+/)[0];
+  await abgleich(a);
+  // Kunde öffnet den Link (ohne App, ohne Anmeldung)
+  const k = await (await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 } })).newPage();
+  await k.goto(link);
+  await k.locator('.status', { hasText: 'Geplant' }).waitFor();
+  assert.ok(await k.locator('dd', { hasText: '8–12 Uhr' }).count());
+  assert.equal(await k.locator('[data-stern]').count(), 0, 'vor der Lieferung keine Bewertung');
+  assert.ok(await k.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  // Abgeliefert → Kunde bewertet
+  await a.evaluate(id => merke('touren', { ...S.touren[id], status: 'ERLEDIGT', abgeliefertAm: jetztIso(), empfaenger: 'Meier', geaendertAm: jetztIso() }), tid);
+  await abgleich(a);
+  await k.reload();
+  await k.locator('.status', { hasText: 'Zugestellt' }).waitFor();
+  await k.locator('[data-stern="4"]').click();
+  await k.locator('#text').fill('Sehr freundlich');
+  await k.locator('#senden').click();
+  await k.locator('text=Vielen Dank für Ihre Bewertung').waitFor();
+  await abgleich(a);
+  assert.deepEqual(await a.evaluate(id => [S.touren[id].bewertung, S.touren[id].bewertungText], tid), [4, 'Sehr freundlich']);
+  const st = await a.evaluate(() => [...statistikRechnen('touren', 'bewertung', 'auftraggeber', null, '2000-01-01', '2099-12-31').ergebnis.values()].map(e => e.wert));
+  assert.deepEqual(st, [4]);
+  await k.context().close(); await a.context().close(); await cloud.schliessen();
 });
