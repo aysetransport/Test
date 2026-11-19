@@ -1177,3 +1177,51 @@ test('Logins: Admin legt Fahrer-Login an, Fahrer meldet sich an und sieht nur se
   await f.locator('#login-form').waitFor();
   await a.context().close(); await f.context().close(); await cloud.schliessen();
 });
+
+test('Monatsabrechnung je Firma und Briefe (Urlaubsbestätigung, Beschäftigung, Firma)', async () => {
+  const s = await geraet(null, { bereich: 'finanzen', timezoneId: 'Europe/Berlin' });
+  const ids = await s.evaluate(() => {
+    const f = Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV' }), g = Aktionen.firmaSpeichern({ name: 'Küchen Nord', status: 'AKTIV' });
+    Aktionen.crmSpeichern('adressen', { firmaId: f, art: 'HAUPTSITZ', strasse: 'Hauptstr. 1', plz: '42853', ort: 'Remscheid' });
+    Aktionen.crmSpeichern('preise', { firmaId: f, bezeichnung: 'Montage', betragCent: 25000, einheit: 'je Tour' });
+    Aktionen.crmSpeichern('preise', { firmaId: f, bezeichnung: 'Lieferung', betragCent: 9000 });
+    FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV' });
+    const a = PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER', wochenstunden: 40, eintritt: '2024-03-01', urlaubstage: 28 });
+    const zr = zeitraum('LETZTER_MONAT'), t = { kennzeichen: 'RS-AT 100', auftraggeber: '', fahrerId: a };
+    TourAktionen.neu(zr.von, { ...t, auftraggeberId: f, einsatzart: 'Montage' }); TourAktionen.neu(plusTage(zr.von, 1), { ...t, auftraggeberId: f, einsatzart: 'Montage' });
+    TourAktionen.neu(plusTage(zr.von, 2), { ...t, auftraggeberId: f, einsatzart: 'Lieferung' }); TourAktionen.neu(plusTage(zr.von, 3), { ...t, auftraggeberId: g, einsatzart: 'Lieferung' });
+    TourAktionen.neu(plusTage(zr.von, 4), { ...t, auftraggeberId: f, einsatzart: 'Montage', fahrerId: '' }); // nicht gefahren
+    return { f, g, a };
+  });
+  await s.locator('[data-monatsabrechnung]').first().click();
+  await s.locator('#sammel-liste', { hasText: 'Küchen Nord' }).waitFor();
+  assert.ok(await s.locator('#sammel-liste', { hasText: 'ohne Preis' }).count(), 'fehlender Preis wird gemeldet');
+  await s.locator('#sammel-los').click();
+  const r = await s.evaluate(f => { const b = alle('belege').filter(x => x.art === 'RECHNUNG'), k = b.find(x => x.firmaId === f);
+    return { n: b.length, pos: JSON.parse(k.positionen).map(p => [p.bez, p.menge, p.einzelCent]), abgerechnet: alle('touren').filter(t => t.belegId).length, status: k.status }; }, ids.f);
+  assert.deepEqual(r, { n: 2, pos: [['Lieferung', 1, 9000], ['Montage', 2, 25000]], abgerechnet: 4, status: 'ENTWURF' });
+  // zweiter Lauf: nichts mehr offen
+  await s.locator('[data-monatsabrechnung]').first().click();
+  await s.locator('#sammel-liste', { hasText: 'alles abgerechnet' }).waitFor();
+  await s.evaluate(() => $('#dialog').close());
+  // Brief an Mitarbeiter: Beschäftigungsbescheinigung mit Daten
+  await s.evaluate(id => { window.__druck = ''; window.druckeHtml = h => { window.__druck = h; }; location.hash = '#/mitarbeiter/' + id; }, ids.a);
+  await s.locator('[data-brief="BESCHAEFTIGUNG"]').click();
+  const text = await s.locator('#brief-form [name=text]').inputValue();
+  assert.ok(text.includes('Ali Demir') && text.includes('01.03.2024') && text.includes('40 Stunden'), text);
+  await s.locator('#brief-form button.voll').click();
+  const h = await s.evaluate(() => window.__druck);
+  assert.ok(h.includes('Bescheinigung über das Beschäftigungsverhältnis') && h.includes('Ali Demir'));
+  assert.ok(await s.evaluate(id => alle('personaleintraege').some(e => e.mitarbeiterId === id && e.text.startsWith('Brief:')), ids.a));
+  // Urlaubsbestätigung: Tage und Rest
+  await s.evaluate(() => $('#dialog').close());
+  await s.evaluate(id => { const id2 = uuid(); PersonalAktionen.abwesenheit({ id: id2, mitarbeiterId: id, von: '2026-12-14', bis: '2026-12-18', grund: 'Urlaub' }); briefDialog({ vorlage: 'URLAUB', abwesenheitId: id2, mitarbeiterId: id }); }, ids.a);
+  const ut = await s.locator('#brief-form [name=text]').inputValue();
+  assert.ok(ut.includes('14.12.2026') && ut.includes('18.12.2026') && ut.includes('(5 Arbeitstage)'), ut);
+  // Brief an Firma: Anschrift und Preise
+  await s.evaluate(() => $('#dialog').close());
+  await s.evaluate(f => briefDialog({ vorlage: 'PREISE', firmaId: f }), ids.f);
+  assert.ok((await s.locator('#brief-form [name=anschrift]').inputValue()).includes('42853 Remscheid'));
+  assert.ok((await s.locator('#brief-form [name=text]').inputValue()).includes('Montage: 250,00'));
+  await s.close();
+});

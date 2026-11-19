@@ -184,6 +184,14 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.2 (Windows-App 4.2, Android-App 5.2, Web-App) – Monatsabrechnung und Briefe
+
+- **🧾 Monatsabrechnung** (Finanzen oder ＋ Neu): zeigt für den Vormonat (Zeitraum frei wählbar) jede Firma mit gefahrenen, noch nicht abgerechneten Touren – Anzahl, Summe netto und Einsatzarten ohne Preis. Häkchen setzen, „Rechnungen anlegen“: je Firma eine Rechnung als Entwurf, Positionen je Einsatzart mit dem Preis aus der Preisliste der Firma. Die Touren gelten danach als abgerechnet; wird die Rechnung gelöscht, sind sie wieder offen.
+- **✉ Briefe nach DIN 5008** mit Ihrem Briefkopf (⚙ → Eigene Firmendaten), druckbar oder als PDF:
+  - Vorlagen: freier Brief, Urlaubsbestätigung (Zeitraum, Arbeitstage, Resturlaub automatisch), Beschäftigungsbescheinigung (Eintritt, Stelle, Wochenstunden), Aufforderung Fahrerkarte auslesen, Auftragsbestätigung und Preisanpassung (mit der Preisliste der Firma), Beendigung der Zusammenarbeit.
+  - Aufrufen über ＋ Neu → Brief, beim Mitarbeiter „✉ Brief“, bei der Firma „📄 Brief“ oder im Urlaubseintrag „Urlaubsbestätigung drucken“. Anschrift und Anrede werden vorbelegt, alles bleibt änderbar.
+  - Gedruckte Briefe werden bei der Firma als Aktivität bzw. in der Personalakte vermerkt.
+
 ## Neu in 4.1 (Windows-App 4.1, Android-App 5.1, Web-App) – eigene Logins
 
 **Wichtig:** Diese Version braucht die neue `cloud/Code.gs` (Cloud-Version 9) – ersetzen und als neue Version bereitstellen.
