@@ -1287,3 +1287,33 @@ test('Tour senden: WhatsApp an das ganze Team auf einmal', async () => {
   assert.ok(l[1].startsWith('sms:+491711111,+491722222?body='), l[1]);
   await s.close();
 });
+
+test('Fristen-Matrix und Ausrüstung: fällige Fristen, Ausgabe und Rückgabe', async () => {
+  const s = await geraet(null, { bereich: 'personal', viewport: { width: 390, height: 844 } });
+  const id = await s.evaluate(() => {
+    const a = PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER', fuehrerscheinBis: plusTage(heute(), -3), modul95Bis: plusTage(heute(), 10), unterweisungBis: plusTage(heute(), 200) });
+    PersonalAktionen.speichern({ name: 'Ben Ott', rolle: 'BEIFAHRER', unterweisungBis: plusTage(heute(), 300) });
+    PersonalAktionen.eintrag({ mitarbeiterId: a, art: 'AUSRUESTUNG', datum: '2026-01-05', text: 'Tankkarte DKV 12' });
+    PersonalAktionen.eintrag({ mitarbeiterId: a, art: 'AUSRUESTUNG', datum: '2026-01-05', text: 'Schlüssel Halle' });
+    bereichWechseln('personal'); return a;
+  });
+  await s.locator('.werkzeug-mehr').click();
+  await s.locator('[data-fristen-matrix]').click();
+  await s.locator('.matrix tbody tr').first().waitFor();
+  assert.equal(await s.locator('.matrix tbody tr').first().locator('th').textContent(), 'Ali Demir', 'Überfällige zuerst');
+  assert.equal(await s.locator('.matrix td.rot').count(), 1); assert.equal(await s.locator('.matrix td.gelb').count(), 1);
+  assert.ok(await s.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Seite scrollt nicht seitlich');
+  await s.locator('#matrix-faellig').check();
+  await s.locator('.matrix tbody tr').first().waitFor();
+  assert.equal(await s.locator('.matrix tbody tr').count(), 1);
+  await s.evaluate(() => $('#dialog').close());
+  if (!(await s.locator('[data-ausruestung]').isVisible())) await s.locator('.werkzeug-mehr').click();
+  await s.locator('[data-ausruestung]', { hasText: '(2)' }).click();
+  await s.locator('[data-aus-zurueck]').first().click();
+  await s.locator('#toast', { hasText: 'zurückgegeben' }).waitFor();
+  assert.deepEqual(await s.evaluate(id => ausruestungOffen(id).map(e => e.text), id), ['Schlüssel Halle']);
+  await s.evaluate(() => { window.__druck = ''; window.druckeHtml = h => { window.__druck = h; }; });
+  await s.locator('[data-aus-druck]').click();
+  assert.ok(await s.evaluate(() => window.__druck.includes('Tankkarte DKV 12') && window.__druck.includes('Unterschrift Mitarbeiter')));
+  await s.close();
+});

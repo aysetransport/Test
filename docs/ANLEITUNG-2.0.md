@@ -184,6 +184,11 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.4 (Windows-App 4.4, Android-App 5.4, Web-App) – Fristen-Matrix und Ausrüstung
+
+- **🎓 Fristen- und Schulungsmatrix** (Personal → Werkzeugleiste, am Handy unter ⋯): alle aktiven Mitarbeiter × Führerschein, Fahrerkarte, Modul 95, Führerscheinkontrolle, Unterweisung, Arbeitsmedizin und Fahrerkarte auslesen. Rot = überfällig, gelb = in 30 Tagen fällig, „–“ = nicht eingetragen. Überfällige stehen oben; „nur fällige“ filtert; Druck im Querformat (z. B. für die Unterweisungsmappe). Name antippen = zum Mitarbeiter.
+- **🔑 Ausrüstung** (nur Admin): Schlüssel, Tankkarten, Kleidung, Geräte als Personalakten-Eintrag „Ausrüstung“ erfassen. Die Übersicht zeigt alles, was noch ausgegeben ist – ausgeschiedene Mitarbeiter mit offener Rückgabe rot. „✓ zurück“ vermerkt die Rückgabe, „🖨 Protokoll“ druckt ein Übergabe-/Rückgabeprotokoll zum Unterschreiben.
+
 ## Neu in 4.3 (Windows-App 4.3, Android-App 5.3, Web-App) – Lohn-Import und Zusammenführen
 
 **Wichtig:** Neue `cloud/Code.gs` bereitstellen (gleiche Cloud-Version 9, aber Lohnabrechnungs-Dokumente sind jetzt für Disposition-Logins gesperrt).
