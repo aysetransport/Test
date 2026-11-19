@@ -3514,14 +3514,40 @@ function tourEingabeOffen() {
   const gespeichert = f === 'fahrer' ? maName(t.fahrerId) : f === 'beifahrer' ? maName(beifahrerVon(t)[Number(el.dataset.index)]) : f === 'auftraggeber' ? tourAuftraggeberName(t) : t[f] || '';
   return el.value.trim() !== String(gespeichert || '').trim();
 }
+/** Ähnliche Mitarbeiter zu einem unbekannten Namen (Tippfehler, nur Vor- oder Nachname, Anfang des Namens). */
+function aehnlicheMitarbeiter(name, max = 4) {
+  const abstand = (a, b) => { if (Math.abs(a.length - b.length) > 2) return 9; const d = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) { let vor = d[0]; d[0] = i; for (let j = 1; j <= b.length; j++) { const tmp = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, vor + (a[i - 1] === b[j - 1] ? 0 : 1)); vor = tmp; } } return d[b.length]; };
+  const w = nameSchluessel(name).split(' ').filter(Boolean); if (!w.length) return [];
+  return mitarbeiterListe(true).map(m => {
+    const t = [...nameSchluessel(m.name).split(' '), ...String(m.aliase || '').split(';').flatMap(a => nameSchluessel(a).split(' '))].filter(Boolean);
+    const p = w.reduce((n, x) => n + Math.max(0, ...t.map(y => (y === x ? 3 : y.startsWith(x) && x.length >= 2 ? 2 : x.length >= 4 && abstand(x, y) <= (x.length >= 7 ? 2 : 1) ? 1.5 : 0))), 0);
+    return { m, p };
+  }).filter(x => x.p > 0).sort((a, b) => b.p - a.p || a.m.name.localeCompare(b.m.name, 'de')).slice(0, max).map(x => x.m);
+}
+/** Unbekannter Name in der Tourenplanung: nichts anlegen – Hinweis mit „Meintest du …?“. */
+function unbekannterMitarbeiter(t, feld, index, name) {
+  const v = aehnlicheMitarbeiter(name);
+  dialog(`<div><h2>„${esc(name)}“ gibt es nicht im Personal</h2>${v.length ? `<p>Meintest du:</p><div id="meintest">${v.map(m => `<button class="vorlage" data-meintest="${m.id}"><b>${esc(m.name)}</b> <span class="leise">${esc(ROLLE[m.rolle] || '')}${abwesendAm(m.id, t.datum) ? ' · ' + esc(abwesendAm(m.id, t.datum).grund || 'abwesend') : ''}</span></button>`).join('')}</div>`
+    : '<p class="leise">Kein ähnlicher Name gefunden. Neue Mitarbeiter bitte unter Personal anlegen.</p>'}
+    <div class="dialog-knoepfe"><button class="knopf text" data-zu>Abbrechen</button></div></div>`);
+  if (!v.length) return;
+  $('#meintest').onclick = e => {
+    const b = e.target.closest('[data-meintest]'); if (!b) return;
+    const x = { ...S.touren[t.id] };
+    if (feld === 'fahrer') x.fahrerId = b.dataset.meintest;
+    else { const bf = beifahrerVon(x); bf[index] = b.dataset.meintest; x.beifahrerIds = [...new Set(bf.filter(Boolean))].join(','); }
+    $('#dialog').close(); TourAktionen.speichern(x);
+  };
+}
 /** Eingabe in einer Tourzeile übernehmen (Namen → Mitarbeiter, Kennzeichen → Fuhrpark, Auftraggeber → Firma). */
 function tourEingabe(t, el) {
   const feld = el.dataset.feld, wert = el.value.trim(), neu = { ...t };
-  const person = (name, rolle) => {
+  let unbekannt = '';
+  const person = name => {
     if (!name) return '';
     const m = maZumNamen(name); if (m) return m.id;
-    toast(`„${name}“ neu im Personal angelegt – bitte unter Personal ergänzen`, 5000);
-    return PersonalAktionen.schnellAnlegen(name, rolle);
+    unbekannt = name; return null;
   };
   if (feld === 'kennzeichen') { const z = fahrzeugZumKz(wert); neu.kennzeichen = z ? z.kennzeichen : wert.toUpperCase(); }
   else if (feld === 'auftraggeber') {
@@ -3531,12 +3557,17 @@ function tourEingabe(t, el) {
       neu.auftraggeberId = Aktionen.firmaSpeichern({ name: wert, status: 'AKTIV', notizen: 'Aus der Tourenplanung angelegt' }); neu.auftraggeber = wert;
       toast(`Firma „${wert}“ im CRM angelegt`, 4000);
     }
-  } else if (feld === 'fahrer') neu.fahrerId = person(wert, 'FAHRER');
+  } else if (feld === 'fahrer') { const id = person(wert); if (id !== null) neu.fahrerId = id; }
   else if (feld === 'beifahrer') {
-    const bf = beifahrerVon(t), i = Number(el.dataset.index), id = person(wert, 'BEIFAHRER');
-    if (id) bf[i] = id; else bf.splice(i, 1);
+    const bf = beifahrerVon(t), i = Number(el.dataset.index), id = person(wert);
+    if (id) bf[i] = id; else if (id === '') bf.splice(i, 1);
     neu.beifahrerIds = bf.filter(Boolean).join(',');
   } else neu[feld] = wert;
+  if (unbekannt) {
+    el.value = feld === 'fahrer' ? maName(t.fahrerId) : maName(beifahrerVon(t)[Number(el.dataset.index)]) || '';
+    setTimeout(() => unbekannterMitarbeiter(t, feld, Number(el.dataset.index), unbekannt), 0);
+    return;
+  }
   if (JSON.stringify(neu) !== JSON.stringify(t)) TourAktionen.speichern(neu);
 }
 

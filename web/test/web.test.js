@@ -1457,7 +1457,7 @@ test('Stoppliste (optional): mehrere Kunden, Route, Avis je Stopp, Fahrer hakt a
   await k.goto(link);
   await k.locator('text=Noch 2 Stopps vor Ihnen.').waitFor();
   // Fahrer-Ansicht: Stopps abhaken
-  await a.evaluate(id => { S.einstellungen.ichId = S.touren[id].fahrerId; bereichWechseln('fahrer'); }, tid);
+  await a.evaluate(id => { if ($('#dialog').open) $('#dialog').close(); S.einstellungen.ichId = S.touren[id].fahrerId; bereichWechseln('fahrer'); }, tid);
   await a.locator('.fahrer-stopps .stopp.naechster', { hasText: 'Frau Meier' }).waitFor();
   a.on('dialog', d => d.accept('Meier'));
   await a.locator('.fahrer-stopps .stopp.naechster [data-fs="fertig"]').click();
@@ -1466,4 +1466,24 @@ test('Stoppliste (optional): mehrere Kunden, Route, Avis je Stopp, Fahrer hakt a
   await k.reload(); await k.locator('text=Noch 1 Stopp vor Ihnen.').waitFor();
   assert.ok(await k.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await k.context().close(); await a.context().close(); await cloud.schliessen();
+});
+
+test('Tourenplanung: unbekannter Name legt niemanden an, sondern fragt „Meintest du …?“', async () => {
+  const s = await geraet(null, { bereich: 'touren' });
+  const tid = await s.evaluate(() => {
+    FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV' });
+    PersonalAktionen.speichern({ name: 'Fatih Akyüz', rolle: 'FAHRER' }); PersonalAktionen.speichern({ name: 'Mehmet Eybilen', rolle: 'FAHRER' });
+    return TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeber: 'X' });
+  });
+  const feld = s.locator(`[data-tour-zeile="${tid}"] [data-feld="fahrer"]`);
+  await feld.fill('Fatik'); await feld.press('Enter'); await feld.blur();
+  await s.locator('#dialog h2', { hasText: '„Fatik“ gibt es nicht im Personal' }).waitFor();
+  assert.deepEqual(await s.locator('[data-meintest]').allTextContents().then(l => l.map(x => x.split(' ').slice(0, 2).join(' '))), ['Fatih Akyüz']);
+  assert.equal(await s.evaluate(() => alle('mitarbeiter').length), 2, 'niemand angelegt');
+  await s.locator('[data-meintest]').click();
+  assert.equal(await s.evaluate(id => maName(S.touren[id].fahrerId), tid), 'Fatih Akyüz');
+  // Nur der Nachname reicht als Vorschlag; völlig Unbekanntes: nur Hinweis
+  assert.deepEqual(await s.evaluate(() => aehnlicheMitarbeiter('eybilen').map(m => m.name)), ['Mehmet Eybilen']);
+  assert.deepEqual(await s.evaluate(() => aehnlicheMitarbeiter('Zoltan').length), 0);
+  await s.close();
 });

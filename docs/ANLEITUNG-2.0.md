@@ -184,6 +184,18 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.6 (Windows-App 4.6, Android-App 5.6, Web-App) – Stoppliste und „Meintest du …?“
+
+**Wichtig:** Neue `cloud/Code.gs` bereitstellen (Cloud-Version 11).
+
+- **📍 Stoppliste (optional)**: Tour → ⋮ → „Stoppliste“ – nur wenn eine Tour mehrere Kunden oder Adressen hat. Ohne Stopps bleibt alles wie bisher.
+  - Stopps als Lieferung, Abholung, Montage oder Sonstiges mit Kunde, Adresse, Telefon, E-Mail, Zeitfenster und Hinweis; Reihenfolge mit ▲▼. Ein bereits eingetragener Endkunde wird Stopp 1.
+  - „🧭 Route“ öffnet Google Maps über alle offenen Stopps in dieser Reihenfolge. „📨 Lieferavis an alle“ – je Kunde mit eigenem Zeitfenster und eigenem Statuslink.
+  - Der Kunde sieht auf seinem Statuslink „Noch 2 Stopps vor Ihnen“ bzw. „Sie sind der nächste Stopp“ und kann nach der Lieferung bewerten.
+  - Fahrer sehen die Stopps in „Meine Touren“, der nächste ist hervorgehoben: 🧭 Navigation, ☎ Anruf, ✓ erledigt (mit Empfängername). Die WhatsApp an das Team enthält die Stoppliste.
+  - In der Tourenplanung zeigt 📍n an der Tour, wie viele Stopps sie hat.
+- **Keine automatisch angelegten Mitarbeiter mehr**: Ein unbekannter Name in der Tourenplanung legt niemanden an. Stattdessen: „… gibt es nicht im Personal – Meintest du: …?“ mit passenden Vorschlägen (Tippfehler, nur Vor- oder Nachname, Anfang des Namens). Neue Mitarbeiter legst du unter Personal an.
+
 ## Neu in 4.5 (Windows-App 4.5, Android-App 5.5, Web-App) – Gutschriften, Lieferavis, Kundenbewertung
 
 **Wichtig:** Neue `cloud/Code.gs` bereitstellen (Cloud-Version 10) – bis dahin zeigen die Apps „Cloud-Skript veraltet“.
