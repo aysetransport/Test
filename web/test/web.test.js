@@ -924,11 +924,23 @@ test('Personal-Import (Lohnabrechnungen) und Akquise: Anruf-Ergebnis legt Wieder
     lohn: [{ personalnummer: '17', monat: '2026-10', bruttoCent: 310000, nettoCent: 215000, kostenCent: 380000, stunden: 168 }, { name: 'Ben Ott', monat: '2026-10', bruttoCent: 250000 }] });
   await s.evaluate(() => PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER' }));
   await s.locator('#personal-import').setInputFiles({ name: 'personal.json', mimeType: 'application/json', buffer: Buffer.from(datei) });
+  await s.locator('#imp-summe', { hasText: '1 zugeordnet · 1 neu' }).waitFor();
+  await s.locator('#imp-form button.voll').click();
   await s.locator('#toast', { hasText: 'Import: 1 neu, 1 ergänzt, 2 Lohnabrechnungen' }).waitFor();
   await s.locator('#personal-import').setInputFiles({ name: 'personal.json', mimeType: 'application/json', buffer: Buffer.from(datei) });
+  await s.locator('#imp-form button.voll').click();
   await s.locator('#toast', { hasText: 'Import: 0 neu, 0 ergänzt, 2 Lohnabrechnungen' }).waitFor();
+  // Anders geschriebener Name: Vorschlag zum Prüfen, Alias wird gespeichert, keine Dublette
+  await s.evaluate(() => PersonalAktionen.speichern({ name: 'Mike Engelhardt', rolle: 'FAHRER' }));
+  await s.locator('#personal-import').setInputFiles({ name: 'p2.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ mitarbeiter: [{ name: 'Mike Davis Engelhardt', personalnummer: '4' }, { name: 'Zoe Weg', personalnummer: '99' }],
+    lohn: [{ personalnummer: '4', monat: '2026-10', bruttoCent: 190000 }, { personalnummer: '99', monat: '2026-10', bruttoCent: 1 }] })) });
+  await s.locator('.imp-zeile.pruefen', { hasText: 'Mike Davis Engelhardt' }).waitFor();
+  await s.locator('#imp-form [name=z1]').selectOption('WEG');
+  await s.locator('#imp-form button.voll').click();
+  await s.locator('#toast', { hasText: 'Import: 0 neu, 1 ergänzt, 1 Lohnabrechnungen' }).waitFor();
+  assert.deepEqual(await s.evaluate(() => { const m = maZumNamen('Mike Davis Engelhardt'); return [m.name, m.personalnummer, alle('mitarbeiter').length, !!maZumNamen('Zoe Weg')]; }), ['Mike Engelhardt', '4', 3, false]);
   const r = await s.evaluate(() => { const m = maZumNamen('Ali Demir'); return [m.personalnummer, m.urlaubstage, alle('personaleintraege').length, maAuswertung(m, '2026-10-01', '2026-10-31').kostenCent]; });
-  assert.deepEqual(r, ['17', 28, 2, 380000]);
+  assert.deepEqual(r, ['17', 28, 3, 380000]);
 
   // Akquise: Interessent erfassen, Anruf mit Ergebnis „Angebot gewünscht“
   await s.evaluate(() => interessentDialog());
@@ -1223,5 +1235,34 @@ test('Monatsabrechnung je Firma und Briefe (Urlaubsbestätigung, Beschäftigung,
   await s.evaluate(f => briefDialog({ vorlage: 'PREISE', firmaId: f }), ids.f);
   assert.ok((await s.locator('#brief-form [name=anschrift]').inputValue()).includes('42853 Remscheid'));
   assert.ok((await s.locator('#brief-form [name=text]').inputValue()).includes('Montage: 250,00'));
+  await s.close();
+});
+
+test('Mitarbeiter zusammenführen: Doppelte finden, Touren, Zeiten, Lohn und Dokumente umhängen', async () => {
+  const s = await geraet(null, { bereich: 'personal' });
+  const ids = await s.evaluate(async () => {
+    const a = PersonalAktionen.speichern({ name: 'Fatih', rolle: 'FAHRER', telefon: '0171 1' }), c = PersonalAktionen.speichern({ name: 'Cem Ott', rolle: 'BEIFAHRER' });
+    FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV' });
+    TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeber: 'X', fahrerId: c, beifahrerIds: a });
+    ZeitAktionen.speichern({ mitarbeiterId: a, datum: heute(), beginn: '07:00', ende: '15:00', pauseMin: 30 });
+    await personalImportieren(JSON.stringify({ mitarbeiter: [{ name: 'Fatih Akyüz', personalnummer: '17', geburtstag: '1990-01-02' }], lohn: [{ personalnummer: '17', monat: '2026-10', bruttoCent: 90000 }],
+      dokumente: [{ personalnummer: '17', art: 'Lohnabrechnung', name: 'Oktober 2026.pdf', mimeType: 'application/pdf', base64: btoa('%PDF-1') }] }), { 0: 'NEU' });
+    bereichWechseln('personal');
+    return { a, b: maZumNamen('Fatih Akyüz').id };
+  });
+  await s.locator('[data-doppelte]', { hasText: 'Doppelte (1)' }).click();
+  await s.locator('[data-doppelt]').click();
+  await s.locator('#zus-form [name=bleibt][value="' + ids.a + '"]').waitFor();
+  assert.equal(await s.locator('#zus-form [name=bleibt]:checked').getAttribute('value'), ids.a, 'Eintrag mit Touren bleibt');
+  assert.equal(await s.locator('#zus-form [name=name]').inputValue(), 'Fatih Akyüz');
+  await s.locator('#zus-form button.voll').click();
+  await s.locator('#ja').click();
+  await s.locator('#toast', { hasText: 'Zusammengeführt' }).waitFor();
+  const r = await s.evaluate(id => { const m = maVon(id); return { n: alle('mitarbeiter').length, name: m.name, nr: m.personalnummer, geb: m.geburtstag, tel: m.telefon, alias: m.aliase,
+    touren: alle('touren').filter(t => teamVon(t).includes(id)).length, zeiten: alle('zeiten').filter(z => z.mitarbeiterId === id).length,
+    lohn: personalakteVon(id).filter(e => e.art === 'LOHN').length, doks: anlagenVon(id).map(a => a.anzeigename) }; }, ids.a);
+  assert.deepEqual(r, { n: 2, name: 'Fatih Akyüz', nr: '17', geb: '1990-01-02', tel: '0171 1', alias: 'Fatih', touren: 1, zeiten: 1, lohn: 1, doks: ['Lohnabrechnung – Oktober 2026.pdf'] });
+  assert.ok(await s.evaluate(id => !!Dateien.hole(anlagenVon(id)[0].id), ids.a));
+  assert.equal(await s.locator('[data-doppelte]').count(), 0);
   await s.close();
 });

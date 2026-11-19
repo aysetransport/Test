@@ -418,6 +418,7 @@ function sync(anfrage) {
       antwort.ansicht = 'FAHRER';
     } else if (rolle === 'DISPO') {
       antwort.personaleintraege = [];
+      antwort.anlagen = antwort.anlagen.filter(function (a) { return !lohnAnlage_(d, a); });
       antwort.mitarbeiter = antwort.mitarbeiter.map(function (m) { var k = {}; Object.keys(m).forEach(function (f) { if (f !== 'stundenlohnCent') k[f] = m[f]; }); return k; });
       antwort.ansicht = 'DISPO';
     }
@@ -627,7 +628,12 @@ function anlageHochladen(id, base64) {
   }
 }
 
+/** Lohnabrechnungen in der Personalakte gehören zu den Lohndaten – nur für Admins. */
+function lohnAnlage_(d, a) {
+  return !!(a && d.mitarbeiter && d.mitarbeiter[String(a.fallId || '').toLowerCase()] && /^lohnabrechnung/i.test(String(a.anzeigename || '')));
+}
 function pruefeAnlageSichtbar_(d, a) {
+  if (ZUGANG_.rolle === 'DISPO' && lohnAnlage_(d, a)) throw new Error('Kein Zugriff auf diese Anlage');
   if (ZUGANG_.rolle !== 'FAHRER') return;
   var sicht = fahrerSicht_(d, ZUGANG_.mitarbeiterId || '');
   if (!sicht.anlagen.some(function (x) { return x.id === a.id; })) throw new Error('Kein Zugriff auf diese Anlage');

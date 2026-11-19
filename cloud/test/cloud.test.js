@@ -384,6 +384,13 @@ test('Benutzer-Logins: Admin legt Fahrer an, Fahrer sieht nur Eigenes und änder
   const rd = u.aufruf('sync', buero.token, { seit: 0 });
   assert.equal(rd.touren.length, 2); assert.equal(rd.preise.length, 1); assert.equal(rd.personaleintraege.length, 0);
   assert.ok(rd.mitarbeiter.every(m => m.stundenlohnCent === undefined));
+  // Lohnabrechnungen in der Personalakte sieht und lädt nur der Admin
+  const LA = 'e6e6e6e6-0000-4000-8000-000000000001', FS = 'e6e6e6e6-0000-4000-8000-000000000002';
+  u.aufruf('sync', PIN, { seit: 0, anlagen: [{ id: LA, fallId: ALI, anzeigename: 'Lohnabrechnung – Oktober 2026.pdf', mimeType: 'application/pdf', groesseBytes: 3, hinzugefuegtAm: jetzt },
+    { id: FS, fallId: ALI, anzeigename: 'Führerschein – vorne.jpg', mimeType: 'image/jpeg', groesseBytes: 3, hinzugefuegtAm: jetzt }] });
+  assert.deepEqual(u.aufruf('sync', buero.token, { seit: 0 }).anlagen.map(x => x.id), [FS]);
+  assert.equal(u.aufruf('sync', PIN, { seit: 0 }).anlagen.length, 2);
+  assert.throws(() => u.aufruf('anlageLaden', buero.token, LA), /Kein Zugriff/);
   u.aufruf('sync', buero.token, { seit: 0, mitarbeiter: [{ ...ma(ALI, 'Ali D.'), stundenlohnCent: 1, geaendertAm: new Date(Date.now() + 2000).toISOString() }] });
   const nachDispo = u.aufruf('sync', PIN, { seit: 0 }).mitarbeiter.find(m => m.id === ALI);
   assert.deepEqual([nachDispo.name, nachDispo.stundenlohnCent], ['Ali D.', 1500], 'Disposition ändert Namen, aber nicht den Lohn');

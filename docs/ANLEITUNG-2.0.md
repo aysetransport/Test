@@ -184,6 +184,16 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.3 (Windows-App 4.3, Android-App 5.3, Web-App) – Lohn-Import und Zusammenführen
+
+**Wichtig:** Neue `cloud/Code.gs` bereitstellen (gleiche Cloud-Version 9, aber Lohnabrechnungs-Dokumente sind jetzt für Disposition-Logins gesperrt).
+
+- **Personal-Import mit Zuordnung**: Personal → „⤓ Import (Lohnabrechnungen)“ zeigt vor dem Import jede Person der Datei mit der Zuordnung (vorhandener Mitarbeiter, neu anlegen oder auslassen). Ähnliche Namen sind gelb markiert und stehen oben. Abweichende Namen werden als Alias gespeichert.
+- **Mitarbeiter zusammenführen** (nur Admin): beim Mitarbeiter unten „🔁 Mit anderem zusammenführen …“ oder in der Personal-Liste „🔁 Doppelte (n)“ – findet Paare wie „Fatih“ ↔ „Fatih Akyüz“.
+  - Touren (Fahrer und Beifahrer), Arbeitszeiten, Abwesenheiten, Personalakte und Lohnabrechnungen, Fahrerkartentage, Dokumente, Aufgaben und Schadensfälle wandern zum bleibenden Eintrag; leere Felder werden ergänzt, der andere Name wird Alias.
+  - Vorschlag: Der Eintrag mit den meisten Touren bleibt (an ihm hängen meist auch Logins), der längere Name wird übernommen – beides änderbar.
+- **Lohnabrechnungen** (PDF in der Personalakte) sieht nur noch der Admin, nicht die Disposition.
+
 ## Neu in 4.2 (Windows-App 4.2, Android-App 5.2, Web-App) – Monatsabrechnung und Briefe
 
 - **🧾 Monatsabrechnung** (Finanzen oder ＋ Neu): zeigt für den Vormonat (Zeitraum frei wählbar) jede Firma mit gefahrenen, noch nicht abgerechneten Touren – Anzahl, Summe netto und Einsatzarten ohne Preis. Häkchen setzen, „Rechnungen anlegen“: je Firma eine Rechnung als Entwurf, Positionen je Einsatzart mit dem Preis aus der Preisliste der Firma. Die Touren gelten danach als abgerechnet; wird die Rechnung gelöscht, sind sie wieder offen.
