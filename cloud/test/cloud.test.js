@@ -255,7 +255,7 @@ test('Auftraggeber: Kontaktdaten am Fall und eigene Liste mit denselben Abgleich
   assert.deepEqual(weg.auftraggeber.map(e => [e.geloescht, e.name]), [[true, undefined]]);
   const spaeter = u.sync({ seit: weg.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Wieder da?', geaendertAm: '2026-11-12T08:00:00Z' }] });
   assert.equal(spaeter.auftraggeber[0].geloescht, true, 'gelöscht bleibt gelöscht');
-  assert.equal(u.aufruf('status').api, 10);
+  assert.equal(u.aufruf('status').api, 11);
 });
 
 test('CRM: Ansprechpartner, Preise usw. gleichen sich ab und verschwinden mit ihrer Firma', () => {
@@ -429,4 +429,35 @@ test('Statuslink: Kunde sieht den Lieferstatus ohne Anmeldung und bewertet einma
   u.sync({ seit: 0, touren: [{ id: T, firmaId: '', datum: '2026-11-20', kennzeichen: 'RS-AT 100', auftraggeberId: F, fahrerId: 'x', statusCode: CODE, status: 'ERLEDIGT', notiz: 'neu', geaendertAm: new Date(Date.now() + 60000).toISOString() }] });
   const t = u.sync({ seit: 0 }).touren.find(x => x.id === T);
   assert.deepEqual([t.bewertung, t.bewertungText, t.notiz], [4, 'Pünktlich, freundlich', 'neu']);
+});
+
+test('Stopps: mehrere Kunden je Tour, Fahrer hakt ab, Statuslink je Stopp mit Bewertung', () => {
+  const u = eingerichtet();
+  const ALI = 'a1a1a1a1-0000-4000-8000-000000000009', T = 'f3f3f3f3-0000-4000-8000-000000000001', T2 = 'f3f3f3f3-0000-4000-8000-000000000002';
+  const S1 = 'f4f4f4f4-0000-4000-8000-000000000001', S2 = 'f4f4f4f4-0000-4000-8000-000000000002', S3 = 'f4f4f4f4-0000-4000-8000-000000000003';
+  const heute = new Date().toISOString().slice(0, 10), jetzt = new Date().toISOString(), C2 = 'Stopp2Code0000000000';
+  const stopp = (id, nr, tourId, extra = {}) => ({ id, firmaId: '', tourId, reihenfolge: nr, art: 'LIEFERUNG', kundeName: 'Kunde ' + nr, adresse: 'Str. ' + nr, geaendertAm: jetzt, ...extra });
+  u.sync({ seit: 0, mitarbeiter: [{ id: ALI, firmaId: '', name: 'Ali', rolle: 'FAHRER', aktiv: true, geaendertAm: jetzt }],
+    touren: [{ id: T, firmaId: '', datum: heute, kennzeichen: 'RS-AT 100', fahrerId: ALI, geaendertAm: jetzt }, { id: T2, firmaId: '', datum: heute, kennzeichen: 'RS-AT 200', fahrerId: 'x', geaendertAm: jetzt }],
+    stopps: [stopp(S1, 1, T), stopp(S2, 2, T, { statusCode: C2, zeitfenster: '10–12 Uhr' }), stopp(S3, 1, T2)] });
+  u.aufruf('benutzerSpeichern', PIN, { login: 'ali', name: 'Ali', rolle: 'FAHRER', mitarbeiterId: ALI, passwort: 'fahrer-123' });
+  const ali = u.aufruf('einloggen', 'ali', 'fahrer-123');
+  assert.deepEqual(u.aufruf('sync', ali.token, { seit: 0 }).stopps.map(x => x.id).sort(), [S1, S2], 'nur Stopps eigener Touren');
+  // Tour unterwegs, Stopp 1 offen → Kunde 2 sieht „1 Stopp vor Ihnen“
+  u.aufruf('sync', ali.token, { seit: 0, touren: [{ id: T, status: 'UNTERWEGS', geaendertAm: new Date(Date.now() + 1000).toISOString() }] });
+  let st = u.aufruf('sendungsstatus', C2);
+  assert.deepEqual([st.statusText, st.stoppsVorher, st.kunde, st.zeitfenster], ['Unterwegs', 1, 'Kunde 2', '10–12 Uhr']);
+  // Fahrer hakt Stopp 1 ab und versucht, Adresse und fremden Stopp zu ändern
+  u.aufruf('sync', ali.token, { seit: 0, stopps: [{ ...stopp(S1, 1, T), status: 'ERLEDIGT', erledigtAm: jetzt, empfaenger: 'Herr 1', adresse: 'gehackt', geaendertAm: new Date(Date.now() + 2000).toISOString() },
+    { ...stopp(S3, 1, T2), status: 'ERLEDIGT', geaendertAm: new Date(Date.now() + 2000).toISOString() }] });
+  const admin = u.sync({ seit: 0 }).stopps;
+  const s1 = admin.find(x => x.id === S1), s3 = admin.find(x => x.id === S3);
+  assert.deepEqual([s1.status, s1.empfaenger, s1.adresse, s3.status], ['ERLEDIGT', 'Herr 1', 'Str. 1', 'OFFEN']);
+  assert.equal(u.aufruf('sendungsstatus', C2).stoppsVorher, 0);
+  assert.throws(() => u.aufruf('bewerten', C2, 5), /erst nach der Lieferung/);
+  u.aufruf('sync', ali.token, { seit: 0, stopps: [{ ...stopp(S2, 2, T), status: 'ERLEDIGT', erledigtAm: jetzt, empfaenger: 'Frau 2', geaendertAm: new Date(Date.now() + 3000).toISOString() }] });
+  st = u.aufruf('sendungsstatus', C2);
+  assert.deepEqual([st.statusText, st.empfaenger, st.bewertbar], ['Zugestellt', 'Frau 2', true]);
+  u.aufruf('bewerten', C2, 5, 'Top');
+  assert.equal(u.sync({ seit: 0 }).stopps.find(x => x.id === S2).bewertung, 5);
 });

@@ -30,7 +30,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 10; // 10: Statuslink, Lieferavis-Felder und Kundenbewertung an Touren; 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
+var API_VERSION = 11; // 11: Stopps (mehrere Kunden je Tour); 10: Statuslink, Lieferavis-Felder und Kundenbewertung an Touren; 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
 
 /**
  * CRM-Tabellen: alle hängen über firmaId an einem Auftraggeber (Tabelle „auftraggeber“).
@@ -78,7 +78,10 @@ var CRM_TABELLEN = {
   tachotage: { mitarbeiterId: 'text', kartenNr: 'text', fahrerName: 'text', datum: 'datum', fahrMin: 'cent', arbeitMin: 'cent', bereitMin: 'cent', ruheMin: 'cent',
     beginn: 'text', ende: 'text', km: 'cent', fahrzeuge: 'text', aktivitaeten: 'text' },
   // Interne Aufgaben (ohne Firma), optional mit Bezug (Fall, Tour, Fahrzeug, Mitarbeiter, Firma)
-  aufgabenIntern: { titel: 'text', text: 'text', faelligAm: 'datum', zustaendigId: 'text', prioritaet: 'wort:NORMAL', erledigt: 'bool', erledigtAm: 'datum', bezugArt: 'text', bezugId: 'text' }
+  aufgabenIntern: { titel: 'text', text: 'text', faelligAm: 'datum', zustaendigId: 'text', prioritaet: 'wort:NORMAL', erledigt: 'bool', erledigtAm: 'datum', bezugArt: 'text', bezugId: 'text' },
+  // Stopps einer Tour (mehrere Kunden/Adressen): art LIEFERUNG, ABHOLUNG, MONTAGE, SONSTIGES; status OFFEN, ERLEDIGT, PROBLEM
+  stopps: { tourId: 'text', reihenfolge: 'cent', art: 'wort:LIEFERUNG', kundeName: 'text', kundeTelefon: 'text', kundeEmail: 'text', adresse: 'text', zeitfenster: 'text',
+    notiz: 'text', status: 'wort:OFFEN', erledigtAm: 'text', empfaenger: 'text', statusCode: 'text', bewertung: 'cent', bewertungText: 'text', bewertetAm: 'text' }
 };
 /** Felder einer Firma, die nicht jede App kennt: Fehlen sie in einer Änderung, bleibt der bisherige Wert. */
 var FIRMEN_ZUSATZ = ['kundennummer', 'ustId', 'zahlungszielTage', 'schlagworte'];
@@ -241,6 +244,7 @@ function fahrerSicht_(d, ich) {
     fahrzeuge: nimm('fahrzeuge', function () { return true; }, ['kennzeichen', 'bezeichnung', 'art', 'status', 'zgg', 'kmStand', 'aliase', 'leihfahrzeug', 'fahrer', 'huBis', 'spBis', 'uvvBis']),
     fahrzeugeintraege: [],
     faelle: nimm('faelle', function (f) { return faelle[f.id]; }),
+    stopps: nimm('stopps', function (x) { return touren[x.tourId]; }),
     verlauf: nimm('verlauf', function (v) { return faelle[v.fallId]; }),
     anlagen: nimm('anlagen', function (a) { return touren[a.fallId] || faelle[a.fallId]; }).map(ohneInterna_)
   };
@@ -265,6 +269,11 @@ function fahrerEingang_(d, anfrage, ich) {
   r.aufgabenIntern = liste_(anfrage.aufgabenIntern).filter(function (a) { return a && !a.geloescht; }).map(function (a) {
     var alt = d.aufgabenIntern[String(a.id).toLowerCase()]; if (!alt) return a;
     if (alt.zustaendigId !== ich) return null; var m = {}; Object.keys(alt).forEach(function (k) { m[k] = alt[k]; }); m.erledigt = a.erledigt === true; m.erledigtAm = a.erledigtAm; m.geaendertAm = a.geaendertAm; return m; }).filter(function (a) { return a; });
+  // Stopps eigener Touren: nur Status, Zeitpunkt, Empfänger und Notiz – keine neuen Stopps
+  r.stopps = liste_(anfrage.stopps).map(function (x) {
+    var alt = x && !x.geloescht && d.stopps[String(x.id).toLowerCase()]; if (!alt || alt.geloescht || !sichtbar[String(alt.tourId).toLowerCase()]) return null;
+    var m = {}; Object.keys(alt).forEach(function (k) { m[k] = alt[k]; }); ['status', 'erledigtAm', 'empfaenger', 'notiz'].forEach(function (f) { if (f in x) m[f] = x[f]; }); m.geaendertAm = x.geaendertAm; return m; })
+    .filter(function (x) { return x; });
   r.fahrzeugeintraege = liste_(anfrage.fahrzeugeintraege).filter(function (x) { return x && !x.geloescht && neu('fahrzeugeintraege', x) && ['TANKEN', 'KM', 'SCHADEN'].indexOf(x.art) >= 0; });
   return r;
 }
@@ -273,28 +282,34 @@ function fahrerEingang_(d, anfrage, ich) {
 
 // ============================== Statuslink für Endkunden (ohne Anmeldung) ==============================
 var STATUS_TEXT = { GEPLANT: 'Geplant', UNTERWEGS: 'Unterwegs', ANGEKOMMEN: 'Vor Ort', ERLEDIGT: 'Zugestellt', STORNIERT: 'Abgesagt', PROBLEM: 'Verzögert' };
+/** Code gehört zu einer Tour oder zu einem Stopp: { t: Tour, s: Stopp oder null, ziel: Datensatz mit Bewertung }. */
 function tourZumCode_(d, code) {
   code = String(code || '');
   if (!/^[A-Za-z0-9]{16,40}$/.test(code)) throw new Error('Link ungültig');
-  var t = null;
-  Object.keys(d.touren || {}).some(function (k) { var x = d.touren[k]; if (!x.geloescht && x.statusCode === code) { t = x; return true; } return false; });
-  if (!t) throw new Error('Link ungültig oder abgelaufen');
-  return t;
+  var finde = function (tab) { var e = null; Object.keys(d[tab] || {}).some(function (k) { var x = d[tab][k]; if (!x.geloescht && x.statusCode === code) { e = x; return true; } return false; }); return e; };
+  var s = finde('stopps'), t = s ? d.touren[s.tourId] : finde('touren');
+  if (!t || t.geloescht) throw new Error('Link ungültig oder abgelaufen');
+  return { t: t, s: s, ziel: s || t };
 }
 /** Was der Endkunde über seinen Statuslink sieht – keine Namen von Fahrern, keine Preise. */
 function sendungsstatus(code) {
-  var d = ladeDaten_(), t = tourZumCode_(d, code), firma = d.auftraggeber[t.auftraggeberId];
-  var erledigt = t.status === 'ERLEDIGT' || !!t.abgeliefertAm;
-  return { datum: t.datum, zeitfenster: t.zeitfenster || t.uhrzeit || '', status: erledigt ? 'ERLEDIGT' : (t.status || 'GEPLANT'), statusText: STATUS_TEXT[erledigt ? 'ERLEDIGT' : t.status] || 'Geplant',
-    abgeliefertAm: t.abgeliefertAm || '', empfaenger: erledigt ? (t.empfaenger || '') : '', im_auftrag: firma && !firma.geloescht ? firma.name : (t.auftraggeber || ''),
-    kunde: t.kundeName || '', bewertbar: erledigt && !t.bewertung, bewertung: t.bewertung || null };
+  var d = ladeDaten_(), g = tourZumCode_(d, code), t = g.t, s = g.s, firma = d.auftraggeber[t.auftraggeberId];
+  var erledigt = s ? s.status === 'ERLEDIGT' : (t.status === 'ERLEDIGT' || !!t.abgeliefertAm);
+  var status = erledigt ? 'ERLEDIGT' : s && s.status === 'PROBLEM' ? 'PROBLEM' : (t.status === 'ERLEDIGT' ? 'UNTERWEGS' : t.status || 'GEPLANT');
+  var vorher = null;
+  if (s && !erledigt && status === 'UNTERWEGS') vorher = Object.keys(d.stopps).map(function (k) { return d.stopps[k]; })
+    .filter(function (x) { return !x.geloescht && x.tourId === s.tourId && x.status !== 'ERLEDIGT' && (x.reihenfolge || 0) < (s.reihenfolge || 0); }).length;
+  return { datum: t.datum, zeitfenster: (s ? s.zeitfenster : t.zeitfenster) || t.uhrzeit || '', status: status, statusText: STATUS_TEXT[status] || 'Geplant', stoppsVorher: vorher,
+    abgeliefertAm: (s ? s.erledigtAm : t.abgeliefertAm) || '', empfaenger: erledigt ? ((s ? s.empfaenger : t.empfaenger) || '') : '',
+    im_auftrag: firma && !firma.geloescht ? firma.name : (t.auftraggeber || ''), kunde: (s ? s.kundeName : t.kundeName) || '', abholung: !!(s && s.art === 'ABHOLUNG'),
+    bewertbar: erledigt && !g.ziel.bewertung, bewertung: g.ziel.bewertung || null };
 }
 /** Bewertung 1–5 Sterne nach der Ablieferung – einmal je Lieferung. */
 function bewerten(code, sterne, text) {
   var sperre = LockService.getScriptLock(); sperre.waitLock(20000);
   try {
-    var d = ladeDaten_(), t = tourZumCode_(d, code), n = Math.round(Number(sterne));
-    if (!(t.status === 'ERLEDIGT' || t.abgeliefertAm)) throw new Error('Bewerten geht erst nach der Lieferung.');
+    var d = ladeDaten_(), g = tourZumCode_(d, code), t = g.ziel, n = Math.round(Number(sterne));
+    if (!(g.s ? g.s.status === 'ERLEDIGT' : (t.status === 'ERLEDIGT' || t.abgeliefertAm))) throw new Error('Bewerten geht erst nach der Lieferung.');
     if (t.bewertung) throw new Error('Diese Lieferung wurde schon bewertet. Danke!');
     if (!(n >= 1 && n <= 5)) throw new Error('Bitte 1 bis 5 Sterne wählen.');
     t.bewertung = n; t.bewertungText = String(text || '').slice(0, 1000); t.bewertetAm = new Date().toISOString();
@@ -554,7 +569,7 @@ function uebernehmeCrm_(d, tabelle, roh, zurueck) {
     return;
   }
   // Bewertungen kommen nur vom Kunden (Statuslink) – ein Gerät mit älterem Stand löscht sie nicht.
-  if (tabelle === 'touren' && alt && alt.bewertung && !neu.bewertung) { neu.bewertung = alt.bewertung; neu.bewertungText = alt.bewertungText; neu.bewertetAm = alt.bewertetAm; }
+  if ((tabelle === 'touren' || tabelle === 'stopps') && alt && alt.bewertung && !neu.bewertung) { neu.bewertung = alt.bewertung; neu.bewertungText = alt.bewertungText; neu.bewertetAm = alt.bewertetAm; }
   neu.rev = ++d.rev;
   d[tabelle][neu.id] = neu;
 }

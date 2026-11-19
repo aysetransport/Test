@@ -361,7 +361,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 10;
+  cloud.umgebung.kontext.API_VERSION = 11;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
@@ -1411,5 +1411,59 @@ test('Lieferavis, Statuslink für den Endkunden und Bewertung nach der Lieferung
   assert.deepEqual(await a.evaluate(id => [S.touren[id].bewertung, S.touren[id].bewertungText], tid), [4, 'Sehr freundlich']);
   const st = await a.evaluate(() => [...statistikRechnen('touren', 'bewertung', 'auftraggeber', null, '2000-01-01', '2099-12-31').ergebnis.values()].map(e => e.wert));
   assert.deepEqual(st, [4]);
+  await k.context().close(); await a.context().close(); await cloud.schliessen();
+});
+
+test('Stoppliste (optional): mehrere Kunden, Route, Avis je Stopp, Fahrer hakt ab, Kunde sieht Reihenfolge', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'touren' });
+  await melde(a, PIN, true); await aktuell(a);
+  const tid = await a.evaluate(() => {
+    FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV' });
+    const m = PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER' });
+    window.__links = []; window.oeffne = u => window.__links.push(u); window.oeffneLink = u => window.__links.push(u);
+    const t = TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeber: 'Möbel Krause', name: 'Sammeltour', fahrerId: m });
+    merke('touren', { ...S.touren[t], kundeName: 'Frau Meier', kundeTelefon: '0171 1', kundeAdresse: 'Hauptstr. 1, Remscheid', geaendertAm: jetztIso() });
+    return t;
+  });
+  // Ohne Stopps: Tourzeile unverändert
+  assert.equal(await a.locator('[data-tour-stopps]').count(), 0);
+  await a.evaluate(id => tourMehr(S.touren[id]), tid);
+  await a.locator('[data-tm="stopps"]').click();
+  await a.locator('#stopp-liste .stopp', { hasText: 'Frau Meier' }).waitFor(); // Endkunde wird Stopp 1
+  for (const [name, adr, tel] of [['Herr Kaya', 'Bahnhofstr. 5, Solingen', '0172 2'], ['Lager Nord', 'Industriestr. 9, Wuppertal', '']]) {
+    await a.locator('#stopp-neu').click();
+    await a.locator('#stopp-form [name=kundeName]').fill(name); await a.locator('#stopp-form [name=adresse]').fill(adr); await a.locator('#stopp-form [name=kundeTelefon]').fill(tel);
+    if (name === 'Lager Nord') await a.locator('#stopp-form [name=art]').selectOption('ABHOLUNG');
+    await a.locator('#stopp-form button.voll').click();
+  }
+  await a.locator('#stopp-liste .stopp').nth(2).waitFor();
+  // Reihenfolge ändern: Lager Nord nach oben
+  await a.locator('#stopp-liste .stopp').nth(2).locator('[data-stopp-akt="hoch"]').click();
+  assert.deepEqual(await a.evaluate(id => stoppsVon(id).map(s => s.kundeName), tid), ['Frau Meier', 'Lager Nord', 'Herr Kaya']);
+  await a.locator('#stopp-route').click();
+  const route = decodeURIComponent(await a.evaluate(() => window.__links.pop()));
+  assert.ok(route.includes('destination=Bahnhofstr. 5') && route.includes('waypoints=Hauptstr. 1, Remscheid|Industriestr. 9'), route);
+  // Avis an Herrn Kaya per SMS mit eigenem Statuslink
+  await a.locator('#stopp-liste .stopp').nth(2).locator('[data-stopp-akt="bearbeiten"]').click();
+  await a.locator('[data-savis="sms"]').click();
+  const sms = decodeURIComponent(await a.evaluate(() => window.__links.pop()));
+  assert.ok(sms.startsWith('sms:+491722') && sms.includes('Guten Tag Herr Kaya') && sms.includes('status.html?s='), sms);
+  const link = sms.match(/https?:\S+status\.html\S+/)[0];
+  assert.ok((await a.evaluate(id => tourNachricht(S.touren[id]), tid)).includes('2. Abholung: Lager Nord – Industriestr. 9, Wuppertal'));
+  await a.evaluate(id => tourStatusSetzen(S.touren[id], 'UNTERWEGS'), tid);
+  await abgleich(a);
+  const k = await (await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 } })).newPage();
+  await k.goto(link);
+  await k.locator('text=Noch 2 Stopps vor Ihnen.').waitFor();
+  // Fahrer-Ansicht: Stopps abhaken
+  await a.evaluate(id => { S.einstellungen.ichId = S.touren[id].fahrerId; bereichWechseln('fahrer'); }, tid);
+  await a.locator('.fahrer-stopps .stopp.naechster', { hasText: 'Frau Meier' }).waitFor();
+  a.on('dialog', d => d.accept('Meier'));
+  await a.locator('.fahrer-stopps .stopp.naechster [data-fs="fertig"]').click();
+  await a.locator('.fahrer-stopps .stopp.naechster', { hasText: 'Lager Nord' }).waitFor();
+  await abgleich(a);
+  await k.reload(); await k.locator('text=Noch 1 Stopp vor Ihnen.').waitFor();
+  assert.ok(await k.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await k.context().close(); await a.context().close(); await cloud.schliessen();
 });
