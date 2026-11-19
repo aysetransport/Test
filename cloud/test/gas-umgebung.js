@@ -89,6 +89,7 @@ function erstelleUmgebung() {
         getProperty: k => (eigenschaften.has(k) ? eigenschaften.get(k) : null),
         setProperty: (k, v) => { eigenschaften.set(k, String(v)); },
         deleteProperty: k => { eigenschaften.delete(k); },
+        getProperties: () => Object.fromEntries(eigenschaften),
       }),
     },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
@@ -104,6 +105,7 @@ function erstelleUmgebung() {
       base64Decode: text => Array.from(new Int8Array(Buffer.from(String(text), 'base64'))),
       newBlob: (bytes, mime, name) => blob(Buffer.from(bytes), mime, name),
       getUuid: () => crypto.randomUUID(),
+      formatDate: (datum, zone, format) => new Date(datum.getTime() + 3600000).toISOString().slice(0, 10), // nur 'yyyy-MM-dd' (Europe/Berlin, Winterzeit)
     },
   });
   vm.runInContext(fs.readFileSync(SKRIPT, 'utf8'), kontext, { filename: 'Code.gs' });

@@ -30,7 +30,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 8; // 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
+var API_VERSION = 9; // 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
 
 /**
  * CRM-Tabellen: alle hängen über firmaId an einem Auftraggeber (Tabelle „auftraggeber“).
@@ -98,12 +98,16 @@ function doGet() {
   return ContentService.createTextOutput('Schadensfälle-Cloud läuft. Diese Adresse in der App eintragen.');
 }
 
-/** Ohne PIN erreichbar: verrät nur, ob schon eine PIN festgelegt wurde. */
-var OFFEN = { status: status, pinFestlegen: pinFestlegen };
+/** Ohne PIN erreichbar: verrät nur, ob schon eine PIN festgelegt wurde; Anmeldung mit Benutzername und Passwort. */
+var OFFEN = { status: status, pinFestlegen: pinFestlegen, einloggen: einloggen };
 
 /** Nur mit gültiger PIN. Das erste Argument jedes Aufrufs ist die PIN. */
 var GESCHUETZT = {
   anmelden: anmelden,
+  abmelden: abmelden,
+  benutzerListe: benutzerListe,
+  benutzerSpeichern: benutzerSpeichern,
+  benutzerLoeschen: benutzerLoeschen,
   stand: stand,
   sync: sync,
   anlageHochladen: anlageHochladen,
@@ -113,8 +117,153 @@ var GESCHUETZT = {
 function aufruf_(fn, args) {
   if (Object.prototype.hasOwnProperty.call(OFFEN, fn)) return OFFEN[fn].apply(null, args);
   if (!Object.prototype.hasOwnProperty.call(GESCHUETZT, fn)) throw new Error('Unbekannte Funktion: ' + fn);
-  pruefePin_(args[0]);
+  ZUGANG_ = pruefeZugang_(args[0]);
   return GESCHUETZT[fn].apply(null, args.slice(1));
+}
+
+// ============================== Benutzer und Rollen ==============================
+/**
+ * Wer die Cloud-PIN kennt, ist Admin. Weitere Benutzer (Fahrer, Disposition) meldet der Admin mit Benutzername und
+ * Passwort an. Passwörter liegen nur gesalzen und gehasht in den Skript-Eigenschaften (nicht in daten.json, die an die
+ * Geräte geht). Eine Anmeldung ergibt ein Sitzungs-Token („T:…“), das statt der PIN mitgeschickt wird.
+ * Rollen: ADMIN (alles), DISPO (alles außer Benutzerverwaltung und Lohndaten), FAHRER (nur eigene Touren, Zeiten,
+ * Abwesenheiten, Aufgaben und dazugehörige Fälle). Die Rechte werden hier im Skript durchgesetzt.
+ */
+var ROLLEN = { ADMIN: 'Admin', DISPO: 'Disposition / Büro', FAHRER: 'Fahrer' };
+var SITZUNG_TAGE = 90;
+var MIN_PASSWORT = 6;
+var ZUGANG_ = { rolle: 'ADMIN' };
+function benutzer_() { return JSON.parse(PropertiesService.getScriptProperties().getProperty('BENUTZER') || '{}'); }
+function speichereBenutzer_(b) { PropertiesService.getScriptProperties().setProperty('BENUTZER', JSON.stringify(b)); }
+function loginNormal_(l) { return String(l == null ? '' : l).trim().toLowerCase(); }
+function oeffentlich_(b) { return { id: b.id, login: b.login, name: b.name, rolle: b.rolle, mitarbeiterId: b.mitarbeiterId || '', aktiv: b.aktiv !== false, geaendertAm: b.geaendertAm || '', letzteAnmeldung: b.letzteAnmeldung || '' }; }
+
+function pruefeZugang_(zugang) {
+  var z = String(zugang == null ? '' : zugang);
+  if (z.indexOf('T:') !== 0) { pruefePin_(z); return { rolle: 'ADMIN', pin: true }; }
+  var props = PropertiesService.getScriptProperties(), schluessel = 'SITZUNG_' + hash_(z, 'sitzung');
+  var s = JSON.parse(props.getProperty(schluessel) || 'null');
+  var b = s && benutzer_()[s.b];
+  if (!s || !b || b.aktiv === false || b.version !== s.v || s.bis < Date.now()) {
+    if (s) props.deleteProperty(schluessel);
+    throw new Error('Anmeldung abgelaufen – bitte erneut anmelden (Passwort bzw. PIN)');
+  }
+  return { rolle: b.rolle, benutzerId: b.id, mitarbeiterId: b.mitarbeiterId || '', name: b.name, sitzung: schluessel };
+}
+function nurAdmin_() { if (ZUGANG_.rolle !== 'ADMIN') throw new Error('Nur für Admins'); }
+
+/** Anmeldung mit Benutzername und Passwort. */
+function einloggen(login, passwort) {
+  login = loginNormal_(login);
+  var props = PropertiesService.getScriptProperties(), jetzt = Date.now(), fk = 'FEHL_' + login;
+  var zaehler = JSON.parse(props.getProperty(fk) || '{"n":0,"bis":0}');
+  if (zaehler.bis > jetzt) throw new Error('GESPERRT: Zu viele falsche Eingaben. Bitte in ' + Math.ceil((zaehler.bis - jetzt) / 60000) + ' Minuten erneut versuchen.');
+  var alle = benutzer_(), b = null;
+  Object.keys(alle).forEach(function (k) { if (alle[k].login === login) b = alle[k]; });
+  if (!b || b.aktiv === false || hash_(String(passwort == null ? '' : passwort), b.salz) !== b.hash) {
+    zaehler.n = (zaehler.bis && zaehler.bis <= jetzt ? 0 : zaehler.n) + 1;
+    zaehler.bis = zaehler.n >= MAX_FEHLVERSUCHE ? jetzt + SPERRE_MINUTEN * 60000 : 0;
+    props.setProperty(fk, JSON.stringify(zaehler));
+    throw new Error('Benutzername oder Passwort falsch');
+  }
+  if (zaehler.n) props.deleteProperty(fk);
+  // abgelaufene Sitzungen aufräumen
+  var alleProps = props.getProperties();
+  Object.keys(alleProps).forEach(function (k) { if (k.indexOf('SITZUNG_') === 0) { try { if (JSON.parse(alleProps[k]).bis < jetzt) props.deleteProperty(k); } catch (e) { props.deleteProperty(k); } } });
+  var token = 'T:' + Utilities.getUuid() + Utilities.getUuid();
+  props.setProperty('SITZUNG_' + hash_(token, 'sitzung'), JSON.stringify({ b: b.id, v: b.version, bis: jetzt + SITZUNG_TAGE * 864e5 }));
+  b.letzteAnmeldung = new Date(jetzt).toISOString(); alle[b.id] = b; speichereBenutzer_(alle);
+  return { token: token, rolle: b.rolle, name: b.name, mitarbeiterId: b.mitarbeiterId || '', api: API_VERSION };
+}
+function abmelden() { if (ZUGANG_.sitzung) PropertiesService.getScriptProperties().deleteProperty(ZUGANG_.sitzung); return true; }
+function benutzerListe() {
+  nurAdmin_();
+  var b = benutzer_();
+  return Object.keys(b).map(function (k) { return oeffentlich_(b[k]); }).sort(function (x, y) { return x.name < y.name ? -1 : 1; });
+}
+/** Legt einen Benutzer an oder ändert ihn. Neues Passwort, Sperre oder Rollenwechsel beenden alle seine Sitzungen. */
+function benutzerSpeichern(roh) {
+  nurAdmin_();
+  roh = roh || {};
+  var sperre = LockService.getScriptLock(); sperre.waitLock(20000);
+  try {
+    var alle = benutzer_(), id = roh.id ? kennung_(roh.id) : Utilities.getUuid().toLowerCase(), alt = alle[id];
+    var login = loginNormal_(roh.login);
+    if (!/^[a-z0-9._-]{3,40}$/.test(login)) throw new Error('Benutzername: 3–40 Zeichen, nur Buchstaben a–z, Ziffern, Punkt, Minus, Unterstrich.');
+    Object.keys(alle).forEach(function (k) { if (k !== id && alle[k].login === login) throw new Error('Den Benutzernamen gibt es schon.'); });
+    if (!ROLLEN[roh.rolle]) throw new Error('Unbekannte Rolle');
+    var passwort = roh.passwort == null ? '' : String(roh.passwort);
+    if (!alt && !passwort) throw new Error('Bitte ein Passwort festlegen.');
+    if (passwort && passwort.length < MIN_PASSWORT) throw new Error('Das Passwort braucht mindestens ' + MIN_PASSWORT + ' Zeichen.');
+    var b = alt || { id: id, version: 1 };
+    var aktiv = roh.aktiv !== false;
+    if (alt && (passwort || alt.rolle !== roh.rolle || (alt.aktiv !== false) !== aktiv || (alt.mitarbeiterId || '') !== (roh.mitarbeiterId || ''))) b.version = (b.version || 1) + 1;
+    b.login = login; b.name = text_(roh.name || login).slice(0, 80); b.rolle = roh.rolle; b.mitarbeiterId = roh.mitarbeiterId ? kennung_(roh.mitarbeiterId) : ''; b.aktiv = aktiv;
+    if (passwort) { b.salz = Utilities.getUuid(); b.hash = hash_(passwort, b.salz); }
+    b.geaendertAm = new Date().toISOString();
+    alle[id] = b; speichereBenutzer_(alle);
+    return benutzerListe();
+  } finally { sperre.releaseLock(); }
+}
+function benutzerLoeschen(id) {
+  nurAdmin_();
+  var alle = benutzer_(); delete alle[kennung_(id)]; speichereBenutzer_(alle);
+  return benutzerListe();
+}
+
+/** Was ein Fahrer sehen darf: eigene Touren (ab 45 Tagen zurück), deren Firmen, Team, Fälle, Anlagen. */
+var FAHRER_TABELLEN = ['faelle', 'verlauf', 'anlagen', 'auftraggeber', 'adressen', 'fahrzeuge', 'fahrzeugeintraege', 'mitarbeiter', 'abwesenheiten', 'einsatzarten', 'touren', 'zeiten', 'aufgabenIntern', 'tachotage'];
+function fahrerSicht_(d, ich) {
+  var ab = Utilities.formatDate(new Date(Date.now() - 45 * 864e5), 'Europe/Berlin', 'yyyy-MM-dd');
+  var lebt = function (x) { return x && !x.geloescht; };
+  var team = function (t) { return [t.fahrerId].concat(String(t.beifahrerIds || '').split(',')).filter(function (x) { return x; }); };
+  var touren = {}, firmen = {}, leute = {}, faelle = {};
+  Object.keys(d.touren).forEach(function (k) { var t = d.touren[k]; if (lebt(t) && t.datum >= ab && team(t).indexOf(ich) >= 0) { touren[k] = t; if (t.auftraggeberId) firmen[t.auftraggeberId] = 1; team(t).forEach(function (m) { leute[m] = 1; }); } });
+  Object.keys(d.faelle).forEach(function (k) { var f = d.faelle[k]; if (lebt(f) && (f.fahrerId === ich || touren[f.tourId])) faelle[k] = f; });
+  var aufgaben = {};
+  Object.keys(d.aufgabenIntern).forEach(function (k) { var a = d.aufgabenIntern[k]; if (lebt(a) && (a.zustaendigId === ich || (a.bezugArt === 'tour' && touren[a.bezugId]))) aufgaben[k] = a; });
+  var nimm = function (tab, test, felder) { return Object.keys(d[tab]).map(function (k) { return d[tab][k]; }).filter(function (x) { return lebt(x) && test(x); }).map(function (x) {
+    if (!felder) return x; var k = { id: x.id, firmaId: x.firmaId || '', rev: x.rev, geaendertAm: x.geaendertAm }; felder.forEach(function (f) { k[f] = x[f]; }); return k; }); };
+  return {
+    touren: nimm('touren', function (t) { return touren[t.id]; }),
+    auftraggeber: nimm('auftraggeber', function (f) { return firmen[f.id]; }, ['name', 'telefon', 'status']),
+    adressen: nimm('adressen', function (a) { return firmen[a.firmaId]; }),
+    mitarbeiter: nimm('mitarbeiter', function (m) { return m.id === ich; }, ['name', 'rolle', 'telefon', 'email', 'aktiv', 'monteur', 'fuehrerschein', 'fahrerkarteNr', 'fahrerkarteBis', 'fuehrerscheinBis', 'modul95Bis', 'urlaubstage', 'resturlaub', 'wochenstunden'])
+      .concat(nimm('mitarbeiter', function (m) { return m.id !== ich && leute[m.id]; }, ['name', 'rolle', 'telefon', 'aktiv'])),
+    abwesenheiten: nimm('abwesenheiten', function (a) { return a.mitarbeiterId === ich; }),
+    zeiten: nimm('zeiten', function (z) { return z.mitarbeiterId === ich; }),
+    tachotage: nimm('tachotage', function (t) { return t.mitarbeiterId === ich; }),
+    aufgabenIntern: nimm('aufgabenIntern', function (a) { return aufgaben[a.id]; }),
+    einsatzarten: nimm('einsatzarten', function () { return true; }),
+    fahrzeuge: nimm('fahrzeuge', function () { return true; }, ['kennzeichen', 'bezeichnung', 'art', 'status', 'zgg', 'kmStand', 'aliase', 'leihfahrzeug', 'fahrer', 'huBis', 'spBis', 'uvvBis']),
+    fahrzeugeintraege: [],
+    faelle: nimm('faelle', function (f) { return faelle[f.id]; }),
+    verlauf: nimm('verlauf', function (v) { return faelle[v.fallId]; }),
+    anlagen: nimm('anlagen', function (a) { return touren[a.fallId] || faelle[a.fallId]; }).map(ohneInterna_)
+  };
+}
+var FAHRER_TOURFELDER = ['status', 'beginn', 'ende', 'kmStart', 'kmEnde', 'empfaenger', 'abgeliefertAm', 'notiz'];
+/** Prüft, was ein Fahrer hochladen darf, und baut Änderungen an fremden Datensätzen auf die erlaubten Felder zurück. */
+function fahrerEingang_(d, anfrage, ich) {
+  var sicht = fahrerSicht_(d, ich), sichtbar = {};
+  ['touren', 'faelle'].forEach(function (t) { sicht[t].forEach(function (x) { sichtbar[x.id] = t; }); });
+  var neu = function (tab, x) { return x && x.id && !d[tab][String(x.id).toLowerCase()]; };
+  var r = {};
+  r.faelle = liste_(anfrage.faelle).filter(function (f) { return f && !f.geloescht && (neu('faelle', f) || sichtbar[String(f.id).toLowerCase()] === 'faelle'); });
+  r.faelle.forEach(function (f) { sichtbar[String(f.id).toLowerCase()] = 'faelle'; });
+  r.verlauf = liste_(anfrage.verlauf).filter(function (v) { return v && !v.geloescht && sichtbar[String(v.fallId).toLowerCase()] === 'faelle'; });
+  r.anlagen = liste_(anfrage.anlagen).filter(function (a) { return a && !a.geloescht && sichtbar[String(a.fallId).toLowerCase()]; });
+  r.touren = liste_(anfrage.touren).filter(function (t) { return t && !t.geloescht && sichtbar[String(t.id).toLowerCase()] === 'touren'; }).map(function (t) {
+    var alt = d.touren[String(t.id).toLowerCase()], m = {}; Object.keys(alt).forEach(function (k) { m[k] = alt[k]; });
+    FAHRER_TOURFELDER.forEach(function (f) { if (f in t) m[f] = t[f]; }); m.geaendertAm = t.geaendertAm; return m; });
+  r.zeiten = liste_(anfrage.zeiten).filter(function (z) { var alt = z && d.zeiten[String(z.id).toLowerCase()];
+    return z && z.mitarbeiterId === ich && (!alt || (alt.mitarbeiterId === ich && alt.quelle !== 'TACHO')) && z.quelle !== 'TACHO'; });
+  r.abwesenheiten = liste_(anfrage.abwesenheiten).filter(function (a) { var alt = a && d.abwesenheiten[String(a.id).toLowerCase()]; return a && a.mitarbeiterId === ich && (!alt || alt.mitarbeiterId === ich); });
+  r.aufgabenIntern = liste_(anfrage.aufgabenIntern).filter(function (a) { return a && !a.geloescht; }).map(function (a) {
+    var alt = d.aufgabenIntern[String(a.id).toLowerCase()]; if (!alt) return a;
+    if (alt.zustaendigId !== ich) return null; var m = {}; Object.keys(alt).forEach(function (k) { m[k] = alt[k]; }); m.erledigt = a.erledigt === true; m.erledigtAm = a.erledigtAm; m.geaendertAm = a.geaendertAm; return m; }).filter(function (a) { return a; });
+  r.fahrzeugeintraege = liste_(anfrage.fahrzeugeintraege).filter(function (x) { return x && !x.geloescht && neu('fahrzeugeintraege', x) && ['TANKEN', 'KM', 'SCHADEN'].indexOf(x.art) >= 0; });
+  return r;
 }
 
 // ============================== PIN ==============================
@@ -123,7 +272,8 @@ function status() {
   return {
     name: 'Schadensfälle',
     api: API_VERSION,
-    eingerichtet: !!PropertiesService.getScriptProperties().getProperty('PIN_HASH')
+    eingerichtet: !!PropertiesService.getScriptProperties().getProperty('PIN_HASH'),
+    benutzer: Object.keys(benutzer_()).length > 0
   };
 }
 
@@ -185,7 +335,7 @@ function hash_(pin, salz) {
 
 function anmelden() {
   var d = ladeDaten_();
-  return { name: 'Schadensfälle', api: API_VERSION, kennung: d.kennung, rev: d.rev };
+  return { name: 'Schadensfälle', api: API_VERSION, kennung: d.kennung, rev: d.rev, rolle: ZUGANG_.rolle, mitarbeiterId: ZUGANG_.mitarbeiterId || '', benutzer: ZUGANG_.name || '' };
 }
 
 /** Schnelle Abfrage, ob es Neues gibt. */
@@ -221,6 +371,16 @@ function sync(anfrage) {
   sperre.waitLock(25000);
   try {
     var d = ladeDaten_();
+    var rolle = ZUGANG_.rolle, ich = ZUGANG_.mitarbeiterId || '';
+    if (rolle === 'FAHRER') {
+      var erlaubt = fahrerEingang_(d, anfrage, ich);
+      anfrage = { seit: anfrage.seit, kennung: anfrage.kennung };
+      Object.keys(erlaubt).forEach(function (t) { anfrage[t] = erlaubt[t]; });
+    } else if (rolle === 'DISPO') {
+      // keine Lohndaten: Personalakte nicht schreibbar, Stundenlohn bleibt wie gespeichert
+      anfrage.personaleintraege = [];
+      anfrage.mitarbeiter = liste_(anfrage.mitarbeiter).map(function (m) { var alt = m && d.mitarbeiter[String(m.id).toLowerCase()]; if (m) m.stundenlohnCent = alt ? alt.stundenlohnCent : null; return m; });
+    }
     // Kennt das Gerät einen anderen Datenbestand (z. B. nach neu angelegtem Ordner), bekommt es alles.
     var seit = anfrage.kennung === d.kennung ? Math.max(0, Number(anfrage.seit) || 0) : 0;
     var vorher = d.rev;
@@ -251,6 +411,17 @@ function sync(anfrage) {
       auftraggeber: auswahl_(d.auftraggeber, seit, zurueck.auftraggeber)
     };
     CRM_NAMEN.forEach(function (t) { antwort[t] = auswahl_(d[t], seit, zurueck[t]); });
+    if (rolle === 'FAHRER') {
+      // Fahrer bekommen jedes Mal ihren vollständigen, gefilterten Bestand (klein) – nichts darüber hinaus.
+      var sicht = fahrerSicht_(d, ich);
+      ['faelle', 'verlauf', 'anlagen', 'auftraggeber'].concat(CRM_NAMEN).forEach(function (t) { antwort[t] = sicht[t] || []; });
+      antwort.ansicht = 'FAHRER';
+    } else if (rolle === 'DISPO') {
+      antwort.personaleintraege = [];
+      antwort.mitarbeiter = antwort.mitarbeiter.map(function (m) { var k = {}; Object.keys(m).forEach(function (f) { if (f !== 'stundenlohnCent') k[f] = m[f]; }); return k; });
+      antwort.ansicht = 'DISPO';
+    }
+    antwort.rolle = rolle;
     return antwort;
   } finally {
     sperre.releaseLock();
@@ -428,8 +599,9 @@ function anlageHochladen(id, base64) {
   if (!bytes.length) throw new Error('Die Anlage ist leer.');
   if (bytes.length > MAX_ANLAGE_BYTES) throw new Error('Die Anlage ist größer als 25 MB.');
 
-  var eintrag = ladeDaten_().anlagen[id];
+  var dd = ladeDaten_(), eintrag = dd.anlagen[id];
   if (!eintrag || eintrag.geloescht) throw new Error('Anlage unbekannt');
+  pruefeAnlageSichtbar_(dd, eintrag);
   if (eintrag.vorhanden) return { vorhanden: true };
   // Die Datei wird vor der Sperre angelegt, damit andere Geräte währenddessen abgleichen können.
   var datei = unterordner_(ANLAGEN_ORDNER).createFile(
@@ -455,9 +627,15 @@ function anlageHochladen(id, base64) {
   }
 }
 
+function pruefeAnlageSichtbar_(d, a) {
+  if (ZUGANG_.rolle !== 'FAHRER') return;
+  var sicht = fahrerSicht_(d, ZUGANG_.mitarbeiterId || '');
+  if (!sicht.anlagen.some(function (x) { return x.id === a.id; })) throw new Error('Kein Zugriff auf diese Anlage');
+}
 function anlageLaden(id) {
-  var a = ladeDaten_().anlagen[kennung_(id)];
+  var d = ladeDaten_(), a = d.anlagen[kennung_(id)];
   if (!a || a.geloescht) throw new Error('Anlage unbekannt');
+  pruefeAnlageSichtbar_(d, a);
   if (!a.vorhanden || !a.dateiId) throw new Error('Die Anlage wurde noch nicht hochgeladen.');
   var blob = DriveApp.getFileById(a.dateiId).getBlob();
   return { base64: Utilities.base64Encode(blob.getBytes()), mimeType: a.mimeType, anzeigename: a.anzeigename };

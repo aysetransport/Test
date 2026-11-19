@@ -361,7 +361,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 8;
+  cloud.umgebung.kontext.API_VERSION = 9;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
@@ -1114,4 +1114,66 @@ test('iPhone: kein seitliches Scrollen in allen Bereichen, Menü und Dialoge bed
   const d = await s.locator('#dialog').boundingBox();
   assert.ok(d.width >= 389, 'Dialoge am Handy über die ganze Breite');
   await kontext.close();
+});
+
+test('Logins: Admin legt Fahrer-Login an, Fahrer meldet sich an und sieht nur seine Touren', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'touren' });
+  await melde(a, PIN, true);
+  await aktuell(a);
+  await a.evaluate(() => {
+    const f1 = Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV' }), f2 = Aktionen.firmaSpeichern({ name: 'Geheim GmbH', status: 'AKTIV' });
+    Aktionen.crmSpeichern('preise', { firmaId: f1, bezeichnung: 'Montage', betragCent: 25000 });
+    const ali = PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER', telefon: '0171 1', stundenlohnCent: 1500 }), cem = PersonalAktionen.speichern({ name: 'Cem Kaya', rolle: 'FAHRER' });
+    TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeberId: f1, auftraggeber: '', name: 'Küche', fahrerId: ali });
+    TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 200', auftraggeberId: f2, auftraggeber: '', name: 'Fremd', fahrerId: cem });
+  });
+  await abgleich(a);
+  // Admin: Login für Ali über die Mitarbeiter-Seite
+  await a.evaluate(() => { bereichWechseln('personal'); gehe('#/mitarbeiter/' + maZumNamen('Ali Demir').id); });
+  await a.locator('[data-ma=login]').click();
+  await a.locator('#benutzer-form [name=login]').waitFor();
+  assert.equal(await a.locator('#benutzer-form [name=login]').inputValue(), 'ali.demir');
+  await a.locator('#benutzer-form [name=passwort]').fill('fahrer-123');
+  await a.locator('#benutzer-form button.voll').click();
+  await a.locator('#dialog pre', { hasText: 'Benutzername: ali.demir' }).waitFor();
+  await a.locator('#z-fertig').click();
+  await a.locator('#benutzer-liste').waitFor();
+  await a.evaluate(() => $('#dialog').close());
+  // Fahrer-Gerät
+  const f = await geraet(cloud.url, { bereich: 'firmen' });
+  await f.locator('#login-name').fill('ali.demir');
+  await f.locator('#login-pw').fill('falsch1');
+  await f.locator('#login-form button.voll').click();
+  await f.locator('#login-fehler', { hasText: 'falsch' }).waitFor();
+  await f.locator('#login-pw').fill('fahrer-123');
+  await f.locator('#login-form button.voll').click();
+  await aktuell(f);
+  await f.locator('.fahrer-tour', { hasText: 'Küche' }).waitFor();
+  const sicht = await f.evaluate(() => ({ bereich: ANSICHT.bereich, touren: alle('touren').map(t => t.name), firmen: auftraggeberListe().map(x => x.name), preise: alle('preise').length,
+    lohn: alle('mitarbeiter').map(m => m.stundenlohnCent), nav: [...document.querySelectorAll('.nav-gross [data-bereich]')].map(b => b.dataset.bereich) }));
+  assert.equal(sicht.bereich, 'fahrer');
+  assert.deepEqual(sicht.touren, ['Küche']);
+  assert.deepEqual(sicht.firmen, ['Möbel Krause']);
+  assert.equal(sicht.preise, 0);
+  assert.ok(sicht.lohn.every(x => x === undefined));
+  assert.ok(!sicht.nav.includes('firmen') && !sicht.nav.includes('finanzen') && sicht.nav.includes('zeiten'));
+  // Fahrer liefert ab → Admin sieht den Status
+  await f.locator('[data-fahrer=abliefern]').click();
+  await f.locator('#abliefern-form [name=empfaenger]').fill('Frau Kunde');
+  await f.locator('#abliefern-form button.voll').click();
+  await f.locator('#toast', { hasText: 'Abgeliefert' }).waitFor();
+  await abgleich(f);
+  await abgleich(a);
+  assert.deepEqual(await a.evaluate(() => { const t = tourenAm(heute()).find(x => x.name === 'Küche'); return [t.status, t.empfaenger]; }), ['ERLEDIGT', 'Frau Kunde']);
+  // Admin sperrt den Login → Fahrer muss sich neu anmelden
+  await a.evaluate(() => gehe('#/einstellungen'));
+  await a.locator('#benutzer-knopf').click();
+  await a.locator('[data-benutzer]').first().click();
+  await a.locator('#benutzer-form [name=aktiv]').uncheck();
+  await a.locator('#benutzer-form button.voll').click();
+  await a.locator('#benutzer-liste', { hasText: 'gesperrt' }).waitFor();
+  await f.evaluate(() => abgleich());
+  await f.locator('#login-form').waitFor();
+  await a.context().close(); await f.context().close(); await cloud.schliessen();
 });

@@ -255,7 +255,7 @@ test('Auftraggeber: Kontaktdaten am Fall und eigene Liste mit denselben Abgleich
   assert.deepEqual(weg.auftraggeber.map(e => [e.geloescht, e.name]), [[true, undefined]]);
   const spaeter = u.sync({ seit: weg.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Wieder da?', geaendertAm: '2026-11-12T08:00:00Z' }] });
   assert.equal(spaeter.auftraggeber[0].geloescht, true, 'gelöscht bleibt gelöscht');
-  assert.equal(u.aufruf('status').api, 8);
+  assert.equal(u.aufruf('status').api, 9);
 });
 
 test('CRM: Ansprechpartner, Preise usw. gleichen sich ab und verschwinden mit ihrer Firma', () => {
@@ -321,4 +321,81 @@ test('Belege (Angebote/Rechnungen) gleichen sich ab; Firmenfelder, die eine App 
   const z = u.sync({ seit: r.rev, kennung: r.kennung, auftraggeber: [{ id: F, name: 'Seats and Sofas', geaendertAm: '2026-11-11T08:00:00Z' }] });
   assert.deepEqual([z.auftraggeber[0].name, z.auftraggeber[0].kundennummer, z.auftraggeber[0].ustId, z.auftraggeber[0].zahlungszielTage, z.auftraggeber[0].schlagworte],
     ['Seats and Sofas', 'K-1001', 'DE123', '30', 'Möbel']);
+});
+
+test('Benutzer-Logins: Admin legt Fahrer an, Fahrer sieht nur Eigenes und ändert nur Erlaubtes', () => {
+  const u = eingerichtet();
+  const ALI = 'a1a1a1a1-0000-4000-8000-000000000001', BEN = 'b2b2b2b2-0000-4000-8000-000000000002', CEM = 'c3c3c3c3-0000-4000-8000-000000000003';
+  const F1 = 'f1f1f1f1-0000-4000-8000-000000000001', F2 = 'f2f2f2f2-0000-4000-8000-000000000002';
+  const T1 = 'd1d1d1d1-0000-4000-8000-000000000001', T2 = 'd2d2d2d2-0000-4000-8000-000000000002';
+  const heute = new Date().toISOString().slice(0, 10), jetzt = new Date().toISOString();
+  const ma = (id, name) => ({ id, firmaId: '', name, rolle: 'FAHRER', aktiv: true, stundenlohnCent: 1500, geaendertAm: jetzt });
+  u.sync({ seit: 0, auftraggeber: [{ id: F1, name: 'Möbel Krause', status: 'AKTIV', geaendertAm: jetzt }, { id: F2, name: 'Geheim GmbH', status: 'AKTIV', geaendertAm: jetzt }],
+    mitarbeiter: [ma(ALI, 'Ali'), ma(BEN, 'Ben'), ma(CEM, 'Cem')],
+    touren: [{ id: T1, firmaId: '', datum: heute, kennzeichen: 'RS-AT 100', auftraggeberId: F1, fahrerId: ALI, beifahrerIds: BEN, name: 'Küche', geaendertAm: jetzt },
+      { id: T2, firmaId: '', datum: heute, kennzeichen: 'RS-AT 200', auftraggeberId: F2, fahrerId: CEM, name: 'Fremd', geaendertAm: jetzt }],
+    preise: [{ id: 'e1e1e1e1-0000-4000-8000-000000000001', firmaId: F1, bezeichnung: 'Montage', betragCent: 25000, geaendertAm: jetzt }],
+    personaleintraege: [{ id: 'e2e2e2e2-0000-4000-8000-000000000001', firmaId: '', mitarbeiterId: ALI, art: 'LOHN', datum: '2026-10-01', bruttoCent: 300000, geaendertAm: jetzt }] });
+
+  // Nur der Admin verwaltet Benutzer; Passwörter nie im Klartext
+  assert.equal(u.aufruf('status').benutzer, false);
+  assert.throws(() => u.aufruf('benutzerSpeichern', PIN, { login: 'Ali', rolle: 'FAHRER', passwort: '123' }), /mindestens 6/);
+  u.aufruf('benutzerSpeichern', PIN, { login: 'Ali.Demir', name: 'Ali Demir', rolle: 'FAHRER', mitarbeiterId: ALI, passwort: 'fahrer-123' });
+  u.aufruf('benutzerSpeichern', PIN, { login: 'buero', name: 'Büro', rolle: 'DISPO', passwort: 'buero-123' });
+  assert.throws(() => u.aufruf('benutzerSpeichern', PIN, { login: 'ali.demir', rolle: 'FAHRER', passwort: 'xxxxxxx' }), /gibt es schon/);
+  assert.ok(!JSON.stringify([...u.eigenschaften]).includes('fahrer-123'));
+  assert.equal(u.aufruf('status').benutzer, true);
+
+  assert.throws(() => u.aufruf('einloggen', 'ali.demir', 'falsch'), /Benutzername oder Passwort falsch/);
+  const ali = u.aufruf('einloggen', 'ALI.DEMIR', 'fahrer-123');
+  assert.equal(ali.rolle, 'FAHRER'); assert.ok(ali.token.startsWith('T:'));
+  assert.throws(() => u.aufruf('benutzerListe', ali.token), /Nur für Admins/);
+
+  // Sicht des Fahrers: eigene Tour, deren Firma, Team ohne Lohn; keine fremde Tour, keine Preise, keine Personalakte
+  const r = u.aufruf('sync', ali.token, { seit: 0 });
+  assert.equal(r.ansicht, 'FAHRER');
+  assert.deepEqual(r.touren.map(t => t.id), [T1]);
+  assert.deepEqual(r.auftraggeber.map(f => f.name), ['Möbel Krause']);
+  assert.deepEqual(r.mitarbeiter.map(m => m.name).sort(), ['Ali', 'Ben']);
+  assert.ok(r.mitarbeiter.every(m => m.stundenlohnCent === undefined));
+  assert.equal(r.preise.length, 0); assert.equal(r.personaleintraege.length, 0); assert.equal(r.belege.length, 0);
+
+  // Erlaubt: Status der eigenen Tour, eigene Zeit, Krankmeldung, neuer Schadensfall; verboten: fremde Tour, fremde Zeit, Tourdaten, Firmen
+  const zurueck = u.aufruf('sync', ali.token, { seit: 0,
+    touren: [{ id: T1, status: 'ERLEDIGT', kmEnde: 1234, name: 'umbenannt', fahrerId: CEM, geaendertAm: new Date(Date.now() + 1000).toISOString() },
+      { id: T2, status: 'STORNIERT', geaendertAm: new Date(Date.now() + 1000).toISOString() }],
+    zeiten: [{ id: 'e3e3e3e3-0000-4000-8000-000000000001', mitarbeiterId: ALI, datum: heute, beginn: '07:00', ende: '15:00', pauseMin: 30, quelle: 'STEMPEL', geaendertAm: jetzt },
+      { id: 'e3e3e3e3-0000-4000-8000-000000000002', mitarbeiterId: CEM, datum: heute, beginn: '07:00', ende: '15:00', geaendertAm: jetzt }],
+    abwesenheiten: [{ id: 'e4e4e4e4-0000-4000-8000-000000000001', mitarbeiterId: ALI, von: heute, bis: heute, grund: 'Krank', geaendertAm: jetzt }],
+    faelle: [fall('e5e5e5e5-0000-4000-8000-000000000001', { tourId: T1, fahrerId: ALI })],
+    auftraggeber: [{ id: F2, name: 'gehackt', geaendertAm: new Date(Date.now() + 1000).toISOString() }],
+    personaleintraege: [{ id: 'e2e2e2e2-0000-4000-8000-000000000001', mitarbeiterId: ALI, art: 'LOHN', datum: '2026-10-01', bruttoCent: 999999, geaendertAm: new Date(Date.now() + 1000).toISOString() }] });
+  assert.equal(zurueck.faelle.length, 1, 'eigener Schadensfall ist sichtbar');
+  const admin = u.aufruf('sync', PIN, { seit: 0 }), t1 = admin.touren.find(t => t.id === T1), t2 = admin.touren.find(t => t.id === T2);
+  assert.deepEqual([t1.status, t1.kmEnde, t1.name, t1.fahrerId], ['ERLEDIGT', 1234, 'Küche', ALI]);
+  assert.equal(t2.status, 'GEPLANT');
+  assert.deepEqual(admin.zeiten.map(z => z.mitarbeiterId), [ALI]);
+  assert.equal(admin.abwesenheiten.length, 1);
+  assert.equal(admin.auftraggeber.find(f => f.id === F2).name, 'Geheim GmbH');
+  assert.equal(admin.personaleintraege[0].bruttoCent, 300000);
+
+  // Disposition: alles außer Lohndaten
+  const buero = u.aufruf('einloggen', 'buero', 'buero-123');
+  const rd = u.aufruf('sync', buero.token, { seit: 0 });
+  assert.equal(rd.touren.length, 2); assert.equal(rd.preise.length, 1); assert.equal(rd.personaleintraege.length, 0);
+  assert.ok(rd.mitarbeiter.every(m => m.stundenlohnCent === undefined));
+  u.aufruf('sync', buero.token, { seit: 0, mitarbeiter: [{ ...ma(ALI, 'Ali D.'), stundenlohnCent: 1, geaendertAm: new Date(Date.now() + 2000).toISOString() }] });
+  const nachDispo = u.aufruf('sync', PIN, { seit: 0 }).mitarbeiter.find(m => m.id === ALI);
+  assert.deepEqual([nachDispo.name, nachDispo.stundenlohnCent], ['Ali D.', 1500], 'Disposition ändert Namen, aber nicht den Lohn');
+
+  // Sperren beendet die Sitzung sofort; Abmelden ebenso
+  const liste = u.aufruf('benutzerListe', PIN), aliB = liste.find(b => b.login === 'ali.demir');
+  u.aufruf('benutzerSpeichern', PIN, { ...aliB, aktiv: false });
+  assert.throws(() => u.aufruf('sync', ali.token, { seit: 0 }), /erneut anmelden/);
+  assert.throws(() => u.aufruf('einloggen', 'ali.demir', 'fahrer-123'), /falsch/);
+  u.aufruf('abmelden', buero.token);
+  assert.throws(() => u.aufruf('stand', buero.token), /erneut anmelden/);
+  // Nach acht Fehlversuchen ist der Login gesperrt
+  for (let i = 0; i < 8; i++) assert.throws(() => u.aufruf('einloggen', 'buero', 'falsch'), /falsch/);
+  assert.throws(() => u.aufruf('einloggen', 'buero', 'buero-123'), /GESPERRT/);
 });

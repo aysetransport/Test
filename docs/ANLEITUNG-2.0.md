@@ -184,6 +184,21 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.1 (Windows-App 4.1, Android-App 5.1, Web-App) – eigene Logins
+
+**Wichtig:** Diese Version braucht die neue `cloud/Code.gs` (Cloud-Version 9) – ersetzen und als neue Version bereitstellen.
+
+- **Eigene Logins** für Fahrer und Büro: ⚙ → Anmeldung → „Benutzer und Logins verwalten“ (nur Admin) oder beim Mitarbeiter „👤 Login“.
+  - Benutzername wird vorgeschlagen (z. B. ali.demir), Passwort erzeugt; die Zugangsdaten lassen sich direkt per WhatsApp, SMS oder Ausdruck weitergeben. „Logins für alle Fahrer ohne Login“ legt sie in einem Rutsch an.
+  - Login ausschalten = sofort gesperrt, alle Geräte dieses Benutzers abgemeldet. Neues Passwort setzen ebenso.
+- **Rollen** (von der Cloud durchgesetzt – nicht nur in der App versteckt):
+  - *Admin* (Anmeldung mit der Cloud-PIN oder Admin-Login): alles, inklusive Benutzerverwaltung und Lohndaten.
+  - *Disposition / Büro*: alles außer Benutzerverwaltung und Lohndaten (Lohnabrechnungen, Stundenlöhne werden weder angezeigt noch geändert).
+  - *Fahrer*: nur „Meine Touren“ (eigene Touren ab 45 Tagen zurück, deren Kunden und Team), eigene Arbeitszeiten, Abwesenheiten, Aufgaben, Kalender und Schadensmeldungen zu eigenen Touren. Darf nur Status, Zeiten, km und Ablieferung der eigenen Touren ändern – keine Firmen, Preise, Rechnungen oder Daten anderer.
+- **Anmelden** auf dem Fahrer-Handy: Web-App öffnen (iPhone: Safari → Teilen → „Zum Home-Bildschirm“), Benutzername und Passwort eingeben. Die Anmeldung gilt 90 Tage.
+- Passwörter werden nur gesalzen und gehasht gespeichert; nach 8 Fehlversuchen ist der Login eine Stunde gesperrt.
+- Behoben: Der Hinweis beim Start überdeckte manchmal andere Meldungen.
+
 ## Neu in 4.0 (Windows-App 4.0, Android-App 5.0, Web-App)
 
 **Wichtig:** Diese Version braucht die neue `cloud/Code.gs` (Cloud-Version 8) – wie gewohnt ersetzen und als neue Version bereitstellen.
