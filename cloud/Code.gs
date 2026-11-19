@@ -30,7 +30,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 11; // 11: Stopps (mehrere Kunden je Tour); 10: Statuslink, Lieferavis-Felder und Kundenbewertung an Touren; 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
+var API_VERSION = 12; // 12: Auftragsnummer, Betrag und Ankunftszeit an Stopps (Rollkarte); 11: Stopps (mehrere Kunden je Tour); 10: Statuslink, Lieferavis-Felder und Kundenbewertung an Touren; 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
 
 /**
  * CRM-Tabellen: alle hängen über firmaId an einem Auftraggeber (Tabelle „auftraggeber“).
@@ -81,7 +81,8 @@ var CRM_TABELLEN = {
   aufgabenIntern: { titel: 'text', text: 'text', faelligAm: 'datum', zustaendigId: 'text', prioritaet: 'wort:NORMAL', erledigt: 'bool', erledigtAm: 'datum', bezugArt: 'text', bezugId: 'text' },
   // Stopps einer Tour (mehrere Kunden/Adressen): art LIEFERUNG, ABHOLUNG, MONTAGE, SONSTIGES; status OFFEN, ERLEDIGT, PROBLEM
   stopps: { tourId: 'text', reihenfolge: 'cent', art: 'wort:LIEFERUNG', kundeName: 'text', kundeTelefon: 'text', kundeEmail: 'text', adresse: 'text', zeitfenster: 'text',
-    notiz: 'text', status: 'wort:OFFEN', erledigtAm: 'text', empfaenger: 'text', statusCode: 'text', bewertung: 'cent', bewertungText: 'text', bewertetAm: 'text' }
+    notiz: 'text', status: 'wort:OFFEN', erledigtAm: 'text', empfaenger: 'text', statusCode: 'text', bewertung: 'cent', bewertungText: 'text', bewertetAm: 'text',
+    auftragNr: 'text', betragCent: 'cent', eta: 'text' }
 };
 /** Felder einer Firma, die nicht jede App kennt: Fehlen sie in einer Änderung, bleibt der bisherige Wert. */
 var FIRMEN_ZUSATZ = ['kundennummer', 'ustId', 'zahlungszielTage', 'schlagworte'];

@@ -184,6 +184,17 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.7 (Windows-App 4.7, Android-App 5.7, Web-App) – Stoppliste aus PDF (Rollkarte)
+
+**Wichtig:** Neue `cloud/Code.gs` bereitstellen (Cloud-Version 12).
+
+- **📄 Rollkarte (PDF) einlesen**: Tourenplanung → „📄 Rollkarte (PDF)“ (oder ＋ Neu → „Tour aus Rollkarte“) legt eine neue Tour samt Stoppliste an; in einer bestehenden Tour: ⋮ → Stoppliste → „📄 Aus PDF“ hängt die Stopps an.
+  - Erkannt werden Name, Auftragsnummer, Adresse (auch zweizeilig), Telefon, Zeitfenster, voraussichtliche Ankunft und Betrag; aus dem Kopf Datum und Tourname, aus der Routenzeile die Abfahrtszeit.
+  - Vor dem Speichern zeigt eine **Vorschau** alle Stopps zum Prüfen und Korrigieren. Gelb markiert: PLZ nicht fünfstellig, keine Telefonnummer oder Auftrag schon in der Tour (dann abgewählt – kein doppelter Import).
+  - Stopps haben jetzt auch **Auftragsnummer und Betrag** (z. B. bar zu kassieren): sichtbar in der Stoppliste mit Summe, beim Fahrer als „💶 130,00 €“ und in der WhatsApp an das Team.
+  - Funktioniert mit PDFs, die Text enthalten (aus einem Programm gedruckt/gespeichert). Eingescannte Listen (nur Bild) werden nicht erkannt.
+  - Der PDF-Leser ist in der App enthalten – das Einlesen klappt auch ohne Internet.
+
 ## Neu in 4.6 (Windows-App 4.6, Android-App 5.6, Web-App) – Stoppliste und „Meintest du …?“
 
 **Wichtig:** Neue `cloud/Code.gs` bereitstellen (Cloud-Version 11).

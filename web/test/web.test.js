@@ -361,7 +361,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 11;
+  cloud.umgebung.kontext.API_VERSION = 12;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
@@ -1485,5 +1485,41 @@ test('Tourenplanung: unbekannter Name legt niemanden an, sondern fragt „Meinte
   // Nur der Nachname reicht als Vorschlag; völlig Unbekanntes: nur Hinweis
   assert.deepEqual(await s.evaluate(() => aehnlicheMitarbeiter('eybilen').map(m => m.name)), ['Mehmet Eybilen']);
   assert.deepEqual(await s.evaluate(() => aehnlicheMitarbeiter('Zoltan').length), 0);
+  await s.close();
+});
+
+test('Rollkarte (PDF) → Tour mit Stoppliste: Vorschau, Korrektur, Übernahme', async () => {
+  // Rollkarte wie vom Auftraggeber (Tabelle mit Kopfzeile, zweizeilige Adressen, Zeitfenster mit Ankunft, Routenzeile)
+  const p = await (await browser.newContext()).newPage();
+  const z = (n, a, adr, tel, zf, eta, b) => `<tr><td>${n}</td><td>${a}</td><td>${adr}</td><td>${tel}</td><td>${zf}<br>→ ${eta} Uhr</td><td>${b} €</td><td></td></tr>`;
+  await p.setContent(`<style>body{font:12px Arial}td,th{padding:6px 10px;text-align:left;vertical-align:middle}td:nth-child(3){width:170px}</style>
+    <h3>Rollkarte Testfiliale &nbsp; 20.11.2026</h3><table><tr><th>Name</th><th>Auftragsnummer</th><th>Adresse</th><th>Telefonnummer</th><th>Zeitfenster</th><th>Summe/Betrag</th><th>Erledigt</th></tr>
+    ${z('Meier', '10700001', 'Hauptstr. 1, 42853 Remscheid', '0171111111', '10-13 Uhr', '10:06', '130,00')}
+    ${z('Kaya', '10700002', 'Lange Industriestraße 120, 42719 Solingen-Wald', '0172222222', '12-16 Uhr', '11:40', '275,00')}
+    ${z('Ott', '10700003', 'Weg 3, 4799 Krefeld', '', '10-16:30 Uhr', '13:33', '154,00')}</table>
+    <p>559,00 €</p><p>Route: Abfahrt 09:30 Uhr Filiale → 3 Kunden → Ankunft ca. 15:02 Uhr · 120 km · Fahrzeit 02:32 h</p>`);
+  const pdf = await p.pdf({ format: 'A4', landscape: true }); await p.context().close();
+  const s = await geraet(null, { bereich: 'touren' });
+  const wahl = s.waitForEvent('filechooser');
+  await s.evaluate(() => rollkarteImport());
+  await (await wahl).setFiles({ name: 'rollkarte.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await s.locator('#rk-form [data-rk]').nth(2).waitFor({ timeout: 20000 });
+  assert.equal(await s.locator('#rk-form [name=datum]').inputValue(), '2026-11-20');
+  assert.equal(await s.locator('#rk-form [name=abfahrt]').inputValue(), '09:30');
+  const zeilen = await s.$$eval('#rk-form [data-rk]', l => l.map(z => ['kundeName', 'adresse', 'kundeTelefon', 'zeitfenster', 'auftragNr', 'betrag'].map(n => z.querySelector(`[name=${n}]`).value)));
+  assert.deepEqual(zeilen[0], ['Meier', 'Hauptstr. 1, 42853 Remscheid', '0171111111', '10-13 Uhr', '10700001', '130,00']);
+  assert.equal(zeilen[1][1], 'Lange Industriestraße 120, 42719 Solingen-Wald');
+  assert.ok(await s.locator('#rk-form [data-rk="2"].pruefen', { hasText: 'PLZ prüfen' }).count(), 'vierstellige PLZ wird markiert');
+  await s.locator('#rk-form [data-rk="2"] [name=adresse]').fill('Weg 3, 47799 Krefeld');
+  await s.locator('#rk-form button.voll').click();
+  await s.locator('#stopp-liste .stopp').nth(2).waitFor();
+  const r = await s.evaluate(() => { const t = alle('touren')[0]; return { datum: t.datum, zeit: t.uhrzeit, n: stoppsVon(t.id).length, adr: stoppsVon(t.id)[2].adresse, summe: stoppSumme(t.id), eta: stoppsVon(t.id)[1].eta }; });
+  assert.deepEqual(r, { datum: '2026-11-20', zeit: '09:30', n: 3, adr: 'Weg 3, 47799 Krefeld', summe: 55900, eta: '11:40' });
+  // Dieselbe PDF erneut in diese Tour: schon vorhandene Aufträge sind abgewählt
+  const wahl2 = s.waitForEvent('filechooser');
+  await s.locator('#stopp-pdf').click();
+  await (await wahl2).setFiles({ name: 'rollkarte.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await s.locator('#rk-form [data-rk]').first().waitFor({ timeout: 20000 });
+  assert.equal(await s.locator('#rk-form [name=an]:checked').count(), 0);
   await s.close();
 });
