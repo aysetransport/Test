@@ -30,7 +30,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 7; // 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
+var API_VERSION = 8; // 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
 
 /**
  * CRM-Tabellen: alle hängen über firmaId an einem Auftraggeber (Tabelle „auftraggeber“).
@@ -53,20 +53,29 @@ var CRM_TABELLEN = {
     halter: 'text', marke: 'text', modell: 'text', fin: 'text', erstzulassung: 'datum', zgg: 'cent', leergewicht: 'cent', hsn: 'text', tsn: 'text',
     leistungKw: 'cent', kraftstoff: 'text', schadstoffklasse: 'text', achsen: 'cent', farbe: 'text', teil2Nr: 'text',
     huBis: 'datum', spBis: 'datum', uvvBis: 'datum', tachoBis: 'datum', ladeBis: 'datum', wartungBis: 'datum', versicherungBis: 'datum', leasingBis: 'datum',
-    versicherung: 'text', versicherungsNr: 'text', leasinggeber: 'text', leasingRateCent: 'cent', notiz: 'text', leihfahrzeug: 'bool' },
+    versicherung: 'text', versicherungsNr: 'text', leasinggeber: 'text', leasingRateCent: 'cent', notiz: 'text', leihfahrzeug: 'bool', aliase: 'text' },
   fahrzeugeintraege: { fahrzeugId: 'text', art: 'wort:WARTUNG', datum: 'datum', kmStand: 'cent', betragCent: 'cent', menge: 'cent', werkstatt: 'text', text: 'text' },
   // Personal und Tourenplanung (ohne Firma). Team und Auftraggeber einer Tour über Kennungen, Beifahrer durch Komma getrennt.
   mitarbeiter: { name: 'text', rolle: 'wort:FAHRER', telefon: 'text', email: 'text', adresse: 'text', monteur: 'bool', nichtBei: 'text', aktiv: 'bool',
     fuehrerschein: 'text', fuehrerscheinBis: 'datum', fahrerkarteBis: 'datum', modul95Bis: 'datum', eintritt: 'datum', austritt: 'datum', geburtstag: 'datum', notiz: 'text',
     personalnummer: 'text', anstellung: 'wort:VOLLZEIT', wochenstunden: 'cent', stundenlohnCent: 'cent', urlaubstage: 'cent', resturlaub: 'cent', notfallkontakt: 'text',
-    fuehrerscheinKontrolle: 'datum', unterweisungBis: 'datum', arbeitsmedizinBis: 'datum' },
+    fuehrerscheinKontrolle: 'datum', unterweisungBis: 'datum', arbeitsmedizinBis: 'datum', aliase: 'text', fahrerkarteNr: 'text' },
   // Personalakte: Gespräche, Schulungen, Unterweisungen, Abmahnungen … (bis = gültig bis, z. B. bei Unterweisungen)
   // Lohnabrechnungen als Art LOHN: datum = Monatserster, Beträge in Cent (brutto, netto, Gesamtkosten Arbeitgeber).
   personaleintraege: { mitarbeiterId: 'text', art: 'wort:GESPRAECH', datum: 'datum', bis: 'datum', text: 'text', bruttoCent: 'cent', nettoCent: 'cent', kostenCent: 'cent', stunden: 'cent' },
   abwesenheiten: { mitarbeiterId: 'text', von: 'datum', bis: 'datum', grund: 'text', notiz: 'text' },
   einsatzarten: { name: 'text', beifahrer: 'cent', monteurNoetig: 'bool', notiz: 'text' },
   touren: { datum: 'datum', reihenfolge: 'cent', kennzeichen: 'text', tourNr: 'text', auftraggeberId: 'text', auftraggeber: 'text', name: 'text', uhrzeit: 'text',
-    einsatzart: 'text', fahrerId: 'text', beifahrerIds: 'text', notiz: 'text', belegId: 'text', erledigt: 'bool' }
+    einsatzart: 'text', fahrerId: 'text', beifahrerIds: 'text', notiz: 'text', belegId: 'text', erledigt: 'bool',
+    status: 'wort:GEPLANT', beginn: 'text', ende: 'text', kmStart: 'cent', kmEnde: 'cent', empfaenger: 'text', abgeliefertAm: 'text' },
+  // Arbeitszeit je Mitarbeiter und Tag (Uhrzeiten als HH:MM, Pause in Minuten)
+  // quelle: ERFASST (von Hand), STEMPEL (Fahrer-Modus), PLAN (Entwurf aus dem Tourenplan – bis zur Bestätigung kein Nachweis)
+  zeiten: { mitarbeiterId: 'text', datum: 'datum', beginn: 'text', ende: 'text', pauseMin: 'cent', art: 'wort:ARBEIT', notiz: 'text', quelle: 'wort:ERFASST', bestaetigt: 'bool', bestaetigtAm: 'text' },
+  // Fahrerkarte (Tachograph): ein Tag eines Fahrers, Minuten je Tätigkeit, Fahrzeuge und km; aktivitaeten = JSON [[min, art, slot], …]
+  tachotage: { mitarbeiterId: 'text', kartenNr: 'text', fahrerName: 'text', datum: 'datum', fahrMin: 'cent', arbeitMin: 'cent', bereitMin: 'cent', ruheMin: 'cent',
+    beginn: 'text', ende: 'text', km: 'cent', fahrzeuge: 'text', aktivitaeten: 'text' },
+  // Interne Aufgaben (ohne Firma), optional mit Bezug (Fall, Tour, Fahrzeug, Mitarbeiter, Firma)
+  aufgabenIntern: { titel: 'text', text: 'text', faelligAm: 'datum', zustaendigId: 'text', prioritaet: 'wort:NORMAL', erledigt: 'bool', erledigtAm: 'datum', bezugArt: 'text', bezugId: 'text' }
 };
 /** Felder einer Firma, die nicht jede App kennt: Fehlen sie in einer Änderung, bleibt der bisherige Wert. */
 var FIRMEN_ZUSATZ = ['kundennummer', 'ustId', 'zahlungszielTage', 'schlagworte'];

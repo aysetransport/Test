@@ -255,7 +255,7 @@ test('Auftraggeber: Kontaktdaten am Fall und eigene Liste mit denselben Abgleich
   assert.deepEqual(weg.auftraggeber.map(e => [e.geloescht, e.name]), [[true, undefined]]);
   const spaeter = u.sync({ seit: weg.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Wieder da?', geaendertAm: '2026-11-12T08:00:00Z' }] });
   assert.equal(spaeter.auftraggeber[0].geloescht, true, 'gelöscht bleibt gelöscht');
-  assert.equal(u.aufruf('status').api, 7);
+  assert.equal(u.aufruf('status').api, 8);
 });
 
 test('CRM: Ansprechpartner, Preise usw. gleichen sich ab und verschwinden mit ihrer Firma', () => {

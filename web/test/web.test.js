@@ -361,7 +361,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 7;
+  cloud.umgebung.kontext.API_VERSION = 8;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
@@ -741,7 +741,7 @@ test('Android-App: Brücke (android.js) – Postfach, Speichern, Drucken, PDF un
 
   // CSV-Download landet über die Brücke im Download-Ordner
   await s.locator('[data-nav-mehr]').click();
-  await s.locator('[data-mehr-bereich=fuhrpark]').click();
+  await s.locator('.nav-gross [data-bereich=fuhrpark]').click();
   await s.evaluate(() => FuhrparkAktionen.speichern({ kennzeichen: 'RS-FK 4204' }));
   await s.locator('[data-fuhrpark-csv]').click();
   await s.locator('#toast', { hasText: 'Gespeichert: Download/Ayse CRM/Fahrze' }).waitFor();
@@ -1022,5 +1022,96 @@ test('Postfach: ungelesen, Stern, Archiv, Erinnerung in Termine, Entwurf, geplan
   const serie = await s.evaluate(() => window.__gesendet.slice(1).map(e => [e.an, e.text.split('\n')[0]]));
   assert.deepEqual(serie.sort(), [['dispo@krause.example', 'Sehr geehrte Damen und Herren,'], ['nord@nord.example', 'Guten Tag Frau Nord,']]);
   assert.ok(await s.evaluate(() => vonFirma('aktivitaeten', firmaZumNamen('Küchen Nord').id).some(a => a.art === 'EMAIL')));
+  await kontext.close();
+});
+
+test('Runde 4: Aufgaben, Kalender, Zeiterfassung mit ArbZG, Entwürfe, Excel, Fahrerkarte, Fahrer-Modus mit Unterschrift', async () => {
+  const { fahrerkarte } = require('./ddd.js');
+  const s = await geraet(null, { bereich: 'aufgaben', timezoneId: 'Europe/Berlin' });
+  const ids = await s.evaluate(() => {
+    const f = Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV' }); Aktionen.crmSpeichern('adressen', { firmaId: f, art: 'HAUPTSITZ', strasse: 'Hauptstr. 1', plz: '42853', ort: 'Remscheid' });
+    FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV', zgg: 3500 });
+    const a = PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER', wochenstunden: 40 });
+    const t = TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeberId: f, auftraggeber: '', name: 'Küche', uhrzeit: '06:30', fahrerId: a });
+    TourAktionen.neu(plusTage(heute(), -1), { kennzeichen: 'RS-AT 100', auftraggeberId: f, auftraggeber: '', name: 'Sofa', uhrzeit: '07:15', fahrerId: a });
+    return { a, t };
+  });
+  // Aufgaben per Schnelleingabe: „morgen“ und „@Ali“ werden erkannt
+  await s.locator('#aufgabe-schnell input').fill('Reifen prüfen morgen @Ali');
+  await s.locator('#aufgabe-schnell input').press('Enter');
+  await s.locator('#aufgaben', { hasText: 'Reifen prüfen' }).waitFor();
+  assert.deepEqual(await s.evaluate(() => { const x = alle('aufgabenIntern')[0]; return [x.titel, x.faelligAm === plusTage(heute(), 1), maName(x.zustaendigId)]; }), ['Reifen prüfen morgen', true, 'Ali Demir']);
+  await s.locator('[data-aufgabe-erledigt]').first().click();
+  await s.waitForFunction(() => alle('aufgabenIntern')[0].erledigt);
+  // Kalender zeigt Touren und Feiertage
+  assert.equal(await s.evaluate(() => feiertage(2026, 'NW')['2026-06-04']), 'Fronleichnam');
+  assert.equal(await s.evaluate(() => feiertage(2026, 'NW')['2026-04-03']), 'Karfreitag');
+  await s.evaluate(() => bereichWechseln('kalender'));
+  await s.locator('.kal-zelle.heute', { hasText: '1 Tour' }).waitFor();
+  // Zeiterfassung: Verstöße werden angezeigt, Entwürfe zählen nicht
+  await s.evaluate(id => { ZeitAktionen.speichern({ mitarbeiterId: id, datum: '2026-11-02', beginn: '05:00', ende: '17:00', pauseMin: 20 }); ZeitAktionen.speichern({ mitarbeiterId: id, datum: '2026-11-03', beginn: '03:00', ende: '08:00', pauseMin: 0 }); }, ids.a);
+  const h = await s.evaluate(id => [arbzgPruefen(id, '2026-11-02').map(x => x[1]), arbzgPruefen(id, '2026-11-03').map(x => x[1])], ids.a);
+  assert.ok(h[0].some(x => x.includes('mehr als 10 h')) && h[0].some(x => x.includes('zu wenig Pause')), h[0]);
+  assert.ok(h[1].some(x => x.includes('Ruhezeit nur 10:00 h')), h[1]);
+  const n = await s.evaluate(id => ZeitAktionen.entwuerfeAusPlan(maVon(id), heute().slice(0, 7)), ids.a);
+  assert.ok(n >= 1);
+  const vorher = await s.evaluate(id => zeitMonat(maVon(id), heute().slice(0, 7)).summe, ids.a);
+  await s.evaluate(id => { const z = alle('zeiten').find(x => x.quelle === 'PLAN' && x.datum === heute()); ZeitAktionen.bestaetigen(z, { beginn: '06:30', ende: '15:00', pauseMin: 30 }); }, ids.a);
+  const nachher = await s.evaluate(id => zeitMonat(maVon(id), heute().slice(0, 7)).summe, ids.a);
+  assert.equal(nachher - vorher, 480, 'erst bestätigte Zeiten zählen (8 h)');
+  // Excel ist eine gültige ZIP-Datei mit Blatt je Mitarbeiter
+  const xlsx = await s.evaluate(async id => { const b = zeitenXlsx([maVon(id)], heute().slice(0, 7)); const u = new Uint8Array(await b.arrayBuffer()); return [u[0], u[1], b.size, new TextDecoder().decode(u).includes('Ali Demir')]; }, ids.a);
+  assert.deepEqual([xlsx[0], xlsx[1], xlsx[3]], [0x50, 0x4b, true]);
+  // Fahrerkarte einlesen: Kennzeichen-Alias, Zeiten aus der Karte, Lenkzeit-Prüfung
+  await s.evaluate(() => bereichWechseln('zeiten'));
+  await s.locator('[data-tacho-import-knopf]').click();
+  const karte = fahrerkarte({ kartenNr: 'DF000099', nachname: 'Demir', vorname: 'Ali', tage: [{ datum: '2026-11-10', km: 300, wechsel: [[0, 'RUHE'], [300, 'LENKEN'], [600, 'RUHE'], [620, 'LENKEN'], [800, 'RUHE']] }],
+    fahrzeuge: [{ kz: 'RS AT 100 X', kmVon: 1000, kmBis: 1300, ab: '2026-11-10T05:00:00Z', bis: '2026-11-10T14:00:00Z' }] });
+  await s.locator('#tacho-datei').setInputFiles({ name: 'karte.ddd', mimeType: 'application/octet-stream', buffer: karte });
+  await s.locator('[data-tacho-alias]').selectOption({ label: 'RS-AT 100' });
+  await s.locator('#tacho-los').click();
+  await s.locator('#toast', { hasText: 'Fahrerkarte: 1 Tage übernommen, 1 Arbeitszeiten' }).waitFor();
+  const t = await s.evaluate(() => { const m = maZumNamen('Ali Demir'), z = zeitenVon(m.id, '2026-11-10', '2026-11-10')[0], tt = tachotageVon(m.id)[0];
+    return { nr: m.fahrerkarteNr, quelle: z.quelle, beginn: z.beginn, ende: z.ende, lenk: tt.fahrMin, alias: fahrzeugZumKz('RS AT 100 X') && fahrzeugZumKz('RS AT 100 X').kennzeichen, km: fahrzeugZumKz('RS-AT 100').kmStand,
+      verstoss: Object.values(lenkzeitPruefung(tachotageVon(m.id))).flat().map(x => x[1]) }; });
+  assert.deepEqual([t.nr, t.quelle, t.beginn, t.ende, t.lenk, t.alias, t.km], ['DF000099', 'TACHO', '06:00', '14:20', 480, 'RS-AT 100', 1300]);
+  assert.ok(t.verstoss.some(x => x.includes('über 4,5 h gelenkt')), t.verstoss);
+  // Fahrer-Modus: Stempeluhr und Abliefern mit Unterschrift
+  await s.evaluate(id => { S.einstellungen.ichId = id; bereichWechseln('fahrer'); }, ids.a);
+  await s.locator('[data-stempel=start]').click();
+  await s.locator('[data-stempel=ende]').click();
+  assert.equal(await s.evaluate(id => zeitenVon(id, heute(), heute()).some(z => z.quelle === 'STEMPEL'), ids.a), true);
+  await s.locator('[data-fahrer=abliefern]').first().click();
+  await s.locator('#abliefern-form [name=empfaenger]').fill('Frau Kunde');
+  const c = await s.locator('#sig').boundingBox();
+  await s.mouse.move(c.x + 20, c.y + 30); await s.mouse.down(); await s.mouse.move(c.x + 120, c.y + 60); await s.mouse.move(c.x + 200, c.y + 20); await s.mouse.up();
+  await s.locator('#abliefern-form button.voll').click();
+  await s.locator('#toast', { hasText: 'Abgeliefert' }).waitFor();
+  const ab = await s.evaluate(id => { const t = S.touren[id]; return [t.status, t.empfaenger, anlagenVon(id).map(a => a.anzeigename.split(' – ')[0])]; }, ids.t);
+  assert.deepEqual(ab, ['ERLEDIGT', 'Frau Kunde', ['Unterschrift']]);
+  await s.context().close();
+});
+
+test('iPhone: kein seitliches Scrollen in allen Bereichen, Menü und Dialoge bedienbar', async () => {
+  const { devices } = require('playwright');
+  const kontext = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+  await kontext.route('https://script.google.com/**', r => r.abort());
+  await kontext.addInitScript(() => { if (!localStorage.getItem('schadensfaelle-v1')) localStorage.setItem('schadensfaelle-v1', JSON.stringify({ nurLokal: true })); });
+  const s = await kontext.newPage(); s.on('pageerror', f => { throw f; });
+  await s.goto(seite.url); await s.waitForFunction(() => window.__appBereit);
+  await s.evaluate(() => { const f = Aktionen.firmaSpeichern({ name: 'Eine Firma mit einem wirklich sehr langen Namen GmbH & Co. KG Niederlassung West', status: 'AKTIV' });
+    const a = PersonalAktionen.speichern({ name: 'Ali Demir' }); FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100' }); S.einstellungen.ichId = a;
+    TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeberId: f, auftraggeber: '', name: 'Langer Tourname Nummer eins mit vielen Wörtern', fahrerId: a }); nachAenderung(); });
+  for (const b of ['uebersicht', 'fahrer', 'kalender', 'termine', 'aufgaben', 'touren', 'personal', 'zeiten', 'fuhrpark', 'firmen', 'faelle', 'finanzen', 'auswertung']) {
+    await s.evaluate(x => bereichWechseln(x), b);
+    const [w, v] = await s.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
+    assert.ok(w <= v + 1, `${b}: ${w} > ${v}`);
+  }
+  await s.locator('#menue-knopf').click();
+  await s.locator('.nav-gross [data-bereich=zeiten]').click();
+  await s.waitForFunction(() => ANSICHT.bereich === 'zeiten' && !document.body.classList.contains('nav-offen'));
+  await s.evaluate(() => neuMenue());
+  const d = await s.locator('#dialog').boundingBox();
+  assert.ok(d.width >= 389, 'Dialoge am Handy über die ganze Breite');
   await kontext.close();
 });

@@ -184,6 +184,54 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.0 (Windows-App 4.0, Android-App 5.0, Web-App)
+
+**Wichtig:** Diese Version braucht die neue `cloud/Code.gs` (Cloud-Version 8) – wie gewohnt ersetzen und als neue Version bereitstellen.
+
+**Bedienung**
+- ☰ oben links: am PC Seitenleiste breit/schmal, am Handy und Tablet ausklappbare Seitenleiste mit allen Bereichen (gruppiert nach Heute, Disposition, Kunden, Auswertung), Einstellungen, Hell/Dunkel und Tastenkürzel. Unten bleiben vier Bereiche und „Mehr“.
+- Werkzeugleisten zeigen am Handy die wichtigsten Knöpfe, der Rest steckt hinter „⋯“.
+- Hell, dunkel oder wie das Gerät (⚙ → Bedienung).
+- Tastenkürzel: / oder Strg+K Suche, N Neu, T Tourenplan, K Kalender, G Übersicht, Alt+1…9 Bereiche, ? Hilfe.
+- Am Handy (auch als iPhone-Web-App vom Home-Bildschirm): nichts scrollt seitlich, Eingaben zoomen nicht, Dialoge öffnen als Vollbild, Notch und Home-Leiste werden berücksichtigt.
+
+**Kalender** (📆): Monat oder Woche mit Touren, Abwesenheiten, Terminen, Aufgaben, Fristen, Geburtstagen und Feiertagen; Ebenen ein-/ausblendbar; Tag antippen für Details, Aufgabe oder Abwesenheit; Drucken und .ics.
+
+**Feiertage** für alle Bundesländer (⚙ → Arbeitszeit und Kalender, Vorgabe NRW): im Kalender, im Tourenplan, in der Zeiterfassung und bei Urlaubstagen.
+
+**Aufgaben** (✅): für dich und das Team, mit Zuständigen, Fälligkeit, Priorität und Bezug zu Fall, Tour, Fahrzeug, Firma oder Mitarbeiter. Schnelleingabe versteht „heute“, „morgen“ und „@Name“. Ansichten Offen, Meine, Überfällig, Heute, Diese Woche, Ohne Zuständige, Erledigt. Erscheinen auch unter Termine, im Kalender und in der Übersicht.
+
+**Zeiterfassung** (⏱)
+- Erfassen von Hand, Stempeluhr im Fahrer-Modus oder aus der Fahrerkarte. Jede Zeit zeigt ihre Herkunft.
+- „Entwürfe aus Tourenplan“: für Einsatztage ohne Zeit ein *Entwurf* (Beginn ab Ladezeit). Entwürfe sind gelb markiert und zählen erst, wenn die tatsächlichen Zeiten bestätigt bzw. korrigiert sind.
+- Prüfung nach Arbeitszeitgesetz: mehr als 10 Stunden, zu wenig Pause (30/45 min), Ruhezeit unter 11 Stunden, Sonn- und Feiertagsarbeit, über 48 Stunden pro Woche, Mindestlohn.
+- Monatsübersicht mit Ist, Soll, Saldo, Sonntags-, Feiertags- und Nachtstunden.
+- Stundenzettel zum Drucken mit Unterschriftsfeldern, **Excel (.xlsx)** mit Übersicht und einem Blatt je Mitarbeiter, CSV fürs Lohnbüro.
+
+**Fahrerkarte (Tachograph)** (💳 in Zeiten, Personal oder ＋ Neu)
+- .ddd-/.c1b-/.tgd-/.esm-Dateien der Fahrerkarte (1. und 2. Generation) einlesen: Fahrer, Kartennummer, Gültigkeit, Tätigkeiten je Tag (Lenken, Arbeit, Bereitschaft, Ruhe), benutzte Fahrzeuge und Kilometer.
+- Prüfung nach VO (EG) 561/2006: Tageslenkzeit (9/10 h), Fahrtunterbrechung nach 4,5 h, Wochen- und Doppelwochenlenkzeit, tägliche Ruhezeit.
+- Übernahme in die Zeiterfassung als echte Aufzeichnung; Kilometerstände in den Fuhrpark; Datei wird beim Mitarbeiter abgelegt; Frist „Fahrerkarte auslesen“ alle 28 Tage.
+- Excel-Export je Fahrer und Monat (Stundenzettel aus der Fahrerkarte).
+- **Aliase:** Fahrzeuge können weitere Kennzeichen haben (andere Schreibweise, alte oder Leih-Kennzeichen), Mitarbeiter andere Schreibweisen des Namens und die Kartennummer – so wird alles richtig zugeordnet.
+
+**Tourenplanung**
+- Status je Tour (geplant, unterwegs, erledigt, Problem, storniert), Beginn/Ende, km-Stand (Fahrtenbuch beim Fahrzeug), Empfänger.
+- Wochenplan (Fahrzeuge × Tage), Feiertagshinweis, Begleitschein/Liefernachweis zum Drucken (auch alle des Tages), Navigation zur Adresse der Firma, Aufgabe zur Tour, stornieren.
+
+**Meine Touren (Fahrer-Modus)** (🧭) – fürs Handy der Fahrer
+- Einmal „Wer nutzt dieses Gerät?“ wählen. Dann: eigene Touren der nächsten 7 Tage, Stempeluhr (Arbeitsbeginn, Pause, Feierabend).
+- Losfahren (mit km-Stand), Navigation, Foto, Abliefern mit **Unterschrift des Empfängers** auf dem Bildschirm und Fotos, Schaden melden, Problem melden (legt eine wichtige Aufgabe an), Urlaub beantragen, krank melden.
+
+**Weitere Funktionen**
+- 🧮 Preiskalkulator (Finanzen oder ＋ Neu): Stunden, Personen, km, Fahrzeug, Maut, Aufschlag → Preis je Einsatz, direkt als Angebot.
+- 📒 Buchhaltung: Rechnungsausgangsbuch als CSV für Steuerberater/DATEV (Erlöskonto und Debitor unter ⚙ → Buchhaltung).
+- Firmenliste aus Excel/CSV importieren (Firmen → „Liste importieren“); Spalten werden am Namen erkannt.
+- Datensicherung: alles in einer Datei sichern und wieder einspielen (⚙ → Datensicherung); Erinnerung nach 30 Tagen.
+- Hinweis beim Start: überfällige Termine, fällige Aufgaben, Krankmeldungen, Touren mit Problem, „morgen noch nichts geplant“ – in den Apps auch als Benachrichtigung.
+- Statistik: neue Daten Arbeitszeit, Fahrerkarten und Aufgaben; neue fertige Statistiken (Arbeitsstunden, ArbZG-Verstöße, Lenkzeit und km je Fahrer/Fahrzeug, Touren nach Status, Tourdauer, Erledigungsquote).
+- Behoben: Ein Klick in den Einstellungen startete versehentlich jedes Mal einen Abgleich.
+
 ## Neu in 3.1 (Windows-App 3.1, Android-App 4.1, Web-App) – Statistik
 
 Kein neues Cloud-Skript nötig (bleibt Version 7). Der Bereich heißt jetzt **Statistik** (📊).

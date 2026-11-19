@@ -41,8 +41,8 @@ android {
         applicationId = "de.aysetransport.schaden"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "4.1.0"
+        versionCode = 15
+        versionName = "5.0.0"
     }
 
     // Fester Signaturschlüssel, sofern hinterlegt (Umgebungsvariablen, im Workflow aus GitHub-Secrets).
