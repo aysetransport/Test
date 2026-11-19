@@ -184,6 +184,14 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.8 (Windows-App 4.8, Android-App 5.8, Web-App) – Sprachen für Fahrer und Helfer
+
+- **🌐 Sprache wählen**: in „Meine Touren“ oben, im Anmelde-Dialog oder unter ⚙ → Bedienung. Gilt je Gerät.
+  - Deutsch, Türkçe, العربية (Arabisch), فارسی / دری (Persisch/Dari), Русский, Українська, Polski, Română, Български, Shqip (Albanisch), Bosanski / Hrvatski / Srpski, English, Kurdî (Kurmancî). Arabisch und Persisch werden von rechts nach links angezeigt.
+  - Übersetzt ist alles, was Fahrer und Helfer bedienen: Anmeldung, „Meine Touren“ mit Stempeluhr, Losfahren, Abliefern mit Unterschrift, Stopps abhaken, Problem melden, Urlaub beantragen, Krank melden, Abwesenheit und die Navigation.
+  - **Nach außen bleibt alles deutsch**: SMS/WhatsApp/E-Mails an Kunden, Statuslink-Seite, Lieferavis, Begleitschein, Rechnungen, Briefe, PDFs, Excel – und die Team-WhatsApp. Eingaben der Fahrer (z. B. Bemerkungen) werden so gespeichert, wie sie getippt wurden.
+  - Die Übersetzungen sind sorgfältig erstellt, aber nicht von Muttersprachlern geprüft – Verbesserungsvorschläge der Fahrer gern melden, dann passe ich sie an.
+
 ## Neu in 4.7 (Windows-App 4.7, Android-App 5.7, Web-App) – Stoppliste aus PDF (Rollkarte)
 
 **Wichtig:** Neue `cloud/Code.gs` bereitstellen (Cloud-Version 12).

@@ -1523,3 +1523,33 @@ test('Rollkarte (PDF) → Tour mit Stoppliste: Vorschau, Korrektur, Übernahme',
   assert.equal(await s.locator('#rk-form [name=an]:checked').count(), 0);
   await s.close();
 });
+
+test('Sprachen: Fahrer-Ansicht auf Türkisch und Arabisch (RTL), Kunden-Nachrichten bleiben deutsch', async () => {
+  const s = await geraet(null, { bereich: 'fahrer', viewport: { width: 390, height: 844 } });
+  const tid = await s.evaluate(() => {
+    FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV' });
+    const m = PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER' }); S.einstellungen.ichId = m;
+    const t = TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeber: 'Möbel Krause', name: 'Küche', fahrerId: m, uhrzeit: '07:00' });
+    StoppAktionen.speichern({ tourId: t, reihenfolge: 1, kundeName: 'Frau Meier', adresse: 'Hauptstr. 1, Remscheid', betragCent: 13000 });
+    bereichWechseln('fahrer'); return t;
+  });
+  await s.locator('[data-sprache-wahl]').first().click();
+  await s.locator('[data-sprache="tr"]').click();
+  await s.locator('[data-stempel="start"]', { hasText: 'İşe başla' }).waitFor();
+  assert.ok(await s.locator('.fahrer-tour', { hasText: 'Teslim et' }).count());
+  assert.equal(await s.evaluate(() => document.documentElement.lang), 'tr');
+  // Nach außen bleibt alles deutsch
+  const aussen = await s.evaluate(id => [lieferavisText(S.touren[id]), tourNachricht(S.touren[id])], tid);
+  assert.ok(aussen[0].startsWith('Guten Tag') && aussen[1].includes('Stopps:'), aussen.join('\n'));
+  // Arabisch: von rechts nach links, kein seitliches Scrollen
+  await s.evaluate(() => { S.einstellungen.sprache = 'ar'; spracheAnwenden(); zeichne(); });
+  await s.locator('[data-stempel="start"]', { hasText: 'بدء العمل' }).waitFor();
+  assert.equal(await s.evaluate(() => document.documentElement.dir), 'rtl');
+  assert.ok(await s.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'kein seitliches Scrollen in RTL');
+  await s.locator('[data-fahrer="abliefern"]').click();
+  await s.locator('#abliefern-form h2', { hasText: 'تسليم' }).waitFor();
+  assert.ok(await s.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  // Alle Sprachen vollständig
+  assert.deepEqual(await s.evaluate(() => Object.entries(UI_TEXTE).filter(([, l]) => l.length !== UI_DE.length || l.some(x => !x)).map(([k]) => k)), []);
+  await s.close();
+});
