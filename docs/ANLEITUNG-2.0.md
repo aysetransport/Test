@@ -184,6 +184,16 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.10 (Windows-App 4.10, Android-App 5.10, Web-App) – Anmeldelink, ganze Oberfläche übersetzbar
+
+**Wichtig:** Neue `cloud/Code.gs` bereitstellen (Cloud-Version 13).
+
+- **👑 Hauptadmin und Cloud-PIN abschalten**: Ein Admin-Login wird zum Hauptadmin (Benutzer → Admin öffnen → „👑 Hauptadmin“ – das geht mit der Cloud-PIN oder als bisheriger Hauptadmin). Nur der Hauptadmin verwaltet Admins; er kann nicht gesperrt, herabgestuft oder gelöscht werden, solange er Hauptadmin ist.
+  - Als Hauptadmin anmelden (Benutzername/Passwort) → ⚙ → Anmeldung → „🔐 Anmeldung mit Cloud-PIN …“ → Abschalten. Danach gibt es nur noch persönliche Logins; mit der PIN angemeldete Geräte müssen sich neu anmelden.
+  - **Notfall** (z. B. Passwort des Hauptadmins vergessen): script.google.com → Projekt öffnen → oben die Funktion `notfallPinAnmeldungEinschalten` wählen → „Ausführen“. Danach geht die Cloud-PIN wieder.
+- **Persönlicher Anmeldelink**: Die Zugangsdaten für Fahrer und Büro (Personal → Mitarbeiter → „👤 Login“ bzw. ⚙ → Benutzer) enthalten jetzt einen Link, mit dem sich die Person durch einmaliges Antippen anmeldet – kein Abtippen von Adresse, Benutzername und Passwort. Die Zugangsdaten stecken im #-Teil des Links (wird nie an einen Server gesendet) und werden nach dem Öffnen sofort aus der Adresszeile entfernt. Benutzername und Passwort stehen zusätzlich in der Nachricht.
+- **Ganze Oberfläche in der gewählten Sprache** (⚙ → Bedienung → Sprache, gilt je Gerät): Menüs, Knöpfe, Überschriften, Felder, Hinweise, Dialoge und Meldungen werden übersetzt; Daten (Namen, Adressen, Kennzeichen) und alles, was nach außen geht (Nachrichten-Vorschauen, Briefe, Belege, Drucke, PDFs, Excel, SMS/E-Mail/WhatsApp an Kunden und Team), bleiben unverändert deutsch. Die Übersetzungen werden schrittweise vervollständigt; noch nicht übersetzte Texte erscheinen deutsch.
+
 ## Neu in 4.9 (Windows-App 4.9, Android-App 5.9, Web-App) – Rechte für Disposition und Fahrer
 
 - **Datenexporte und Importe nur für Admins**: Datensicherung, CRM-/Personal-/Fuhrpark-/Rechnungs-/Schadens-/Aufgaben-CSV, Buchhaltungs-Export, Lohnbüro-CSV, Stunden-Excel, Stundenzettel (alle), Fahrerkarten-Excel, Statistik- und Auswertungs-Export sowie alle Importe sind für Disposition und Fahrer ausgeblendet und gesperrt. Drucken für den Betrieb (Tourenplan, Begleitscheine, Rechnungen, eigener Stundenzettel) bleibt.

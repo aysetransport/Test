@@ -255,7 +255,7 @@ test('Auftraggeber: Kontaktdaten am Fall und eigene Liste mit denselben Abgleich
   assert.deepEqual(weg.auftraggeber.map(e => [e.geloescht, e.name]), [[true, undefined]]);
   const spaeter = u.sync({ seit: weg.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Wieder da?', geaendertAm: '2026-11-12T08:00:00Z' }] });
   assert.equal(spaeter.auftraggeber[0].geloescht, true, 'gelöscht bleibt gelöscht');
-  assert.equal(u.aufruf('status').api, 12);
+  assert.equal(u.aufruf('status').api, 13);
 });
 
 test('CRM: Ansprechpartner, Preise usw. gleichen sich ab und verschwinden mit ihrer Firma', () => {
@@ -460,4 +460,35 @@ test('Stopps: mehrere Kunden je Tour, Fahrer hakt ab, Statuslink je Stopp mit Be
   assert.deepEqual([st.statusText, st.empfaenger, st.bewertbar], ['Zugestellt', 'Frau 2', true]);
   u.aufruf('bewerten', C2, 5, 'Top');
   assert.equal(u.sync({ seit: 0 }).stopps.find(x => x.id === S2).bewertung, 5);
+});
+
+test('Hauptadmin: verwaltet Admins, schaltet die Cloud-PIN ab; Notfall-Funktion schaltet sie wieder ein', () => {
+  const u = eingerichtet();
+  u.aufruf('benutzerSpeichern', PIN, { login: 'niclas.lueg', name: 'Niclas', rolle: 'ADMIN', passwort: 'geheim-123' });
+  u.aufruf('benutzerSpeichern', PIN, { login: 'chef2', name: 'Zweiter Admin', rolle: 'ADMIN', passwort: 'geheim-456' });
+  u.aufruf('benutzerSpeichern', PIN, { login: 'buero', name: 'Büro', rolle: 'DISPO', passwort: 'buero-123' });
+  const liste = u.aufruf('benutzerListe', PIN), n = liste.find(b => b.login === 'niclas.lueg');
+  // Ohne Hauptadmin lässt sich die PIN nicht abschalten
+  assert.throws(() => u.aufruf('pinAnmeldung', PIN, false), /Hauptadmin festlegen/);
+  u.aufruf('benutzerSpeichern', PIN, { ...n, hauptadmin: true });
+  assert.equal(u.aufruf('benutzerListe', PIN).filter(b => b.hauptadmin).map(b => b.login).join(), 'niclas.lueg');
+  // Abschalten nur angemeldet als Hauptadmin-Login
+  assert.throws(() => u.aufruf('pinAnmeldung', PIN, false), /als Hauptadmin/);
+  const nl = u.aufruf('einloggen', 'niclas.lueg', 'geheim-123');
+  assert.equal(nl.hauptadmin, true);
+  // Ein anderer Admin darf keine Admins ändern
+  const c2 = u.aufruf('einloggen', 'chef2', 'geheim-456');
+  assert.throws(() => u.aufruf('benutzerSpeichern', c2.token, { ...n, rolle: 'DISPO' }), /nur der Hauptadmin/);
+  assert.throws(() => u.aufruf('pinAnmeldung', c2.token, false), /Nur der Hauptadmin/);
+  assert.throws(() => u.aufruf('benutzerLoeschen', c2.token, n.id), /Hauptadmin kann nicht gelöscht/);
+  assert.throws(() => u.aufruf('benutzerSpeichern', nl.token, { ...n, aktiv: false }), /bleibt Admin und aktiv/);
+  // Hauptadmin schaltet die PIN ab
+  assert.deepEqual(u.aufruf('pinAnmeldung', nl.token, false), { pinAus: true });
+  assert.equal(u.aufruf('status').pinAus, true);
+  assert.throws(() => u.aufruf('sync', PIN, { seit: 0 }), /PIN_AUS/);
+  assert.ok(u.aufruf('sync', nl.token, { seit: 0 }).rolle === 'ADMIN');
+  // Notfall im Script-Editor
+  u.kontext.notfallPinAnmeldungEinschalten();
+  assert.equal(u.aufruf('status').pinAus, false);
+  assert.ok(u.aufruf('sync', PIN, { seit: 0 }));
 });

@@ -30,7 +30,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 12; // 12: Auftragsnummer, Betrag und Ankunftszeit an Stopps (Rollkarte); 11: Stopps (mehrere Kunden je Tour); 10: Statuslink, Lieferavis-Felder und Kundenbewertung an Touren; 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
+var API_VERSION = 13; // 13: Hauptadmin, Cloud-PIN abschaltbar; 12: Auftragsnummer, Betrag und Ankunftszeit an Stopps (Rollkarte); 11: Stopps (mehrere Kunden je Tour); 10: Statuslink, Lieferavis-Felder und Kundenbewertung an Touren; 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
 
 /**
  * CRM-Tabellen: alle hängen über firmaId an einem Auftraggeber (Tabelle „auftraggeber“).
@@ -115,6 +115,7 @@ var GESCHUETZT = {
   benutzerListe: benutzerListe,
   benutzerSpeichern: benutzerSpeichern,
   benutzerLoeschen: benutzerLoeschen,
+  pinAnmeldung: pinAnmeldung,
   stand: stand,
   sync: sync,
   anlageHochladen: anlageHochladen,
@@ -143,11 +144,22 @@ var ZUGANG_ = { rolle: 'ADMIN' };
 function benutzer_() { return JSON.parse(PropertiesService.getScriptProperties().getProperty('BENUTZER') || '{}'); }
 function speichereBenutzer_(b) { PropertiesService.getScriptProperties().setProperty('BENUTZER', JSON.stringify(b)); }
 function loginNormal_(l) { return String(l == null ? '' : l).trim().toLowerCase(); }
-function oeffentlich_(b) { return { id: b.id, login: b.login, name: b.name, rolle: b.rolle, mitarbeiterId: b.mitarbeiterId || '', aktiv: b.aktiv !== false, geaendertAm: b.geaendertAm || '', letzteAnmeldung: b.letzteAnmeldung || '' }; }
+function oeffentlich_(b) { return { id: b.id, login: b.login, name: b.name, rolle: b.rolle, mitarbeiterId: b.mitarbeiterId || '', aktiv: b.aktiv !== false, hauptadmin: !!b.hauptadmin, geaendertAm: b.geaendertAm || '', letzteAnmeldung: b.letzteAnmeldung || '' }; }
+/** Ist die Anmeldung mit der Cloud-PIN abgeschaltet? (Dann nur noch Benutzer-Logins.) */
+function pinAus_() { return PropertiesService.getScriptProperties().getProperty('PIN_AUS') === '1'; }
+function hauptadmin_() { var a = benutzer_(), h = null; Object.keys(a).forEach(function (k) { if (a[k].hauptadmin && a[k].aktiv !== false && a[k].rolle === 'ADMIN') h = a[k]; }); return h; }
+/**
+ * NOTFALL: Im Apps-Script-Editor diese Funktion auswählen und „Ausführen“ – schaltet die Anmeldung mit der
+ * Cloud-PIN wieder ein (z. B. wenn das Passwort des Hauptadmins verloren ist). Nur der Besitzer des Google-Kontos kann das.
+ */
+function notfallPinAnmeldungEinschalten() { PropertiesService.getScriptProperties().deleteProperty('PIN_AUS'); return 'Die Anmeldung mit der Cloud-PIN ist wieder eingeschaltet.'; }
 
 function pruefeZugang_(zugang) {
   var z = String(zugang == null ? '' : zugang);
-  if (z.indexOf('T:') !== 0) { pruefePin_(z); return { rolle: 'ADMIN', pin: true }; }
+  if (z.indexOf('T:') !== 0) {
+    if (pinAus_()) throw new Error('PIN_AUS: Die Anmeldung mit der Cloud-PIN ist abgeschaltet – bitte mit Benutzername und Passwort anmelden.');
+    pruefePin_(z); return { rolle: 'ADMIN', pin: true, hauptadmin: true };
+  }
   var props = PropertiesService.getScriptProperties(), schluessel = 'SITZUNG_' + hash_(z, 'sitzung');
   var s = JSON.parse(props.getProperty(schluessel) || 'null');
   var b = s && benutzer_()[s.b];
@@ -155,7 +167,19 @@ function pruefeZugang_(zugang) {
     if (s) props.deleteProperty(schluessel);
     throw new Error('Anmeldung abgelaufen – bitte erneut anmelden (Passwort bzw. PIN)');
   }
-  return { rolle: b.rolle, benutzerId: b.id, mitarbeiterId: b.mitarbeiterId || '', name: b.name, sitzung: schluessel };
+  return { rolle: b.rolle, benutzerId: b.id, mitarbeiterId: b.mitarbeiterId || '', name: b.name, sitzung: schluessel, hauptadmin: !!b.hauptadmin && b.rolle === 'ADMIN' };
+}
+function nurHauptadmin_() { if (!ZUGANG_.hauptadmin) throw new Error('Nur der Hauptadmin darf das.'); }
+/** Anmeldung mit der Cloud-PIN ab- oder einschalten (nur Hauptadmin; abschalten nur angemeldet als Hauptadmin-Login). */
+function pinAnmeldung(an) {
+  nurHauptadmin_();
+  var props = PropertiesService.getScriptProperties();
+  if (an) { props.deleteProperty('PIN_AUS'); return { pinAus: false }; }
+  var h = hauptadmin_();
+  if (!h) throw new Error('Erst einen Hauptadmin festlegen (Benutzer → Admin → „Hauptadmin“).');
+  if (ZUGANG_.benutzerId !== h.id) throw new Error('Zum Abschalten bitte als Hauptadmin (' + h.login + ') mit Benutzername und Passwort anmelden – so ist sicher, dass dieser Login funktioniert.');
+  props.setProperty('PIN_AUS', '1');
+  return { pinAus: true };
 }
 function nurAdmin_() { if (ZUGANG_.rolle !== 'ADMIN') throw new Error('Nur für Admins'); }
 
@@ -180,7 +204,7 @@ function einloggen(login, passwort) {
   var token = 'T:' + Utilities.getUuid() + Utilities.getUuid();
   props.setProperty('SITZUNG_' + hash_(token, 'sitzung'), JSON.stringify({ b: b.id, v: b.version, bis: jetzt + SITZUNG_TAGE * 864e5 }));
   b.letzteAnmeldung = new Date(jetzt).toISOString(); alle[b.id] = b; speichereBenutzer_(alle);
-  return { token: token, rolle: b.rolle, name: b.name, mitarbeiterId: b.mitarbeiterId || '', api: API_VERSION };
+  return { token: token, rolle: b.rolle, name: b.name, mitarbeiterId: b.mitarbeiterId || '', hauptadmin: !!b.hauptadmin && b.rolle === 'ADMIN', api: API_VERSION };
 }
 function abmelden() { if (ZUGANG_.sitzung) PropertiesService.getScriptProperties().deleteProperty(ZUGANG_.sitzung); return true; }
 function benutzerListe() {
@@ -204,9 +228,14 @@ function benutzerSpeichern(roh) {
     if (passwort && passwort.length < MIN_PASSWORT) throw new Error('Das Passwort braucht mindestens ' + MIN_PASSWORT + ' Zeichen.');
     var b = alt || { id: id, version: 1 };
     var aktiv = roh.aktiv !== false;
+    // Admins und der Hauptadmin werden nur vom Hauptadmin verwaltet; der Hauptadmin bleibt Admin und aktiv.
+    if ((roh.rolle === 'ADMIN' || (alt && alt.rolle === 'ADMIN') || roh.hauptadmin) && !ZUGANG_.hauptadmin) throw new Error('Admins verwaltet nur der Hauptadmin.');
+    if (alt && alt.hauptadmin && (roh.rolle !== 'ADMIN' || !aktiv)) throw new Error('Der Hauptadmin bleibt Admin und aktiv – erst einen anderen Hauptadmin bestimmen.');
+    if (roh.hauptadmin && (roh.rolle !== 'ADMIN' || !aktiv)) throw new Error('Hauptadmin kann nur ein aktiver Admin sein.');
     if (alt && (passwort || alt.rolle !== roh.rolle || (alt.aktiv !== false) !== aktiv || (alt.mitarbeiterId || '') !== (roh.mitarbeiterId || ''))) b.version = (b.version || 1) + 1;
     b.login = login; b.name = text_(roh.name || login).slice(0, 80); b.rolle = roh.rolle; b.mitarbeiterId = roh.mitarbeiterId ? kennung_(roh.mitarbeiterId) : ''; b.aktiv = aktiv;
     if (passwort) { b.salz = Utilities.getUuid(); b.hash = hash_(passwort, b.salz); }
+    if (roh.hauptadmin === true && !b.hauptadmin) { Object.keys(alle).forEach(function (k) { if (alle[k].hauptadmin) { alle[k].hauptadmin = false; } }); b.hauptadmin = true; }
     b.geaendertAm = new Date().toISOString();
     alle[id] = b; speichereBenutzer_(alle);
     return benutzerListe();
@@ -214,7 +243,10 @@ function benutzerSpeichern(roh) {
 }
 function benutzerLoeschen(id) {
   nurAdmin_();
-  var alle = benutzer_(); delete alle[kennung_(id)]; speichereBenutzer_(alle);
+  var alle = benutzer_(), b = alle[kennung_(id)];
+  if (b && b.hauptadmin) throw new Error('Der Hauptadmin kann nicht gelöscht werden – erst einen anderen Hauptadmin bestimmen.');
+  if (b && b.rolle === 'ADMIN' && !ZUGANG_.hauptadmin) throw new Error('Admins verwaltet nur der Hauptadmin.');
+  delete alle[kennung_(id)]; speichereBenutzer_(alle);
   return benutzerListe();
 }
 
@@ -325,7 +357,8 @@ function status() {
     name: 'Schadensfälle',
     api: API_VERSION,
     eingerichtet: !!PropertiesService.getScriptProperties().getProperty('PIN_HASH'),
-    benutzer: Object.keys(benutzer_()).length > 0
+    benutzer: Object.keys(benutzer_()).length > 0,
+    pinAus: pinAus_()
   };
 }
 
@@ -387,7 +420,7 @@ function hash_(pin, salz) {
 
 function anmelden() {
   var d = ladeDaten_();
-  return { name: 'Schadensfälle', api: API_VERSION, kennung: d.kennung, rev: d.rev, rolle: ZUGANG_.rolle, mitarbeiterId: ZUGANG_.mitarbeiterId || '', benutzer: ZUGANG_.name || '' };
+  return { name: 'Schadensfälle', api: API_VERSION, kennung: d.kennung, rev: d.rev, rolle: ZUGANG_.rolle, mitarbeiterId: ZUGANG_.mitarbeiterId || '', benutzer: ZUGANG_.name || '', hauptadmin: !!ZUGANG_.hauptadmin, pinAus: pinAus_() };
 }
 
 /** Schnelle Abfrage, ob es Neues gibt. */

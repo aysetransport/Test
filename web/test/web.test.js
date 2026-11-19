@@ -361,7 +361,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 12;
+  cloud.umgebung.kontext.API_VERSION = 13;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
@@ -1149,6 +1149,7 @@ test('Logins: Admin legt Fahrer-Login an, Fahrer meldet sich an und sieht nur se
   await a.locator('#benutzer-form [name=passwort]').fill('fahrer-123');
   await a.locator('#benutzer-form button.voll').click();
   await a.locator('#dialog pre', { hasText: 'Benutzername: ali.demir' }).waitFor();
+  const zugang = await a.locator('#dialog pre').textContent();
   await a.locator('#z-fertig').click();
   await a.locator('#benutzer-liste').waitFor();
   await a.evaluate(() => $('#dialog').close());
@@ -1580,4 +1581,73 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   assert.equal(await s.locator('#detail [data-einst-wahl="ichId"]').count(), 0);
   assert.equal(await s.locator('#detail [data-einst-wahl="sprache"]').count(), 1);
   await s.close();
+});
+
+// (läuft nach dem Logins-Test, nutzt eine eigene Test-Cloud)
+test('Persönlicher Anmeldelink: Fahrer tippt den Link an und ist angemeldet', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'personal' });
+  await melde(a, PIN, true); await aktuell(a);
+  await a.evaluate(() => PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER', telefon: '0171 1' }));
+  await abgleich(a);
+  await a.evaluate(() => api('benutzerSpeichern', PIN, { login: 'ali.demir', name: 'Ali Demir', rolle: 'FAHRER', mitarbeiterId: maZumNamen('Ali Demir').id, passwort: 'fahrer-123' }));
+  const text = await a.evaluate(() => zugangText('Ali Demir', 'ali.demir', 'fahrer-123'));
+  const link = text.match(/https?:\S+#anmelden=\S+/)[0];
+  assert.ok(text.includes('Passwort: fahrer-123') && link.includes('#anmelden='), text);
+  // frisches Gerät ohne jede Einrichtung
+  const k = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 } });
+  await k.route('https://script.google.com/**', r => r.abort());
+  const f = await k.newPage();
+  await f.goto(link.replace(/^https?:\/\/[^/#]+\/[^#]*/, seite.url));
+  await f.waitForFunction(() => window.__appBereit);
+  await f.locator('#toast', { hasText: 'Angemeldet als Ali Demir' }).waitFor();
+  assert.equal(await f.evaluate(() => [rolle(), ANSICHT.bereich, location.hash.includes('anmelden')].join()), 'FAHRER,fahrer,false');
+  await k.close(); await a.context().close(); await cloud.schliessen();
+});
+
+test('Ganze Oberfläche übersetzt: Büro-Ansicht auf Türkisch, Daten und Vorschauen bleiben unverändert', async () => {
+  const s = await geraet(null, { bereich: 'touren' });
+  await s.evaluate(() => { const f = Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV' }); FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV' });
+    const m = PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER' }); window.__tid = TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeberId: f, auftraggeber: '', name: 'Küche', fahrerId: m });
+    S.einstellungen.sprache = 'tr'; spracheAnwenden(); zeichne(); });
+  await s.waitForFunction(() => !!window.UI_UEBERSETZUNG);
+  await s.locator('#navi', { hasText: 'Takvim' }).waitFor();
+  assert.ok(await s.locator('[data-tp="drucken"]', { hasText: 'Yazdır' }).count(), 'Knopf übersetzt');
+  // Dialog: Bedienung übersetzt, Daten (Kundenname) und Nachrichtenvorschau bleiben
+  await s.evaluate(() => tourSenden(S.touren[window.__tid]));
+  await s.locator('#dialog pre.vorschau').waitFor();
+  assert.ok((await s.locator('#dialog pre.vorschau').textContent()).includes('Auftraggeber: Möbel Krause'), 'Vorschau bleibt deutsch');
+  assert.ok(await s.locator('#dialog', { hasText: 'Ali Demir' }).count());
+  // Zahlen im Text bleiben erhalten
+  assert.equal(await s.evaluate(() => uebersetzeText('3 Stopps, 2 offen')), '3 durak, 2 açık');
+  assert.equal(await s.evaluate(() => uebersetzeText('Möbel Krause')), 'Möbel Krause');
+  await s.evaluate(() => { S.einstellungen.sprache = 'de'; spracheAnwenden(); });
+  await s.close();
+});
+
+test('Hauptadmin schaltet die Cloud-PIN ab – danach nur noch persönliche Logins', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'uebersicht' });
+  await melde(a, PIN, true); await aktuell(a);
+  // mit der PIN: niclas.lueg anlegen und im Dialog zum Hauptadmin machen
+  await a.evaluate(() => api('benutzerSpeichern', PIN, { login: 'niclas.lueg', name: 'Niclas', rolle: 'ADMIN', passwort: 'geheim-123' }));
+  await a.evaluate(() => benutzerVerwaltung());
+  await a.locator('[data-benutzer]', { hasText: 'Niclas' }).click();
+  await a.locator('#benutzer-form [name=hauptadmin]').check();
+  await a.locator('#benutzer-form button.voll').click();
+  await a.locator('[data-benutzer]', { hasText: '👑 Niclas' }).waitFor();
+  await a.evaluate(() => $('#dialog').close());
+  // als niclas.lueg anmelden und die PIN abschalten
+  await a.evaluate(() => einloggenMit('niclas.lueg', 'geheim-123'));
+  assert.equal(await a.evaluate(() => istHauptadmin()), true);
+  await a.evaluate(() => { location.hash = '#/einstellungen'; });
+  await a.locator('#pin-schalter').click();
+  await a.locator('#ja', { hasText: 'Abschalten' }).click();
+  await a.locator('#toast', { hasText: 'abgeschaltet' }).waitFor();
+  // ein Gerät mit PIN: wird zur Login-Anmeldung geschickt, ohne PIN-Knopf
+  const b = await geraet(cloud.url, { bereich: 'uebersicht' });
+  await b.evaluate(() => anmeldung());
+  await b.locator('#login-form').waitFor();
+  assert.equal(await b.locator('#zur-pin').count(), 0);
+  await b.context().close(); await a.context().close(); await cloud.schliessen();
 });
