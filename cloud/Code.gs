@@ -462,8 +462,11 @@ function sync(anfrage) {
       anfrage = { seit: anfrage.seit, kennung: anfrage.kennung };
       Object.keys(erlaubt).forEach(function (t) { anfrage[t] = erlaubt[t]; });
     } else if (rolle === 'DISPO') {
-      // keine Lohndaten: Personalakte nicht schreibbar, Stundenlohn bleibt wie gespeichert
-      anfrage.personaleintraege = [];
+      // keine Lohndaten: Personalakte ohne Lohnabrechnungen (keine Beträge), Stundenlohn bleibt wie gespeichert
+      anfrage.personaleintraege = liste_(anfrage.personaleintraege).filter(function (x) {
+        var alt = x && d.personaleintraege[String(x.id).toLowerCase()];
+        return x && x.art !== 'LOHN' && !(alt && alt.art === 'LOHN');
+      }).map(function (x) { var k = {}; Object.keys(x).forEach(function (f) { if (['bruttoCent', 'nettoCent', 'kostenCent', 'stunden'].indexOf(f) < 0) k[f] = x[f]; }); return k; });
       anfrage.mitarbeiter = liste_(anfrage.mitarbeiter).map(function (m) { var alt = m && d.mitarbeiter[String(m.id).toLowerCase()]; if (m) m.stundenlohnCent = alt ? alt.stundenlohnCent : null; return m; });
     }
     // Kennt das Gerät einen anderen Datenbestand (z. B. nach neu angelegtem Ordner), bekommt es alles.
@@ -502,7 +505,8 @@ function sync(anfrage) {
       ['faelle', 'verlauf', 'anlagen', 'auftraggeber'].concat(CRM_NAMEN).forEach(function (t) { antwort[t] = sicht[t] || []; });
       antwort.ansicht = 'FAHRER';
     } else if (rolle === 'DISPO') {
-      antwort.personaleintraege = [];
+      // vollständige Personalakte ohne Lohnabrechnungen (die App gleicht sie für die Disposition komplett ab)
+      antwort.personaleintraege = Object.keys(d.personaleintraege).map(function (k) { return d.personaleintraege[k]; }).filter(function (x) { return !x.geloescht && x.art !== 'LOHN'; });
       antwort.anlagen = antwort.anlagen.filter(function (a) { return !lohnAnlage_(d, a); });
       antwort.mitarbeiter = antwort.mitarbeiter.map(function (m) { var k = {}; Object.keys(m).forEach(function (f) { if (f !== 'stundenlohnCent') k[f] = m[f]; }); return k; });
       antwort.ansicht = 'DISPO';

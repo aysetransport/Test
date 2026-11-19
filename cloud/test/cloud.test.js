@@ -383,6 +383,15 @@ test('Benutzer-Logins: Admin legt Fahrer an, Fahrer sieht nur Eigenes und änder
   const buero = u.aufruf('einloggen', 'buero', 'buero-123');
   const rd = u.aufruf('sync', buero.token, { seit: 0 });
   assert.equal(rd.touren.length, 2); assert.equal(rd.preise.length, 1); assert.equal(rd.personaleintraege.length, 0);
+  // Disposition pflegt die Personalakte, aber nie Lohnabrechnungen
+  const neuJetzt = new Date(Date.now() + 1500).toISOString();
+  u.aufruf('sync', buero.token, { seit: 0, personaleintraege: [
+    { id: 'e7e7e7e7-0000-4000-8000-000000000001', firmaId: '', mitarbeiterId: ALI, art: 'GESPRAECH', datum: '2026-11-01', text: 'Feedback', bruttoCent: 1, geaendertAm: neuJetzt },
+    { id: 'e7e7e7e7-0000-4000-8000-000000000002', firmaId: '', mitarbeiterId: ALI, art: 'LOHN', datum: '2026-11-01', bruttoCent: 5, geaendertAm: neuJetzt },
+    { id: 'e2e2e2e2-0000-4000-8000-000000000001', firmaId: '', mitarbeiterId: ALI, art: 'GESPRAECH', datum: '2026-10-01', geaendertAm: neuJetzt }] });
+  const akte = u.aufruf('sync', PIN, { seit: 0 }).personaleintraege;
+  assert.deepEqual(akte.map(x => [x.art, x.bruttoCent ?? null]).sort(), [['GESPRAECH', null], ['LOHN', 300000]], 'Gespräch gespeichert ohne Betrag, Lohn unverändert, kein neuer Lohn');
+  assert.deepEqual(u.aufruf('sync', buero.token, { seit: 0 }).personaleintraege.map(x => x.art), ['GESPRAECH']);
   assert.ok(rd.mitarbeiter.every(m => m.stundenlohnCent === undefined));
   // Lohnabrechnungen in der Personalakte sieht und lädt nur der Admin
   const LA = 'e6e6e6e6-0000-4000-8000-000000000001', FS = 'e6e6e6e6-0000-4000-8000-000000000002';

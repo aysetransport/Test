@@ -184,6 +184,12 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.11 (Windows-App 4.11, Android-App 5.11, Web-App) – Übersetzungen ohne App-Update, Personalakte für die Disposition
+
+- **Übersetzungen kommen ohne App-Update**: Die Windows- und Android-App holen neuere Übersetzungen selbst aus dem Netz (nur Daten, kein Programmcode) und merken sie sich für offline. Die Web-App hatte sie schon immer frisch.
+- Die Hälfte der Bedientexte ist jetzt in allen 12 Sprachen übersetzt; der Rest folgt.
+- **Disposition sieht und pflegt die Personalakte** (Gespräche, Unterweisungen, Führerscheinkontrollen, Ausrüstung …) und die Ausrüstungsübersicht – nur Lohnabrechnungen und Stundenlöhne bleiben dem Admin vorbehalten (von der Cloud durchgesetzt).
+
 ## Neu in 4.10 (Windows-App 4.10, Android-App 5.10, Web-App) – Anmeldelink, ganze Oberfläche übersetzbar
 
 **Wichtig:** Neue `cloud/Code.gs` bereitstellen (Cloud-Version 13).

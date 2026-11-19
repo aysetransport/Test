@@ -1651,3 +1651,17 @@ test('Hauptadmin schaltet die Cloud-PIN ab – danach nur noch persönliche Logi
   assert.equal(await b.locator('#zur-pin').count(), 0);
   await b.context().close(); await a.context().close(); await cloud.schliessen();
 });
+
+test('Übersetzungen aus dem Netz: nur neuere, gültige Daten werden übernommen', async () => {
+  const s = await geraet(null, { bereich: 'uebersicht' });
+  const r = await s.evaluate(async () => {
+    S.einstellungen.sprache = 'tr'; spracheAnwenden(); await new Promise(ok => setTimeout(ok, 300)); await UE.laedt;
+    const alt = window.UI_STAND, k = ['Probetext'];
+    return [woerterbuchUebernehmen({ stand: alt - 1, schluessel: k, uebersetzung: { tr: ['eski'] } }),
+      woerterbuchUebernehmen({ stand: alt + 1, schluessel: k, uebersetzung: { tr: [{ böse: 1 }] } }),
+      woerterbuchUebernehmen({ stand: alt + 1, schluessel: k, uebersetzung: { tr: ['yeni'] } }), uebersetzeText('Probetext')];
+  });
+  assert.deepEqual(r, [false, false, true, 'yeni']);
+  await s.evaluate(() => { S.einstellungen.sprache = 'de'; spracheAnwenden(); });
+  await s.close();
+});
