@@ -184,6 +184,13 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.9 (Windows-App 4.9, Android-App 5.9, Web-App) – Rechte für Disposition und Fahrer
+
+- **Datenexporte und Importe nur für Admins**: Datensicherung, CRM-/Personal-/Fuhrpark-/Rechnungs-/Schadens-/Aufgaben-CSV, Buchhaltungs-Export, Lohnbüro-CSV, Stunden-Excel, Stundenzettel (alle), Fahrerkarten-Excel, Statistik- und Auswertungs-Export sowie alle Importe sind für Disposition und Fahrer ausgeblendet und gesperrt. Drucken für den Betrieb (Tourenplan, Begleitscheine, Rechnungen, eigener Stundenzettel) bleibt.
+- **Einstellungen je Rolle**: Disposition sieht nur Absender, Wiedervorlage, eigenes E-Mail-Konto, Signatur/Textbausteine, Akquise, Bedienung und Abmelden – nicht Cloud, Firmendaten, Kosten, Arbeitszeit-Regeln, Datensicherung, Buchhaltung oder Importe. Fahrer sehen nur Sprache, Darstellung und Abmelden.
+- Fahrer sehen weiterhin nur ihre eigenen Touren, Stopps, Zeiten, Abwesenheiten, Aufgaben und Schäden – das setzt die Cloud durch, nicht nur die App.
+- Hinweis: Die Disposition hat die Arbeitsdaten (ohne Löhne) zum Arbeiten auf ihrem Gerät; die Sperre verhindert die bequemen Massen-Exporte in der App.
+
 ## Neu in 4.8 (Windows-App 4.8, Android-App 5.8, Web-App) – Sprachen für Fahrer und Helfer
 
 - **🌐 Sprache wählen**: in „Meine Touren“ oben, im Anmelde-Dialog oder unter ⚙ → Bedienung. Gilt je Gerät.

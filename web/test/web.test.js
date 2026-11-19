@@ -1553,3 +1553,31 @@ test('Sprachen: Fahrer-Ansicht auf Türkisch und Arabisch (RTL), Kunden-Nachrich
   assert.deepEqual(await s.evaluate(() => Object.entries(UI_TEXTE).filter(([, l]) => l.length !== UI_DE.length || l.some(x => !x)).map(([k]) => k)), []);
   await s.close();
 });
+
+test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubte Einstellungen', async () => {
+  const s = await geraet(null, { bereich: 'personal' });
+  const ansicht = async rolle => s.evaluate(r => { S.zugang = r === 'ADMIN' ? null : { rolle: r, name: 'X' }; S.nurLokal = false; S.apiUrl = 'https://example.invalid/exec'; zeichne(); return rolle(); }, rolle);
+  await s.evaluate(() => { PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER' }); });
+  // Admin (ohne Cloud) sieht Exporte
+  assert.ok(await s.locator('[data-personal-csv]').isVisible());
+  await ansicht('DISPO');
+  assert.equal(await s.evaluate(() => rolle()), 'DISPO');
+  assert.equal(await s.locator('[data-personal-csv]').isVisible(), false, 'CSV versteckt');
+  assert.equal(await s.locator('label:has(#personal-import)').isVisible(), false, 'Import versteckt');
+  // auch über Programm-Klick blockiert
+  await s.evaluate(() => { window.__csv = 0; const b = document.createElement('button'); b.dataset.personalCsv = ''; document.body.appendChild(b); window.ladeHerunter = () => window.__csv++; b.click(); });
+  assert.equal(await s.evaluate(() => window.__csv), 0);
+  await s.locator('#toast', { hasText: 'Nur für Admins' }).waitFor();
+  await s.evaluate(() => { location.hash = '#/einstellungen'; });
+  await s.locator('#detail h3', { hasText: 'Bedienung' }).waitFor();
+  const dispo = await s.$$eval('#detail > .karte.block h3', l => l.map(x => x.textContent));
+  assert.ok(!dispo.some(x => /Cloud|Datensicherung|Buchhaltung|Kosten|Firmendaten|^Daten$/.test(x)), dispo.join(', '));
+  // Fahrer: nur Bedienung (Sprache, Darstellung) und Anmeldung
+  await ansicht('FAHRER');
+  await s.evaluate(() => { location.hash = '#/x'; location.hash = '#/einstellungen'; zeichne(); });
+  await s.locator('#detail h3', { hasText: 'Bedienung' }).waitFor();
+  assert.deepEqual(await s.$$eval('#detail > .karte.block h3', l => l.map(x => x.textContent)), ['Bedienung']);
+  assert.equal(await s.locator('#detail [data-einst-wahl="ichId"]').count(), 0);
+  assert.equal(await s.locator('#detail [data-einst-wahl="sprache"]').count(), 1);
+  await s.close();
+});
