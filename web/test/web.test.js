@@ -1266,3 +1266,20 @@ test('Mitarbeiter zusammenführen: Doppelte finden, Touren, Zeiten, Lohn und Dok
   assert.equal(await s.locator('[data-doppelte]').count(), 0);
   await s.close();
 });
+
+test('Tour senden: WhatsApp an das ganze Team auf einmal', async () => {
+  const s = await geraet(null, { bereich: 'touren' });
+  await s.evaluate(() => {
+    const a = PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER', telefon: '0171 1111' }), b = PersonalAktionen.speichern({ name: 'Ben Ott', rolle: 'BEIFAHRER', telefon: '0172 2222' });
+    FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV' });
+    TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeber: 'Möbel Krause', name: 'Küche', fahrerId: a, beifahrerIds: b });
+    window.__links = []; window.oeffneLink = u => window.__links.push(u); window.oeffne = u => window.__links.push(u);
+    tourSenden(alle('touren')[0]);
+  });
+  await s.locator('#tp-wa-alle', { hasText: 'an alle 2' }).click();
+  await s.locator('#tp-sms-alle').click();
+  const l = await s.evaluate(() => window.__links);
+  assert.ok(l[0].startsWith('https://wa.me/?text=') && decodeURIComponent(l[0]).includes('Fahrer: Ali Demir – 0171 1111') && decodeURIComponent(l[0]).includes('Beifahrer: Ben Ott'), l[0]);
+  assert.ok(l[1].startsWith('sms:+491711111,+491722222?body='), l[1]);
+  await s.close();
+});

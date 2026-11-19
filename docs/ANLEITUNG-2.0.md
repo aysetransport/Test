@@ -193,6 +193,7 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
   - Touren (Fahrer und Beifahrer), Arbeitszeiten, Abwesenheiten, Personalakte und Lohnabrechnungen, Fahrerkartentage, Dokumente, Aufgaben und Schadensfälle wandern zum bleibenden Eintrag; leere Felder werden ergänzt, der andere Name wird Alias.
   - Vorschlag: Der Eintrag mit den meisten Touren bleibt (an ihm hängen meist auch Logins), der längere Name wird übernommen – beides änderbar.
 - **Lohnabrechnungen** (PDF in der Personalakte) sieht nur noch der Admin, nicht die Disposition.
+- **WhatsApp an das ganze Team auf einmal** (wie in der alten Tourenplanung): Tour → 💬 → „WhatsApp an alle“ öffnet WhatsApp mit dem Tourtext, dort Fahrer und Beifahrer gleichzeitig (oder die Team-Gruppe) auswählen. Daneben „SMS an alle“ als Gruppen-SMS.
 
 ## Neu in 4.2 (Windows-App 4.2, Android-App 5.2, Web-App) – Monatsabrechnung und Briefe
 
