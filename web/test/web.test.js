@@ -1602,18 +1602,27 @@ test('Statistik: „Kosten pro Einsatz“ bei Mitarbeiter und Fahrzeug haben Vor
     const fid = uuid(); S.auftraggeber[fid] = { id: fid, name: 'Pauschal GmbH', geaendertAm: jetztIso() };
     const rid = BelegAktionen.neu('RECHNUNG', fid);
     BelegAktionen.speichern({ ...S.belege[rid], status: 'OFFEN', datum: heute(), positionen: JSON.stringify([{ bez: 'Montagepauschale November', menge: 1, einzelCent: 250000 }]) });
+    // verbuchte Rechnung mit Touren: eine gefahrene (zählt über die Tour) und eine ohne Fahrer (Betrag fehlte bisher)
+    const ohneFahrer = TourAktionen.speichern({ datum: heute(), name: 'Nur Kunde', auftraggeberId: fid });
+    const gefahrenId = TourAktionen.speichern({ datum: heute(), kennzeichen: 'RS-FK 4201', fahrerId: veli.id, name: 'Gefahren', auftraggeberId: fid });
+    const r2 = BelegAktionen.neu('RECHNUNG', fid);
+    BelegAktionen.speichern({ ...S.belege[r2], status: 'BEZAHLT', datum: heute(), positionen: JSON.stringify([{ bez: 'Touren', menge: 2, einzelCent: 50000 }]) });
+    for (const id of [ohneFahrer, gefahrenId]) merke('touren', { ...S.touren[id], belegId: r2, geaendertAm: jetztIso() });
+    nachAenderung();
     const zr = { von: plusTage(heute(), -1), bis: plusTage(heute(), 1) };
     const virt = belegZeilen().find(v => v.belegId === rid), guv = guvHtml(zr);
     const qz = QUELLEN.touren.zeilen().filter(r => r.datum === heute());
     const anzahl = qz.reduce((n, r) => n + QUELLEN.touren.masse.anzahl[1](r), 0), erloes = qz.reduce((n, r) => n + QUELLEN.touren.masse.erloes[1](r), 0);
     return { personal: k.personal, fahrzeug: k.fahrzeug, tag: kostenAnnahmen().personalTag, gefahren: k.gefahren, team: teamVon(t).length,
+      gesamt: QUELLEN.touren.zeilen().filter(r => r.datum === heute()).reduce((n, r) => n + tourRechnung(r).erloes, 0),
+      belegSumme: alle('belege').reduce((n, b) => n + umsatzNetto(b), 0),
       virtErloes: virt && tourRechnung(virt).erloes, guvHatPauschale: guv.includes('ohne Tourbezug'), anzahl, erloes, tourErloes: k.erloes };
   });
   assert.equal(r.team, 2, 'zwei im Team');
   assert.equal(r.virtErloes, 250000, 'Rechnung ohne Tour zählt als Erlös');
   assert.ok(r.guvHatPauschale, 'Gewinn & Verlust zeigt Rechnungen ohne Tourbezug');
-  assert.equal(r.anzahl, 1, 'Rechnung zählt nicht als Tour');
-  assert.equal(r.erloes, 250000 + r.tourErloes, 'Erlös im Baukasten enthält die Pauschale');
+  assert.equal(r.anzahl, 2, 'Rechnungen zählen nicht als Tour (2 Touren mit Fahrzeug/Team)');
+  assert.equal(r.gesamt, r.belegSumme, 'jede verbuchte Rechnung zählt genau einmal – auch mit Touren ohne Fahrer');
   if (r.gefahren) {
     assert.equal(r.fahrzeug, 9500, 'Fahrzeug: Kosten pro Einsatz');
     assert.equal(r.personal, 18000 + r.tag, 'Ali mit Kosten pro Einsatz, Veli mit Tagessatz');
