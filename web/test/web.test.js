@@ -1614,6 +1614,12 @@ test('Statistik: „Kosten pro Einsatz“ bei Mitarbeiter und Fahrzeug haben Vor
     const qz = QUELLEN.touren.zeilen().filter(r => r.datum === heute());
     const anzahl = qz.reduce((n, r) => n + QUELLEN.touren.masse.anzahl[1](r), 0), erloes = qz.reduce((n, r) => n + QUELLEN.touren.masse.erloes[1](r), 0);
     return { personal: k.personal, fahrzeug: k.fahrzeug, tag: kostenAnnahmen().personalTag, gefahren: k.gefahren, team: teamVon(t).length,
+      entwurfHinweis: (() => { const e = BelegAktionen.neu('RECHNUNG', fid); BelegAktionen.speichern({ ...S.belege[e], datum: heute(), positionen: JSON.stringify([{ bez: 'X', menge: 1, einzelCent: 10000 }]) });
+        const vor = guvHtml(zr).includes('Entwurf/Entwürfe'), zaehltVorher = zaehltUmsatz(S.belege[e]); alsVersendet(S.belege[e]);
+        return { vor, zaehltVorher, nachher: S.belege[e].status, zaehlt: zaehltUmsatz(S.belege[e]), weg: !guvHtml(zr).includes('Entwurf/Entwürfe') }; })(),
+      firmaNurRechnung: (() => { const f2 = uuid(); S.auftraggeber[f2] = { id: f2, name: 'Nur Rechnung KG', geaendertAm: jetztIso() };
+        const rb = BelegAktionen.neu('RECHNUNG', f2); BelegAktionen.speichern({ ...S.belege[rb], status: 'OFFEN', datum: heute(), positionen: JSON.stringify([{ bez: 'Pauschale', menge: 1, einzelCent: 120000 }]) });
+        BelegAktionen.zahlung(S.belege[rb], belegSummen(S.belege[rb]).brutto, heute()); return firmaTourenHtml(S.auftraggeber[f2]); })(),
       gesamt: QUELLEN.touren.zeilen().filter(r => r.datum === heute()).reduce((n, r) => n + tourRechnung(r).erloes, 0),
       belegSumme: alle('belege').reduce((n, b) => n + umsatzNetto(b), 0),
       virtErloes: virt && tourRechnung(virt).erloes, guvHatPauschale: guv.includes('ohne Tourbezug'), anzahl, erloes, tourErloes: k.erloes };
@@ -1622,6 +1628,8 @@ test('Statistik: „Kosten pro Einsatz“ bei Mitarbeiter und Fahrzeug haben Vor
   assert.equal(r.virtErloes, 250000, 'Rechnung ohne Tour zählt als Erlös');
   assert.ok(r.guvHatPauschale, 'Gewinn & Verlust zeigt Rechnungen ohne Tourbezug');
   assert.equal(r.anzahl, 2, 'Rechnungen zählen nicht als Tour (2 Touren mit Fahrzeug/Team)');
+  assert.deepEqual(r.entwurfHinweis, { vor: true, zaehltVorher: false, nachher: 'OFFEN', zaehlt: true, weg: true }, 'Entwurf: Hinweis, nach Druck/PDF zählt er');
+  assert.ok(r.firmaNurRechnung.includes('Gewinn/Verlust') && r.firmaNurRechnung.includes('1.200,00'), 'bezahlte Rechnung ohne Tour im Firmen-Gewinn: ' + r.firmaNurRechnung);
   assert.equal(r.gesamt, r.belegSumme, 'jede verbuchte Rechnung zählt genau einmal – auch mit Touren ohne Fahrer');
   if (r.gefahren) {
     assert.equal(r.fahrzeug, 9500, 'Fahrzeug: Kosten pro Einsatz');
