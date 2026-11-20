@@ -1609,6 +1609,17 @@ test('Rechnung: Unterschrift vom Geschäftsführer statt Bearbeiter, Hinweis „
   assert.ok(r.gf.includes('Geschäftsführer: Seyit Muhammed Batihan'), 'Geschäftsführer in der Fußzeile');
   assert.equal(r.gsUnterz, 'GF', 'Gutschrift übernimmt die Unterschrift');
   assert.ok(!r.ohneHinweis.includes('ohne Unterschrift und Stempel'), 'Hinweis abschaltbar');
+  // abweichende IBAN je Auftraggeber
+  const bank = await s.evaluate(() => {
+    S.einstellungen.rechnung = { ...rechnungsDaten(), iban: 'DE07 3405 0000 0000 1655 71', bank: 'Stadtsparkasse Remscheid' };
+    const b = Object.values(S.belege).find(x => x.art === 'RECHNUNG'), f = S.auftraggeber[b.firmaId];
+    const normal = belegHtml(b);
+    S.auftraggeber[b.firmaId] = { ...f, rechnungIban: 'DE28 1234 5678 9012 3456 78', rechnungBank: 'Volksbank', rechnungBic: 'GENODED1XXX' };
+    return { normal, abw: belegHtml(b) };
+  });
+  assert.ok(bank.normal.includes('IBAN DE07 3405') && bank.normal.includes('Stadtsparkasse'), 'Standard-IBAN');
+  assert.ok(bank.abw.includes('IBAN DE28 1234') && bank.abw.includes('Volksbank') && bank.abw.includes('GENODED1XXX'), 'abweichende IBAN');
+  assert.ok(!bank.abw.includes('DE07 3405'), 'Standard-IBAN nicht mehr drin');
   // Auswahl im Formular wird gespeichert
   const id = await s.evaluate(() => Object.keys(S.belege).find(k => S.belege[k].art === 'RECHNUNG'));
   await s.evaluate(i => { location.hash = '#/beleg/' + i; }, id);

@@ -85,7 +85,7 @@ var CRM_TABELLEN = {
     auftragNr: 'text', betragCent: 'cent', eta: 'text' }
 };
 /** Felder einer Firma, die nicht jede App kennt: Fehlen sie in einer Änderung, bleibt der bisherige Wert. */
-var FIRMEN_ZUSATZ = ['kundennummer', 'ustId', 'zahlungszielTage', 'schlagworte'];
+var FIRMEN_ZUSATZ = ['kundennummer', 'ustId', 'zahlungszielTage', 'schlagworte', 'rechnungBank', 'rechnungIban', 'rechnungBic'];
 var CRM_NAMEN = Object.keys(CRM_TABELLEN);
 
 // ============================== Einstieg ==============================
@@ -569,6 +569,9 @@ function uebernehmeAuftraggeber_(d, roh, zurueck) {
   neu.kundennummer = text_(roh.kundennummer).slice(0, 50);
   neu.ustId = text_(roh.ustId).slice(0, 50);
   neu.zahlungszielTage = text_(roh.zahlungszielTage).slice(0, 5);
+  neu.rechnungBank = text_(roh.rechnungBank).slice(0, 100);
+  neu.rechnungIban = text_(roh.rechnungIban).slice(0, 40);
+  neu.rechnungBic = text_(roh.rechnungBic).slice(0, 15);
   // Ältere Apps schicken diese Felder nicht mit – dann den bisherigen Wert behalten statt ihn zu leeren.
   FIRMEN_ZUSATZ.forEach(function (k) { if (roh[k] === undefined && alt && alt[k] !== undefined) neu[k] = alt[k]; });
   if (alt && zeit_(neu.geaendertAm) <= zeit_(alt.geaendertAm)) {
