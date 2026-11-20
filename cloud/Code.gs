@@ -46,7 +46,7 @@ var CRM_TABELLEN = {
   chancen: { titel: 'text', wertCent: 'cent', phase: 'wort:ANFRAGE', erwartetAm: 'datum', notiz: 'text' },
   // Angebote und Rechnungen (bisher nur Web-/Windows-App); positionen als JSON-Text
   belege: { art: 'wort:RECHNUNG', nummer: 'text', datum: 'datum', faelligAm: 'datum', status: 'wort:OFFEN', positionen: 'text', mwstProzent: 'cent',
-    einleitung: 'text', schluss: 'text', bezahltCent: 'cent', bezahltAm: 'datum', mahnstufe: 'cent', bezug: 'text', notiz: 'text', fallId: 'text' },
+    einleitung: 'text', schluss: 'text', bezahltCent: 'cent', bezahltAm: 'datum', mahnstufe: 'cent', bezug: 'text', notiz: 'text', fallId: 'text', unterzeichner: 'text' },
   // Fuhrpark (ohne Firma): Fahrzeuge mit den Angaben aus dem Fahrzeugschein, Fristen und Fahrzeugakte.
   // Zahlen (km, kg, kW, Cent, Liter × 100) als ganze Zahlen.
   fahrzeuge: { kennzeichen: 'text', bezeichnung: 'text', art: 'wort:TRANSPORTER', status: 'wort:AKTIV', fahrer: 'text', kmStand: 'cent', wartungKm: 'cent',

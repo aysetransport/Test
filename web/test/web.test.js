@@ -1589,6 +1589,35 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await s.close();
 });
 
+test('Rechnung: Unterschrift vom Geschäftsführer statt Bearbeiter, Hinweis „elektronisch erstellt“', async () => {
+  const s = await geraet(null, { bereich: 'finanzen' });
+  const r = await s.evaluate(() => {
+    S.einstellungen.bearbeiter = 'Niclas Lueg';
+    S.einstellungen.rechnung = { ...rechnungsDaten(), name: 'Ayse Transport UG', geschaeftsfuehrer: 'Seyit Muhammed Batihan' };
+    const fid = uuid(); S.auftraggeber[fid] = { id: fid, name: 'Kunde GmbH', geaendertAm: jetztIso() };
+    const id = BelegAktionen.neu('RECHNUNG', fid);
+    const b = S.belege[id], vorher = belegHtml(b);
+    const gf = belegHtml({ ...b, unterzeichner: 'GF' });
+    const gs = S.belege[BelegAktionen.gutschrift({ ...b, unterzeichner: 'GF' }, true)];
+    S.einstellungen.rechnung = { ...rechnungsDaten(), hinweisElektronisch: '' };
+    return { vorher, gf, gsUnterz: gs.unterzeichner, ohneHinweis: belegHtml(b) };
+  });
+  assert.ok(r.vorher.includes('Niclas Lueg<br>Ayse Transport UG'), 'Standard: Bearbeiter');
+  assert.ok(r.vorher.includes('ohne Unterschrift und Stempel gültig'), 'Hinweis standardmäßig drin');
+  assert.ok(r.gf.includes('Seyit Muhammed Batihan<br>Geschäftsführer<br>Ayse Transport UG'), 'Geschäftsführer unterschreibt');
+  assert.ok(!r.gf.includes('Niclas Lueg<br>Ayse'), 'Bearbeiter nicht mehr in der Unterschrift');
+  assert.ok(r.gf.includes('Geschäftsführer: Seyit Muhammed Batihan'), 'Geschäftsführer in der Fußzeile');
+  assert.equal(r.gsUnterz, 'GF', 'Gutschrift übernimmt die Unterschrift');
+  assert.ok(!r.ohneHinweis.includes('ohne Unterschrift und Stempel'), 'Hinweis abschaltbar');
+  // Auswahl im Formular wird gespeichert
+  const id = await s.evaluate(() => Object.keys(S.belege).find(k => S.belege[k].art === 'RECHNUNG'));
+  await s.evaluate(i => { location.hash = '#/beleg/' + i; }, id);
+  await s.locator('#beleg-form [name=unterzeichner]').selectOption('GF');
+  await s.locator('#beleg-speichern').click();
+  assert.equal(await s.evaluate(i => S.belege[i].unterzeichner, id), 'GF');
+  await s.close();
+});
+
 test('Rolle geändert (Fahrer → Disposition): Gerät holt einmal den kompletten Bestand', async () => {
   const cloud = await starteCloud();
   const a = await geraet(cloud.url, { bereich: 'personal' });
