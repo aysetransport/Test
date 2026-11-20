@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('desktop', {
     trennen: art => aufruf('mail:trennen', art),
     sende: (entwurf, art) => aufruf('mail:sende', entwurf, art),
     hole: (stand, art) => aufruf('mail:hole', stand, art),
+    // Schnittstelle 2: ordner, stand, lade, suche, aktion, ordnerAktion, anhang, quelle, sende
+    schnittstelle: 2,
+    ruf: (befehl, daten, art) => aufruf('mail:ruf', befehl, daten, art),
   },
   benachrichtige: (titel, text, ziel) => aufruf('benachrichtige', titel, text, ziel),
   oeffneDatei: (name, bytes) => aufruf('datei:oeffnen', name, bytes),
@@ -24,6 +27,16 @@ contextBridge.exposeInMainWorld('desktop', {
   pdf: html => aufruf('pdf:erzeugen', html),
   speichere: (name, base64) => aufruf('datei:speichern', name, base64),
   beiZiel: rueckruf => ipcRenderer.on('ziel', (_e, ziel) => rueckruf(ziel)),
+  // Fenster im Windows-Stil: Infos (Windows 11, Mica, Akzentfarbe, dunkel), Titelleiste, Taskleisten-Zähler, Zoom
+  fenster: {
+    info: () => ipcRenderer.sendSync('fenster:info'),
+    beiAenderung: rueckruf => ipcRenderer.on('fenster:info', (_e, info) => rueckruf(info)),
+    beiZoom: rueckruf => ipcRenderer.on('fenster:zoom', (_e, f) => rueckruf(f)),
+    titelleiste: (farbe, symbol, thema) => aufruf('fenster:titelleiste', farbe, symbol, thema),
+    zaehler: (anzahl, png) => aufruf('fenster:zaehler', anzahl, png),
+    blinken: () => aufruf('fenster:blinken'),
+    zoom: f => aufruf('fenster:zoom', f),
+  },
   // In-App-Update der Oberfläche
   web: { info: () => aufruf('web:info'), installieren: () => aufruf('web:installieren'), ok: () => aufruf('web:ok'), zuruecksetzen: () => aufruf('web:zuruecksetzen') },
 });

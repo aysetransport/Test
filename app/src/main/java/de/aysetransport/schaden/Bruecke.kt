@@ -59,6 +59,7 @@ class Bruecke(
             "mail:trennen" -> JsonPrimitive(konten.trennen(t(0)))
             "mail:sende" -> io { JsonPrimitive(konten.sende(o(0), t(1))) }
             "mail:hole" -> io { konten.hole(o(0), t(1)) }
+            "mail:ruf" -> io { konten.ruf(t(0).orEmpty(), o(1), t(2)) }
             "benachrichtige" -> JsonPrimitive(geraet().benachrichtige(t(0).orEmpty(), t(1).orEmpty(), t(2)))
             "datei:oeffnen" -> { geraet().oeffne(t(0) ?: "Anlage", bytes(1)); JsonPrimitive(true) }
             "datei:speichern" -> JsonPrimitive(io { geraet().speichere(t(0) ?: "Datei", bytes(1)) })

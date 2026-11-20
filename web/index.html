@@ -7,6 +7,16 @@
 <script>
 // Adresse des Cloud-Skripts (…/exec). Bleibt sie leer, fragt die App beim ersten Start danach.
 window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwhDnWP7p9XeoIz8NisZR7NApIj-Xfgd_lP5j8KjPE11OFbQuA/exec";
+// Windows-App: Windows-11-Stil (Fluent). Abschaltbar unter ⚙ → Darstellung; zum Ausprobieren im Browser: ?layout=windows
+(function () {
+  try {
+    const f = window.desktop && window.desktop.fenster && window.desktop.fenster.info ? window.desktop.fenster.info() : null;
+    const wahl = localStorage.getItem('crm-layout'), h = document.documentElement;
+    const an = /[?&]layout=windows/.test(location.search) || wahl === 'windows' || (wahl !== 'standard' && !!(f && f.windows));
+    window.WIN = an ? (f || {}) : null;
+    if (an) { h.classList.add('win'); if (f && f.mica) h.classList.add('mica'); if (f && f.akzent) h.style.setProperty('--win-akzent', f.akzent); }
+  } catch { window.WIN = null; }
+})();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
 window.WEB_STAND = 1795209282; window.WEB_VERSION = '4.14.0';
@@ -249,6 +259,7 @@ pre.vorschau{white-space:pre-wrap;font:inherit;background:var(--flaeche2);paddin
 .leise{color:var(--leise);font-size:13px}
 .gross{font-size:22px;font-weight:500}
 .zwei-zeilen{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.drei-zeilen{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .marke{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:8px;font-size:12px;font-weight:600;white-space:nowrap}
 .blau{background:var(--blau-f);color:var(--blau-t)}.violett{background:var(--violett-f);color:var(--violett-t)}.gelb{background:var(--gelb-f);color:var(--gelb-t)}
 .lila{background:var(--lila-f);color:var(--lila-t)}.tuerkis{background:var(--tuerkis-f);color:var(--tuerkis-t)}.orange{background:var(--orange-f);color:var(--orange-t)}
@@ -346,6 +357,186 @@ dialog h3{font-size:13px;color:var(--primaer);margin:14px 0 8px}
   #toast{left:12px;right:12px;transform:none;max-width:none;bottom:calc(84px + env(safe-area-inset-bottom))}
 }
 @media (hover:none){.nav-knopf,.knopf,.chip,.vorlage,.kachel{min-height:40px}}.mail-karte.ungelesen{border-left:4px solid var(--primaer)}
+/* ================= Windows-Stil (Windows-App): Fluent Design wie Windows 11 ================= */
+:root.win,:root.win[data-thema=hell]{
+  --win-basis:#F3F3F3;--win-ebene:#F9F9F9;--win-karte:#FFFFFF;--win-karte-rand:rgba(0,0,0,.0578);--win-steuer:rgba(255,255,255,.7);--win-steuer-hover:rgba(249,249,249,.5);
+  --win-steuer-rand:rgba(0,0,0,.0578);--win-steuer-unten:rgba(0,0,0,.1622);--win-dezent-hover:rgba(0,0,0,.0373);--win-dezent-druck:rgba(0,0,0,.0241);--win-trenner:rgba(0,0,0,.0803);
+  --win-text:rgba(0,0,0,.894);--win-text2:rgba(0,0,0,.6063);--win-text3:rgba(0,0,0,.4458);--win-menue:rgba(252,252,252,.92);--win-fuss:#F3F3F3;--win-schatten:0 8px 16px rgba(0,0,0,.14);
+  --win-akzent-basis:var(--win-akzent,#0078D4);--win-akzent-f:color-mix(in srgb,var(--win-akzent-basis) 78%,#000);--win-auf-akzent:#FFFFFF;
+  --bg:var(--win-basis);--flaeche:var(--win-karte);--flaeche2:var(--win-dezent-hover);--hoch:#E5E5E5;--text:var(--win-text);--leise:var(--win-text2);--rand:var(--win-steuer-unten);--linie:var(--win-trenner);
+  --primaer:var(--win-akzent-f);--auf-primaer:var(--win-auf-akzent);--primaer-hell:color-mix(in srgb,var(--win-akzent-basis) 14%,#fff);--auf-primaer-hell:color-mix(in srgb,var(--win-akzent-basis) 70%,#000);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root.win:not([data-thema=hell]){
+  --win-basis:#202020;--win-ebene:#272727;--win-karte:#2B2B2B;--win-karte-rand:rgba(0,0,0,.1);--win-steuer:rgba(255,255,255,.0605);--win-steuer-hover:rgba(255,255,255,.0837);
+  --win-steuer-rand:rgba(255,255,255,.0698);--win-steuer-unten:rgba(255,255,255,.0930);--win-dezent-hover:rgba(255,255,255,.0605);--win-dezent-druck:rgba(255,255,255,.0419);--win-trenner:rgba(255,255,255,.0837);
+  --win-text:#FFFFFF;--win-text2:rgba(255,255,255,.786);--win-text3:rgba(255,255,255,.545);--win-menue:rgba(44,44,44,.96);--win-fuss:#202020;--win-schatten:0 8px 16px rgba(0,0,0,.26);
+  --win-akzent-f:color-mix(in srgb,var(--win-akzent-basis) 55%,#fff);--win-auf-akzent:#000000;
+  --bg:var(--win-basis);--flaeche:var(--win-karte);--hoch:#3A3A3A;--primaer-hell:color-mix(in srgb,var(--win-akzent-basis) 35%,#202020);--auf-primaer-hell:#FFFFFF;
+  color-scheme:dark;
+}}
+:root.win[data-thema=dunkel]{
+  --win-basis:#202020;--win-ebene:#272727;--win-karte:#2B2B2B;--win-karte-rand:rgba(0,0,0,.1);--win-steuer:rgba(255,255,255,.0605);--win-steuer-hover:rgba(255,255,255,.0837);
+  --win-steuer-rand:rgba(255,255,255,.0698);--win-steuer-unten:rgba(255,255,255,.0930);--win-dezent-hover:rgba(255,255,255,.0605);--win-dezent-druck:rgba(255,255,255,.0419);--win-trenner:rgba(255,255,255,.0837);
+  --win-text:#FFFFFF;--win-text2:rgba(255,255,255,.786);--win-text3:rgba(255,255,255,.545);--win-menue:rgba(44,44,44,.96);--win-fuss:#202020;--win-schatten:0 8px 16px rgba(0,0,0,.26);
+  --win-akzent-f:color-mix(in srgb,var(--win-akzent-basis) 55%,#fff);--win-auf-akzent:#000000;
+  --bg:var(--win-basis);--flaeche:var(--win-karte);--flaeche2:var(--win-dezent-hover);--hoch:#3A3A3A;--text:var(--win-text);--leise:var(--win-text2);--rand:var(--win-steuer-unten);--linie:var(--win-trenner);
+  --primaer:var(--win-akzent-f);--auf-primaer:var(--win-auf-akzent);--primaer-hell:color-mix(in srgb,var(--win-akzent-basis) 35%,#202020);--auf-primaer-hell:#FFFFFF;
+  color-scheme:dark;
+}
+:root.win{font:14px/1.43 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;--kopf-hoehe:48px;--nav-breite:280px;--status-hoehe:24px}
+:root.win.mica,:root.win.mica body{background:transparent}
+.win body{background:var(--win-basis)}
+.win .fi{font-family:"Segoe Fluent Icons","Segoe MDL2 Assets";font-style:normal;font-weight:normal;-webkit-font-smoothing:antialiased;line-height:1}
+.win ::selection{background:var(--win-akzent-f);color:var(--win-auf-akzent)}
+
+/* --- Titelleiste: zieht das Fenster, rechts bleibt Platz für die Fenster-Knöpfe von Windows --- */
+.win header{height:var(--kopf-hoehe);min-height:0;padding:0 max(8px,calc(100vw - env(titlebar-area-x,0px) - env(titlebar-area-width,100vw))) 0 4px;gap:4px;background:transparent;border:0;box-shadow:none;-webkit-app-region:drag;app-region:drag;user-select:none}
+.win header button,.win header input,.win header a,.win #suchtreffer{-webkit-app-region:no-drag;app-region:no-drag}
+.win #app-titel{font:12px "Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--win-text);display:flex;align-items:center;gap:12px;padding:0 8px;height:32px;width:auto!important;pointer-events:none;-webkit-app-region:drag}
+.win #app-titel::before{content:"";width:16px;height:16px;background:url(icon-192.png) center/contain no-repeat;flex:none}
+.win #menue-knopf,.win #zurueck{width:40px;height:36px;border-radius:4px;font-size:16px;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.win #suche-global{max-width:520px}
+.win #globale-suche{height:32px;padding:4px 12px 4px 36px;border-radius:4px;border:1px solid var(--win-steuer-rand);border-bottom-color:var(--win-steuer-unten);background:var(--win-steuer);font-size:14px}
+.win #globale-suche:hover{background:var(--win-steuer-hover)}
+.win #globale-suche:focus{outline:0;background:var(--win-karte);border-bottom:2px solid var(--win-akzent-f);padding-bottom:3px}
+.win #suche-global::before{content:"\E721";font:14px "Segoe Fluent Icons","Segoe MDL2 Assets";opacity:.8}
+.win.ohne-fluent #suche-global::before{content:"🔍";font:13px sans-serif}
+.win #suchtreffer{border-radius:8px;background:var(--win-menue);backdrop-filter:blur(30px);border:1px solid var(--win-karte-rand);box-shadow:var(--win-schatten);padding:4px}
+.win .treffer{border-radius:4px;padding:7px 12px}
+.win .treffer-gruppe{color:var(--win-text2);font-weight:600}
+.win #neu-knopf{height:32px;padding:0 12px}
+.win #sync{height:32px;border-radius:4px;font-size:12px;padding:0 10px;background:transparent;border:0;color:var(--win-text2)}
+.win #sync:hover{background:var(--win-dezent-hover)}
+.win #einstellungen-knopf{width:40px;height:36px;border-radius:4px;font-size:16px;padding:0}
+
+/* --- Navigation (NavigationView): Auswahl mit Akzent-Balken, Einstellungen unten --- */
+@media (min-width:900px){
+  .win #navi{background:transparent;border:0;padding:4px 4px 8px;width:var(--nav-breite);top:var(--kopf-hoehe);bottom:var(--status-hoehe);display:flex;flex-direction:column}
+  .win .nav-gross{flex:1;display:flex;flex-direction:column;gap:2px;min-height:0}
+  .win .nav-gross>.nav-gruppe:empty{margin-top:auto;border-top:1px solid var(--win-trenner);margin-bottom:4px}
+  .win body.nav-schmal{--nav-breite:48px}
+  .win body.nav-schmal .nav-knopf{flex-direction:row;justify-content:center;padding:0;font-size:14px}
+  .win body.nav-schmal .nav-knopf .nav-text,.win body.nav-schmal .nav-gruppe:not(:empty){display:none}
+  .win body.nav-schmal .nav-knopf .zahl{position:absolute;top:4px;right:4px;min-width:8px;width:8px;height:8px;padding:0;font-size:0;border-radius:50%}
+  .win main{margin-left:var(--nav-breite);margin-top:0;padding-top:0;max-width:none;min-height:calc(100vh - var(--kopf-hoehe) - var(--status-hoehe));background:var(--win-ebene);
+    border:1px solid var(--win-karte-rand);border-right:0;border-bottom:0;border-top-left-radius:8px;position:relative;top:var(--kopf-hoehe);margin-bottom:var(--status-hoehe)}
+  .win.mica main{background:color-mix(in srgb,var(--win-ebene) 72%,transparent)}
+  .win header{position:fixed;left:0;right:0;top:0}
+  .win #liste{top:var(--kopf-hoehe);max-height:calc(100vh - var(--kopf-hoehe) - var(--status-hoehe));border-right:1px solid var(--win-trenner)}
+  .win body.breit #liste{max-height:none}
+  .win main>section{padding:16px 24px 32px}
+  @media (max-width:1180px){.win{--nav-breite:48px}.win .nav-knopf .nav-text,.win .nav-gruppe:not(:empty){display:none}.win .nav-knopf{flex-direction:row;justify-content:center;padding:0;font-size:14px}
+    .win .nav-knopf .zahl{position:absolute;top:4px;right:4px;min-width:8px;width:8px;height:8px;padding:0;font-size:0;border-radius:50%}}
+}
+.win .nav-knopf{height:36px;min-height:36px;padding:0 12px;border-radius:4px;color:var(--win-text);font-weight:400;font-size:14px;gap:14px}
+.win .nav-knopf:hover{background:var(--win-dezent-hover)}
+.win .nav-knopf:active{background:var(--win-dezent-druck);color:var(--win-text2)}
+.win .nav-knopf[aria-current=page]{background:var(--win-dezent-hover);color:var(--win-text);font-weight:400}
+.win .nav-knopf[aria-current=page]::before{content:"";position:absolute;left:0;top:50%;width:3px;height:16px;margin-top:-8px;border-radius:2px;background:var(--win-akzent-f)}
+.win .nav-symbol{font-size:16px;width:20px}
+.win .nav-gruppe:not(:empty){text-transform:none;letter-spacing:0;font-size:12px;font-weight:600;color:var(--win-text2);padding:12px 12px 4px;opacity:1}
+.win .nav-knopf .zahl{background:var(--win-akzent-f);color:var(--win-auf-akzent);border-radius:8px;font-size:11px;line-height:16px;min-width:16px}
+@media (max-width:899px){
+  .win .nav-klein{display:none}
+  .win #navi{background:transparent;border:0;padding:0}
+  .win body.nav-offen .nav-gross{background:var(--win-menue);backdrop-filter:blur(30px);top:var(--kopf-hoehe);padding:4px;box-shadow:var(--win-schatten);border-right:1px solid var(--win-karte-rand)}
+  .win main{padding-top:var(--kopf-hoehe)}
+  .win main>section{padding-bottom:calc(32px + var(--status-hoehe))}
+  .win #toast{bottom:calc(12px + var(--status-hoehe))}
+}
+
+/* --- Seiten: Titel und Befehlsleiste --- */
+.win .seitenkopf{margin:4px 0 12px}
+.win .seitenkopf h1{font:600 28px/36px "Segoe UI Variable Display","Segoe UI",sans-serif}
+.win .werkzeuge{gap:2px;padding:4px;margin-bottom:12px;background:var(--win-karte);border:1px solid var(--win-karte-rand);border-radius:8px}
+.win .werkzeuge .knopf{background:transparent;border-color:transparent;padding:0 10px;height:32px;font-size:14px;color:var(--win-text)}
+.win .werkzeuge .knopf:hover{background:var(--win-dezent-hover)}
+.win .werkzeuge .knopf:active{background:var(--win-dezent-druck)}
+
+/* --- Steuerelemente --- */
+.win .knopf{min-height:32px;padding:4px 12px;border-radius:4px;border:1px solid var(--win-steuer-rand);border-bottom-color:var(--win-steuer-unten);background:var(--win-steuer);color:var(--win-text);font-size:14px;font-weight:400;gap:8px}
+.win .knopf:hover{background:var(--win-steuer-hover)}
+.win .knopf:active{background:var(--win-dezent-druck);color:var(--win-text2);border-bottom-color:var(--win-steuer-rand)}
+.win .knopf.voll{background:var(--win-akzent-f);color:var(--win-auf-akzent);border-color:color-mix(in srgb,var(--win-akzent-f) 80%,#fff);border-bottom-color:color-mix(in srgb,var(--win-akzent-f) 70%,#000)}
+.win .knopf.voll:hover{background:color-mix(in srgb,var(--win-akzent-f) 90%,var(--win-basis))}
+.win .knopf.voll:active{background:color-mix(in srgb,var(--win-akzent-f) 80%,var(--win-basis));color:color-mix(in srgb,var(--win-auf-akzent) 80%,transparent)}
+.win .knopf.text{background:transparent;border-color:transparent;color:var(--win-akzent-f);padding:4px 8px}
+.win .knopf.text:hover{background:var(--win-dezent-hover)}
+.win .knopf.tonal{background:var(--primaer-hell);color:var(--auf-primaer-hell);border-color:transparent}
+.win .knopf.gefahr{color:#C42B1C}
+.win[data-thema=dunkel] .knopf.gefahr{color:#FF99A4}
+.win .knopf:disabled{opacity:1;color:var(--win-text3);background:var(--win-steuer);border-color:var(--win-steuer-rand)}
+.win .knopf.voll:disabled{background:var(--win-text3);color:var(--win-basis)}
+.win .symbol{border-radius:4px;padding:0;width:32px;height:32px;font-size:16px;display:inline-flex;align-items:center;justify-content:center}
+.win .symbol:hover{background:var(--win-dezent-hover)}
+.win .symbol:active{background:var(--win-dezent-druck)}
+.win label.feld{font-size:14px;color:var(--win-text);margin-bottom:12px}
+.win label.feld input,.win label.feld select,.win label.feld textarea,.win input.suche,.win .feld-win{margin-top:6px;min-height:32px;padding:5px 11px;border-radius:4px;border:1px solid var(--win-steuer-rand);border-bottom-color:var(--win-steuer-unten);background:var(--win-steuer);font-size:14px;color:var(--win-text)}
+.win label.feld input:hover,.win label.feld select:hover,.win label.feld textarea:hover,.win input.suche:hover{background:var(--win-steuer-hover)}
+.win label.feld input:focus,.win label.feld select:focus,.win label.feld textarea:focus,.win input.suche:focus{outline:0;background:var(--win-karte);border-bottom:2px solid var(--win-akzent-f);padding-bottom:4px}
+.win input.suche{border-radius:4px;padding-left:12px;margin-bottom:12px}
+.win input[type=checkbox],.win input[type=radio]{accent-color:var(--win-akzent-f);width:18px;height:18px}
+.win .chip{min-height:32px;padding:4px 12px;border-radius:4px;border:1px solid var(--win-steuer-rand);border-bottom-color:var(--win-steuer-unten);background:var(--win-steuer);font-size:14px}
+.win .chip:hover{background:var(--win-steuer-hover)}
+.win .chip[aria-pressed=true]{background:var(--win-akzent-f);color:var(--win-auf-akzent);border-color:transparent}
+.win :focus-visible{outline:2px solid var(--win-text);outline-offset:1px;border-radius:4px}
+
+/* --- Flächen: Karten, Listen, Tabellen --- */
+.win .karte{background:var(--win-karte);border:1px solid var(--win-karte-rand);border-radius:8px;padding:16px;margin-bottom:8px;box-shadow:none}
+.win .karte.klickbar{border:1px solid var(--win-karte-rand);position:relative}
+.win .karte.klickbar:hover{background:color-mix(in srgb,var(--win-karte) 92%,var(--win-text))}
+.win .karte.gewaehlt{outline:0;background:color-mix(in srgb,var(--win-karte) 90%,var(--win-text))}
+.win .karte.gewaehlt::before{content:"";position:absolute;left:0;top:50%;width:3px;height:24px;margin-top:-12px;border-radius:2px;background:var(--win-akzent-f)}
+.win .vorlage,.win .auswahl{border-radius:4px;padding:8px 10px}
+.win .vorlage:hover,.win .auswahl:hover{background:var(--win-dezent-hover)}
+.win .marke{border-radius:4px;font-weight:600;padding:2px 6px}
+.win .kennzahl{border-radius:8px;border:1px solid var(--win-karte-rand);background:var(--win-karte)}
+.win .tabelle-rahmen,.win .matrix-rahmen{background:var(--win-karte);border:1px solid var(--win-karte-rand);border-radius:8px}
+.win .tabelle th{font-weight:600;color:var(--win-text2);border-bottom:1px solid var(--win-trenner)}
+.win .tabelle tr:hover td{background:var(--win-dezent-hover)}
+.win .wv{border-radius:8px}
+.win .hinweis-box{border-radius:4px}
+.win .block h3,.win dialog h3{font:600 14px "Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--win-text)}
+
+/* --- Dialoge wie ContentDialog: Titel, Inhalt, Knopfleiste unten auf grauer Fläche --- */
+.win dialog{border-radius:8px;border:1px solid var(--win-karte-rand);background:var(--win-karte);padding:24px;box-shadow:0 32px 64px rgba(0,0,0,.19),0 2px 21px rgba(0,0,0,.15);width:min(560px,calc(100vw - 32px))}
+.win dialog::backdrop{background:rgba(0,0,0,.3)}
+.win dialog h2{font:600 20px/28px "Segoe UI Variable Display","Segoe UI",sans-serif;margin-bottom:12px}
+.win .dialog-knoepfe{margin:24px -24px -24px;padding:24px;background:var(--win-fuss);border-top:1px solid var(--win-karte-rand);position:sticky;bottom:-24px;gap:8px}
+.win .dialog-knoepfe .knopf{min-width:96px}
+
+.win .dialog-knoepfe .knopf.text:not(.gefahr){background:var(--win-steuer);border-color:var(--win-steuer-rand);border-bottom-color:var(--win-steuer-unten);color:var(--win-text);padding:4px 12px}
+.win .dialog-knoepfe .knopf.text:not(.gefahr):hover{background:var(--win-steuer-hover)}
+/* Listen links wie eine Windows-Listenansicht: flache Zeilen statt einzelner Karten */
+@media (min-width:900px){
+  .win body:not(.breit) #liste .karte.klickbar{background:transparent;border:0;border-radius:4px;margin:0 0 2px;padding:10px 12px}
+  .win body:not(.breit) #liste .karte.klickbar:hover{background:var(--win-dezent-hover)}
+  .win body:not(.breit) #liste .karte.klickbar.gewaehlt{background:var(--win-dezent-hover)}
+  .win body:not(.breit) #liste .karte.klickbar+.karte.klickbar{box-shadow:0 -1px 0 var(--win-trenner)}
+  .win body:not(.breit) #liste .karte.klickbar:hover+.karte.klickbar,.win body:not(.breit) #liste .karte.klickbar.gewaehlt+.karte.klickbar{box-shadow:none}
+}
+/* --- Meldungen wie InfoBar, Kontextmenüs, Statusleiste, Scrollleisten --- */
+.win #toast{left:auto;right:16px;transform:none;bottom:calc(16px + var(--status-hoehe));background:var(--win-karte);color:var(--win-text);border:1px solid var(--win-karte-rand);border-left:4px solid var(--win-akzent-f);border-radius:8px;box-shadow:var(--win-schatten);padding:12px 16px;display:flex;align-items:center;gap:12px;max-width:min(480px,calc(100vw - 32px))}
+.win #toast[hidden]{display:none}
+.kontext-menue{position:fixed;z-index:50;min-width:200px;max-width:320px;padding:4px;border-radius:8px;background:var(--win-menue,var(--flaeche));backdrop-filter:blur(30px);border:1px solid var(--win-karte-rand,var(--rand));box-shadow:var(--win-schatten,0 8px 24px rgba(0,0,0,.2));font-size:14px}
+.kontext-menue button{display:flex;align-items:center;gap:12px;width:100%;height:32px;padding:0 12px;border:0;border-radius:4px;background:transparent;color:var(--text);text-align:left;cursor:default;white-space:nowrap}
+.kontext-menue button:hover,.kontext-menue button:focus{background:var(--win-dezent-hover,var(--flaeche2));outline:0}
+.kontext-menue button:disabled{color:var(--win-text3,var(--leise))}
+.kontext-menue .km-symbol{width:16px;text-align:center;flex:none}
+.kontext-menue .km-taste{margin-left:auto;padding-left:24px;color:var(--win-text2,var(--leise));font-size:12px}
+.kontext-menue hr{border:0;border-top:1px solid var(--win-trenner,var(--linie));margin:4px 0}
+#statusleiste{display:none}
+.win #statusleiste{display:flex;align-items:center;gap:16px;position:fixed;left:0;right:0;bottom:0;height:var(--status-hoehe);padding:0 12px 0 16px;font-size:12px;color:var(--win-text2);background:var(--win-basis);border-top:1px solid var(--win-trenner);z-index:8;user-select:none}
+.win.mica #statusleiste{background:transparent}
+.win #statusleiste .fuell{flex:1}
+.win #statusleiste button{border:0;background:transparent;color:inherit;font:inherit;padding:0 6px;height:20px;border-radius:4px;cursor:default}
+.win #statusleiste button:hover{background:var(--win-dezent-hover)}
+.win ::-webkit-scrollbar{width:12px;height:12px}
+.win ::-webkit-scrollbar-track{background:transparent}
+.win ::-webkit-scrollbar-thumb{background:var(--win-text3);border-radius:6px;border:4px solid transparent;background-clip:content-box}
+.win ::-webkit-scrollbar-thumb:hover{border-width:3px;background:var(--win-text2);background-clip:content-box}
+.win ::-webkit-scrollbar-corner{background:transparent}
 </style>
 </head>
 <body>
@@ -367,6 +558,7 @@ dialog h3{font-size:13px;color:var(--primaer);margin:14px 0 8px}
 </main>
 <dialog id="dialog"></dialog>
 <div id="toast" role="status" hidden></div>
+<footer id="statusleiste" aria-label="Statusleiste"></footer>
 
 <script>
 'use strict';
@@ -987,7 +1179,7 @@ function zeichneSync() {
   else if (SYNC.fehler) { text = SYNC.fehler; farbe = 'rot'; }
   else if (wartend || !SYNC.zuletzt) text = 'Speichere …';
   else { text = 'Cloud aktuell'; farbe = 'gruen'; }
-  el.textContent = text; el.className = farbe; el.dataset.zustand = !mitCloud() ? 'lokal' : !PIN ? 'anmelden' : SYNC.laeuft || wartend || !SYNC.zuletzt ? 'beschaeftigt' : SYNC.fehler ? 'fehler' : 'aktuell';
+  el.textContent = text; el.className = farbe; if (window.WIN) setTimeout(statusleisteZeichnen, 0); el.dataset.zustand = !mitCloud() ? 'lokal' : !PIN ? 'anmelden' : SYNC.laeuft || wartend || !SYNC.zuletzt ? 'beschaeftigt' : SYNC.fehler ? 'fehler' : 'aktuell';
 }
 
 // ---------- Anmeldung ----------
@@ -1315,13 +1507,13 @@ function navZahlen() {
 function zeichneNavi() {
   const z = navZahlen(), aktiv = ANSICHT.bereich;
   const knopf = (k, klasse = '') => `<button class="nav-knopf ${klasse}" data-bereich="${k}" aria-current="${aktiv === k ? 'page' : 'false'}" title="${esc(t(BEREICHE[k][0]))}">
-    <span class="nav-symbol" aria-hidden="true">${BEREICHE[k][1]}</span><span class="nav-text">${esc(t(BEREICHE[k][0]))}</span>${z[k] ? `<span class="zahl">${z[k] > 99 ? '99+' : z[k]}</span>` : ''}</button>`;
+    <span class="nav-symbol" aria-hidden="true">${winSymbol(k, BEREICHE[k][1])}</span><span class="nav-text">${esc(t(BEREICHE[k][0]))}</span>${z[k] ? `<span class="zahl">${z[k] > 99 ? '99+' : z[k]}</span>` : ''}</button>`;
   const unten = navUnten(), mehrAktiv = !unten.includes(aktiv);
   const gruppen = [...new Set(Object.values(BEREICHE).map(b => b[2]))];
   $('#navi').innerHTML = `<div class="nav-gross">${gruppen.map(g => `<div class="nav-gruppe">${esc(g)}</div>${Object.keys(BEREICHE).filter(k => BEREICHE[k][2] === g && bereichSichtbar(k)).map(k => knopf(k)).join('')}`).join('')}
-      <div class="nav-gruppe"></div><button class="nav-knopf" data-nav-einstellungen><span class="nav-symbol" aria-hidden="true">⚙</span><span class="nav-text">Einstellungen</span></button>
-      <button class="nav-knopf" data-nav-thema><span class="nav-symbol" aria-hidden="true">${{ hell: '☀', dunkel: '🌙' }[S.einstellungen.thema] || '🌓'}</span><span class="nav-text">Darstellung: ${{ hell: 'hell', dunkel: 'dunkel' }[S.einstellungen.thema] || 'automatisch'}</span></button>
-      <button class="nav-knopf" data-nav-hilfe><span class="nav-symbol" aria-hidden="true">⌨</span><span class="nav-text">Tastenkürzel</span></button></div>
+      <div class="nav-gruppe"></div><button class="nav-knopf" data-nav-einstellungen><span class="nav-symbol" aria-hidden="true">${winSymbol('einstellungen', '⚙')}</span><span class="nav-text">Einstellungen</span></button>
+      <button class="nav-knopf" data-nav-thema><span class="nav-symbol" aria-hidden="true">${winSymbol('thema', { hell: '☀', dunkel: '🌙' }[S.einstellungen.thema] || '🌓')}</span><span class="nav-text">Darstellung: ${{ hell: 'hell', dunkel: 'dunkel' }[S.einstellungen.thema] || 'automatisch'}</span></button>
+      <button class="nav-knopf" data-nav-hilfe><span class="nav-symbol" aria-hidden="true">${winSymbol('hilfe', '⌨')}</span><span class="nav-text">Tastenkürzel</span></button></div>
     <div class="nav-klein">${unten.filter(bereichSichtbar).map(k => knopf(k)).join('')}
       <button class="nav-knopf" data-nav-mehr aria-current="${mehrAktiv ? 'page' : 'false'}"><span class="nav-symbol" aria-hidden="true">☰</span><span class="nav-text">${mehrAktiv ? esc(t(BEREICHE[aktiv][0])) : 'Mehr'}</span>
         ${Object.keys(BEREICHE).filter(k => !unten.includes(k)).some(k => z[k]) ? '<span class="zahl">•</span>' : ''}</button></div>`;
@@ -1350,7 +1542,7 @@ function menueUmschalten() {
 $('#menue-knopf').onclick = menueUmschalten;
 $('#nav-schleier').onclick = () => document.body.classList.remove('nav-offen');
 try { if (localStorage.getItem('nav-schmal')) document.body.classList.add('nav-schmal'); } catch {}
-function themaSetzen() { const t = S.einstellungen.thema; if (t === 'hell' || t === 'dunkel') document.documentElement.dataset.thema = t; else delete document.documentElement.dataset.thema; }
+function themaSetzen() { const t = S.einstellungen.thema; if (t === 'hell' || t === 'dunkel') document.documentElement.dataset.thema = t; else delete document.documentElement.dataset.thema;  if (typeof titelleisteFarben === 'function') titelleisteFarben(); }
 themaSetzen();
 /** Werkzeugleiste: am Handy nur die ersten Knöpfe, der Rest hinter „⋯ Mehr“. */
 document.addEventListener('click', e => { const m = e.target.closest('[data-werkzeug-mehr]'); if (m) m.closest('.werkzeuge').classList.toggle('offen'); });
@@ -1492,8 +1684,15 @@ function route() {
 }
 const gehe = hash => { if (location.hash === hash) zeichne(); else location.hash = hash; };
 
-function toast(text, ms = 3500) {
-  const el = $('#toast'); el.textContent = text; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, ms);
+/** Kurze Meldung; mit aktion = { text, fn } erscheint ein Knopf (z. B. „Rückgängig“). */
+function toast(text, ms = 3500, aktion = null) {
+  const el = $('#toast'); el.textContent = text; el.hidden = false; clearTimeout(toast.t);
+  if (aktion) {
+    const b = Object.assign(document.createElement('button'), { className: 'knopf text', textContent: t(aktion.text) });
+    b.style.marginLeft = '12px'; b.style.color = 'inherit'; b.style.textDecoration = 'underline';
+    b.onclick = () => { el.hidden = true; aktion.fn(); }; el.appendChild(b);
+  }
+  toast.t = setTimeout(() => { el.hidden = true; }, ms);
 }
 function dialog(html, { schliessbar = true } = {}) {
   const d = $('#dialog'); d.innerHTML = html; d.oncancel = e => { if (!schliessbar) e.preventDefault(); };
@@ -1915,7 +2114,7 @@ function zeichneEinstellungenVoll() {
       : `<p class="leise" style="margin-bottom:8px">Derzeit bleiben alle Fälle nur in diesem Browser. Mit der Adresse des Cloud-Skripts werden sie in Google Drive gespeichert und mit anderen Geräten geteilt.</p>
         <label class="feld">Cloud-Adresse (…/exec)<input id="cloud-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(apiUrl())}"></label>
         <button class="knopf voll" id="verbinden">Verbinden</button>`}</div>
-    ${updateKarte()}
+    ${winLayoutKarte()}${updateKarte()}
     ${cloudUpdateKarte()}
     ${window.desktop ? mailEinstellungen() : ''}
     <div class="karte block"><h3>Eigene Firmendaten für Angebote und Rechnungen</h3>
@@ -2169,6 +2368,50 @@ function historieVon(firma) {
   ].sort((x, y) => y.sort.localeCompare(x.sort));
 }
 
+/** Kontakthistorie begrenzt: neueste Einträge zuerst, je Eintrag höchstens 3 Zeilen (voller Text beim Öffnen), Filter, Suche und „Weitere anzeigen“. */
+const HISTORIE_START = 10, HISTORIE_MEHR = 20;
+function historieHtml(e) {
+  const zustand = (ANSICHT.historie && ANSICHT.historie.firma === e.id) ? ANSICHT.historie : (ANSICHT.historie = { firma: e.id, anzahl: HISTORIE_START, art: '', suche: '' });
+  const alleEintraege = historieVon(e);
+  if (!alleEintraege.length) return '';
+  const art = h => (h.a ? h.a.art : 'EMAIL'), such = normal(zustand.suche);
+  const passend = alleEintraege.filter(h => (!zustand.art || art(h) === zustand.art)
+    && (!such || normal(h.a ? [h.a.text, h.a.kontakt].join(' ') : h.v.text).includes(such)));
+  const zahl = k => alleEintraege.filter(h => art(h) === k).length;
+  const filter = alleEintraege.length > HISTORIE_START ? `<div class="chips" role="group" aria-label="Kontakthistorie filtern" style="margin:6px 0">
+      <button class="chip" data-historie-art="" aria-pressed="${!zustand.art}">Alle (${alleEintraege.length})</button>
+      ${Object.entries(AKTIVITAET_ART).filter(([k]) => zahl(k)).map(([k, l]) => `<button class="chip" data-historie-art="${k}" aria-pressed="${zustand.art === k}">${esc(l)} (${zahl(k)})</button>`).join('')}</div>
+    <input class="suche" type="search" id="historie-suche" placeholder="In der Kontakthistorie suchen" value="${esc(zustand.suche)}" style="margin-bottom:6px">` : '';
+  const zeilen = passend.slice(0, zustand.anzahl).map(h => (h.a
+    ? `<button class="vorlage" data-crm="aktivitaeten" data-crm-id="${h.a.id}"><b>${esc(`${datumText(h.a.datum)} · ${AKTIVITAET_ART[h.a.art] || ''}${h.a.kontakt ? ' · ' + h.a.kontakt : ''}`)}</b>${h.a.text ? `<br><span class="leise drei-zeilen" style="white-space:pre-wrap">${esc(h.a.text)}</span>` : ''}</button>`
+    : `<button class="vorlage" data-fall="${h.v.fallId}"><b>${zeitText(h.v.zeitpunkt)} · ${VERLAUF[h.v.typ][0]} · Fall ${esc(S.faelle[h.v.fallId]?.fallnummer || '')}</b><br><span class="leise zwei-zeilen" style="white-space:pre-wrap">${esc(h.v.text.split('\n\n')[0])}</span></button>`)).join('');
+  const rest = passend.length - Math.min(passend.length, zustand.anzahl);
+  return filter + (zeilen || '<p class="leise">Keine Einträge zu diesem Filter.</p>')
+    + (rest > 0 ? `<button class="knopf text" data-historie-mehr>Weitere ${Math.min(rest, HISTORIE_MEHR)} anzeigen <span class="leise">(${rest} ältere)</span></button>` : '')
+    + (zustand.anzahl > HISTORIE_START && passend.length > HISTORIE_START ? `<button class="knopf text" data-historie-weniger>Weniger anzeigen</button>` : '');
+}
+document.addEventListener('click', ev => {
+  const h = ANSICHT.historie; if (!h) return;
+  const art = ev.target.closest('[data-historie-art]');
+  if (art) { h.art = art.dataset.historieArt; h.anzahl = HISTORIE_START; }
+  else if (ev.target.closest('[data-historie-mehr]')) h.anzahl += HISTORIE_MEHR;
+  else if (ev.target.closest('[data-historie-weniger]')) h.anzahl = HISTORIE_START;
+  else return;
+  historieNeu();
+});
+document.addEventListener('input', ev => {
+  if (ev.target.id !== 'historie-suche' || !ANSICHT.historie) return;
+  ANSICHT.historie.suche = ev.target.value; ANSICHT.historie.anzahl = HISTORIE_START; historieNeu();
+  const s = $('#historie-suche'); if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+});
+/** Nur den Bereich Kontakthistorie neu zeichnen (die Firmenseite bleibt, wo sie ist). */
+function historieNeu() {
+  const box = document.querySelector('[data-bereich-firma="aktivitaeten"]'), e = S.auftraggeber[ANSICHT.historie.firma];
+  if (!box || !e) return;
+  const kopf = box.firstElementChild;
+  box.innerHTML = ''; box.appendChild(kopf); box.insertAdjacentHTML('beforeend', historieHtml(e) || '<p class="leise">Noch nichts eingetragen.</p>');
+}
+
 function zeichneFirma(id) {
   const e = S.auftraggeber[id];
   const el = $('#detail');
@@ -2187,9 +2430,7 @@ function zeichneFirma(id) {
   const offen = aufgaben.filter(a => !a.erledigt), erledigt = aufgaben.filter(a => a.erledigt);
   const aufgabeZeile = a => `<div class="termin"><input type="checkbox" data-erledigt="${a.id}" ${a.erledigt ? 'checked' : ''} aria-label="Erledigt">${zeile('aufgaben', a, a.text,
     [a.faelligAm && (a.faelligAm === heute() ? 'heute' : datumText(a.faelligAm)), a.kontakt].filter(Boolean).join(' · '))}</div>`;
-  const historie = historieVon(e).slice(0, 50).map(h => (h.a
-    ? zeile('aktivitaeten', h.a, `${datumText(h.a.datum)} · ${AKTIVITAET_ART[h.a.art] || ''}${h.a.kontakt ? ' · ' + h.a.kontakt : ''}`, h.a.text)
-    : `<button class="vorlage" data-fall="${h.v.fallId}"><b>${zeitText(h.v.zeitpunkt)} · ${VERLAUF[h.v.typ][0]} · Fall ${esc(S.faelle[h.v.fallId]?.fallnummer || '')}</b><br><span class="leise zwei-zeilen" style="white-space:pre-wrap">${esc(h.v.text.split('\n\n')[0])}</span></button>`)).join('');
+  const historie = historieHtml(e);
   const dokumente = vonFirma('dokumente', id).map(d => `<div class="zeile eng">${zeile('dokumente', d, d.titel, [d.link, d.notiz].filter(Boolean).join('\n'))}
       ${/^https?:\/\//i.test(d.link || '') ? `<a class="symbol" href="${esc(d.link)}" target="_blank" rel="noopener" aria-label="${esc(d.titel)} öffnen">↗</a>` : ''}</div>`).join('');
   const faelleDerFirma = faelle().filter(f => gehoertZu(f, e)).sort((a, b) => String(b.geaendertAm).localeCompare(String(a.geaendertAm)))
@@ -7558,7 +7799,164 @@ document.addEventListener('click', e => {
   }
 });
 
+// ============================== Windows-Stil (Windows-App) ==============================
+// Symbole aus „Segoe Fluent Icons“ (Windows 11, sonst Segoe MDL2), Statusleiste, Titelleisten-Farben, Kontextmenüs per
+// Rechtsklick, Windows-Tastenkürzel und Zähler auf dem Taskleistensymbol. Alles nur aktiv, wenn window.WIN gesetzt ist.
+const FLUENT = { uebersicht: '', fahrer: '', kalender: '', termine: '', aufgaben: '', touren: '', personal: '', zeiten: '',
+  fuhrpark: '', firmen: '', faelle: '', postfach: '', finanzen: '', auswertung: '',
+  einstellungen: '', thema: '', hilfe: '', menue: '', zurueck: '', suche: '', neu: '', sync: '', mehr: '' };
+const fluentDa = (() => {
+  let wert = null;
+  return () => {
+    if (wert !== null) return wert;
+    try {
+      const c = document.createElement('canvas').getContext('2d'), b = f => { c.font = `16px ${f}`; return c.measureText('').width; };
+      wert = b('"Segoe Fluent Icons", monospace') !== b('monospace') || b('"Segoe MDL2 Assets", monospace') !== b('monospace');
+    } catch { wert = false; }
+    return wert;
+  };
+})();
+/** Symbol: im Windows-Stil als Fluent-Glyphe, sonst das bisherige Zeichen. */
+const winSymbol = (schluessel, ersatz) => (window.WIN && fluentDa() && FLUENT[schluessel] ? `<span class="fi" aria-hidden="true">${FLUENT[schluessel]}</span>` : ersatz);
+function winRahmen() {
+  if (!window.WIN) return;
+  const h = document.documentElement;
+  h.classList.toggle('ohne-fluent', !fluentDa());
+  const setze = (sel, k) => { const el = $(sel); if (el && fluentDa()) el.innerHTML = winSymbol(k, el.textContent); };
+  setze('#menue-knopf', 'menue'); setze('#zurueck', 'zurueck'); setze('#einstellungen-knopf', 'einstellungen'); setze('#suche-knopf', 'suche');
+  const neu = $('#neu-knopf'); if (neu && fluentDa()) neu.innerHTML = `${winSymbol('neu', '＋')}<span class="lang">&nbsp;Neu</span>`;
+  $('#app-titel').title = 'Ayse CRM';
+  const d = window.desktop && window.desktop.fenster;
+  if (d) {
+    d.beiAenderung(info => { window.WIN = { ...window.WIN, ...info }; if (info.akzent) h.style.setProperty('--win-akzent', info.akzent); h.classList.toggle('mica', !!info.mica); titelleisteFarben(); });
+    d.beiZoom(f => { WIN_ZOOM = f; statusleisteZeichnen(); });
+  }
+  titelleisteFarben();
+  statusleisteZeichnen();
+}
+let WIN_ZOOM = 1;
+const winDunkel = () => (S.einstellungen.thema === 'dunkel' || (S.einstellungen.thema !== 'hell' && matchMedia('(prefers-color-scheme: dark)').matches));
+function titelleisteFarben() {
+  const d = window.WIN && window.desktop && window.desktop.fenster; if (!d) return;
+  const dunkel = winDunkel();
+  d.titelleiste(dunkel ? '#202020' : '#F3F3F3', dunkel ? '#FFFFFF' : '#1A1A1A', { hell: 'light', dunkel: 'dark' }[S.einstellungen.thema] || 'system').catch(() => {});
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => titelleisteFarben());
+
+/** Statusleiste unten (wie Outlook/Explorer): Abgleich, ungelesene Mails, Zoom, Version. */
+function statusleisteZeichnen() {
+  const el = $('#statusleiste'); if (!el || !window.WIN) return;
+  const sync = $('#sync') ? $('#sync').textContent : '';
+  let ungel = 0; try { ungel = Object.values(mails()).filter(ungelesen).length; } catch {}
+  el.innerHTML = `<span>${esc(t(sync || ''))}</span>${MAIL.konto ? `<span>${ungel ? `${ungel} ${esc(t(ungel === 1 ? 'ungelesene E-Mail' : 'ungelesene E-Mails'))}` : esc(t('Postfach gelesen'))}</span>` : ''}
+    <span class="fuell"></span>${Math.abs(WIN_ZOOM - 1) > 0.01 ? `<button data-zoom-zurueck title="${esc(t('Zoom zurücksetzen (Strg+0)'))}">${Math.round(WIN_ZOOM * 100)} %</button>` : ''}<span>Ayse CRM ${esc(window.WEB_VERSION || '')}</span>`;
+  winZaehler(ungel);
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-zoom-zurueck]') && window.desktop && window.desktop.fenster) window.desktop.fenster.zoom(1).then(f => { WIN_ZOOM = f; statusleisteZeichnen(); }); });
+/** Zähler auf dem Taskleistensymbol: kleines rotes Abzeichen mit der Zahl ungelesener Mails. */
+function winZaehler(n) {
+  const d = window.desktop && window.desktop.fenster; if (!d || winZaehler.zuletzt === n) return;
+  winZaehler.zuletzt = n;
+  let png = '';
+  if (n) {
+    const c = Object.assign(document.createElement('canvas'), { width: 32, height: 32 }), g = c.getContext('2d');
+    g.fillStyle = '#C42B1C'; g.beginPath(); g.arc(16, 16, 15, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#fff'; g.font = `bold ${n > 99 ? 13 : n > 9 ? 16 : 19}px "Segoe UI", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(n > 99 ? '99+' : String(n), 16, 17);
+    png = c.toDataURL('image/png');
+  }
+  d.zaehler(n, png).catch(() => {});
+}
+
+// ---------- Kontextmenüs (Rechtsklick, Umschalt+F10, Menütaste) ----------
+const KONTEXT = [];
+/** Ein Bereich meldet seine Menüeinträge an: selektor → el => [{ text, symbol, taste, aktion, aus }] (null = Trennlinie). */
+function kontextAnbieter(selektor, eintraege) { KONTEXT.push({ selektor, eintraege }); }
+function kontextZu() { const m = $('.kontext-menue'); if (m) m.remove(); document.removeEventListener('mousedown', kontextAussen, true); }
+function kontextAussen(e) { if (!e.target.closest('.kontext-menue')) kontextZu(); }
+function kontextMenue(x, y, liste) {
+  kontextZu();
+  const eintraege = liste.filter((e, i, l) => e || (i > 0 && l[i - 1] && i < l.length - 1));
+  const m = document.createElement('div'); m.className = 'kontext-menue'; m.setAttribute('role', 'menu');
+  m.innerHTML = eintraege.map((e, i) => (e ? `<button role="menuitem" data-km="${i}" ${e.aus ? 'disabled' : ''}><span class="km-symbol" aria-hidden="true">${e.symbol || ''}</span>${esc(t(e.text))}${e.taste ? `<span class="km-taste">${esc(e.taste)}</span>` : ''}</button>` : '<hr>')).join('');
+  document.body.appendChild(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + 'px';
+  m.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + 'px';
+  m.onclick = e => { const b = e.target.closest('[data-km]'); if (!b || b.disabled) return; kontextZu(); eintraege[Number(b.dataset.km)].aktion(); };
+  m.onkeydown = e => {
+    const k = [...m.querySelectorAll('button:not(:disabled)')], i = k.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); k[(i + 1) % k.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); k[(i - 1 + k.length) % k.length].focus(); }
+    else if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); kontextZu(); }
+  };
+  setTimeout(() => document.addEventListener('mousedown', kontextAussen, true), 0);
+  const erster = m.querySelector('button:not(:disabled)'); if (erster) erster.focus();
+}
+window.addEventListener('resize', () => kontextZu());
+window.addEventListener('blur', e => { if (e.target === window) kontextZu(); });
+window.addEventListener('scroll', e => { if (!(e.target.closest && e.target.closest('.kontext-menue'))) kontextZu(); }, true);
+function kontextFuer(ziel) {
+  for (const a of KONTEXT) { const el = ziel.closest(a.selektor); if (el) { const l = (a.eintraege(el) || []); if (l.filter(Boolean).length) return l; } }
+  const k = ziel.closest('button.karte, button.vorlage, a[href^="#/"], tr.klickbar');
+  return k ? [{ text: 'Öffnen', symbol: '↗', aktion: () => k.click() }] : null;
+}
+document.addEventListener('contextmenu', e => {
+  if (!window.WIN) return;
+  if (e.target.closest('input, textarea, select, [contenteditable="true"], .kontext-menue') || String(getSelection() || '')) return; // Windows-Menü (Kopieren, Einfügen …)
+  const l = kontextFuer(e.target); if (!l) return;
+  e.preventDefault(); kontextMenue(e.clientX, e.clientY, l);
+});
+document.addEventListener('keydown', e => {
+  if (!window.WIN || !((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu')) return;
+  const el = document.activeElement; if (!el || el === document.body || el.closest('input, textarea, [contenteditable="true"]')) return;
+  const l = kontextFuer(el); if (!l) return;
+  e.preventDefault(); const r = el.getBoundingClientRect(); kontextMenue(r.left + 16, r.bottom - 4, l);
+});
+const kopiere = text => navigator.clipboard.writeText(String(text || '')).then(() => toast('In die Zwischenablage kopiert')).catch(() => {});
+kontextAnbieter('[data-firma]', el => {
+  const f = S.auftraggeber[el.dataset.firma]; if (!f) return null;
+  const k = kontakteVon(f.id).find(x => x.telefon) || {}, tel = f.telefon || k.telefon;
+  return [{ text: 'Öffnen', symbol: '↗', aktion: () => gehe('#/firma/' + f.id) }, null,
+    MAIL.konto && { text: 'E-Mail schreiben', symbol: '✉', aktion: () => mailAnFirma({ firmaId: f.id }) },
+    tel && { text: 'Anrufen', symbol: '☎', aktion: () => oeffne('tel:' + tel.replace(/[^\d+]/g, '')) },
+    { text: 'Anruf festhalten', symbol: '📞', aktion: () => anrufErgebnisDialog(f) },
+    { text: 'Wiedervorlage anlegen', symbol: '⏱', aktion: () => crmDialog('aufgaben', null, f.id) },
+    { text: 'Rechnung aus Touren', symbol: '🧾', aktion: () => { gehe('#/firma/' + f.id); setTimeout(() => { const b = $(`[data-rechnung-touren="${f.id}"]`); if (b) b.click(); }, 50); } },
+    null, { text: 'Namen kopieren', symbol: '⧉', aktion: () => kopiere(f.name) }].filter(x => x !== false && x !== undefined && x !== '');
+});
+kontextAnbieter('[data-fall]', el => {
+  const f = S.faelle[el.dataset.fall]; if (!f) return null;
+  return [{ text: 'Öffnen', symbol: '↗', aktion: () => gehe('#/fall/' + f.id) }, null,
+    MAIL.konto && { text: 'E-Mail schreiben', symbol: '✉', aktion: () => { gehe('#/fall/' + f.id); setTimeout(() => mailVorlagen(f), 50); } },
+    null, { text: 'Fallnummer kopieren', symbol: '⧉', aktion: () => kopiere(f.fallnummer) }].filter(x => x !== false);
+});
+
+/** Einstellungen: Windows-Stil an/aus (nur in der Windows-App sichtbar). */
+function winLayoutKarte() {
+  if (!window.desktop || window.desktop.plattform === 'android') return '';
+  return `<div class="karte block"><h3>Darstellung</h3>
+    <label class="auswahl"><input type="checkbox" data-win-layout ${window.WIN ? 'checked' : ''}> Windows-Stil (wie Windows 11: Titelleiste, Navigation, Menüs, Statusleiste)</label>
+    <p class="leise">Hell/Dunkel und Akzentfarbe kommen aus den Windows-Einstellungen; über die Navigation lässt sich das Design auch fest einstellen.</p></div>`;
+}
+document.addEventListener('change', e => {
+  if (!e.target.matches || !e.target.matches('[data-win-layout]')) return;
+  try { localStorage.setItem('crm-layout', e.target.checked ? 'windows' : 'standard'); } catch {}
+  location.reload();
+});
+
+// ---------- Windows-Tastenkürzel ----------
+document.addEventListener('keydown', e => {
+  if (!window.desktop || $('#dialog').open) return;
+  const strg = e.ctrlKey || e.metaKey, imFeld = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName) || document.activeElement.isContentEditable;
+  if (e.key === 'F5' && !strg) { e.preventDefault(); if (mitCloud() && PIN) abgleich(); if (MAIL.konto && typeof postfachAbrufen === 'function') postfachAbrufen(true); return; }
+  if (strg && !e.shiftKey && e.key === ',') { e.preventDefault(); gehe('#/einstellungen'); return; }
+  if (strg && !e.shiftKey && (e.key.toLowerCase() === 'f' || e.key.toLowerCase() === 'e') && !imFeld) { e.preventDefault(); document.body.classList.add('sucht'); $('#globale-suche').focus(); return; }
+  if (e.altKey && e.key === 'ArrowLeft' && route().art) { e.preventDefault(); history.back(); return; }
+  if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); history.forward(); }
+});
+
 // ============================== Start ==============================
+winRahmen();
 setTimeout(() => { try { tagesHinweiseZeigen(); } catch {} }, 2500);
 document.addEventListener('click', e => {
   if (e.target.closest('[data-kalkulator]')) { kalkulatorDialog(route().art === 'firma' ? route().id : ''); return; }

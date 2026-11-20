@@ -1589,6 +1589,30 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await s.close();
 });
 
+test('Kontakthistorie der Firma begrenzt: 10 neueste, gekürzt, Filter, Suche, weitere anzeigen', async () => {
+  const s = await geraet(null, { bereich: 'firmen' });
+  const id = await s.evaluate(() => {
+    const f = Aktionen.firmaSpeichern({ name: 'Viel Kontakt GmbH', status: 'AKTIV' });
+    for (let i = 0; i < 35; i++) Aktionen.crmSpeichern('aktivitaeten', { firmaId: f, datum: plusTage(heute(), -i), art: i % 5 === 0 ? 'ANRUF' : 'EMAIL', kontakt: '', text: `Eintrag ${i}\n` + 'Zeile\n'.repeat(20) });
+    return f;
+  });
+  await s.evaluate(i => { location.hash = '#/firma/' + i; }, id);
+  const box = s.locator('[data-bereich-firma="aktivitaeten"]');
+  await box.locator('[data-crm="aktivitaeten"]').first().waitFor();
+  assert.equal(await box.locator('[data-crm="aktivitaeten"]').count(), 10, 'zuerst nur 10');
+  assert.ok(await box.locator('.drei-zeilen').first().evaluate(e => e.scrollHeight > e.clientHeight), 'langer Text gekürzt');
+  await box.locator('[data-historie-mehr]').click();
+  assert.equal(await box.locator('[data-crm="aktivitaeten"]').count(), 30);
+  await box.locator('[data-historie-mehr]').click();
+  assert.equal(await box.locator('[data-crm="aktivitaeten"]').count(), 35);
+  await box.locator('[data-historie-art="ANRUF"]').click();
+  assert.equal(await box.locator('[data-crm="aktivitaeten"]').count(), 7, 'nur Anrufe');
+  await box.locator('[data-historie-art=""]').click();
+  await s.locator('#historie-suche').fill('Eintrag 17');
+  assert.equal(await box.locator('[data-crm="aktivitaeten"]').count(), 1, 'Suche');
+  await s.close();
+});
+
 test('E-Rechnung: XRechnung (CII) aus Rechnung und Gutschrift – Pflichtangaben, Schema und Geschäftsregeln; Empfang lesbar', async () => {
   const s = await geraet(null, { bereich: 'finanzen' });
   const r = await s.evaluate(() => {

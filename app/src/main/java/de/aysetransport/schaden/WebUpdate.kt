@@ -23,7 +23,7 @@ import java.security.MessageDigest
 class WebUpdate(private val context: Context) {
     companion object {
         /** Was die App selbst kann (Brücke). Steigt nur, wenn eine Oberfläche neue Gerätefunktionen braucht. */
-        const val NATIV_API = 1
+        const val NATIV_API = 2
         const val BASIS = "https://aysetransport.github.io/schaden/"
         const val MANIFEST = "app-update.json"
     }

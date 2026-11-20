@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const NATIV_API = 1;
+const NATIV_API = 2;
 const BASIS = process.env.SCHADEN_UPDATE_BASIS || 'https://aysetransport.github.io/schaden/';
 const MANIFEST = 'app-update.json';
 
