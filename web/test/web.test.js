@@ -1589,6 +1589,33 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await s.close();
 });
 
+test('Rolle geändert (Fahrer → Disposition): Gerät holt einmal den kompletten Bestand', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'personal' });
+  await melde(a, PIN, true); await aktuell(a);
+  await a.evaluate(() => { for (const n of ['Perihan Kilic', 'Ali Demir', 'Mehmet Yilmaz']) PersonalAktionen.speichern({ name: n, rolle: 'FAHRER', telefon: '0171' });
+    Aktionen.crmSpeichern('touren', { datum: heute(), kunde: 'Kunde A', mitarbeiter: maZumNamen('Ali Demir').id }); });
+  await abgleich(a);
+  const pid = await a.evaluate(() => maZumNamen('Perihan Kilic').id);
+  await a.evaluate(id => api('benutzerSpeichern', PIN, { login: 'perihan.kilic', name: 'Perihan Kilic', rolle: 'FAHRER', mitarbeiterId: id, passwort: 'perihan-123' }), pid);
+  const k = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1200, height: 900 } });
+  await k.route('https://script.google.com/**', r => r.abort());
+  const p = await k.newPage(); await p.goto(seite.url);
+  await p.evaluate(url => { S.apiUrl = url; S.nurLokal = false; speichere(); }, cloud.url);
+  await p.evaluate(() => einloggenMit('perihan.kilic', 'perihan-123'));
+  await abgleich(p);
+  assert.equal(await p.evaluate(() => alle('mitarbeiter').length), 1, 'als Fahrer nur sich selbst');
+  // Admin macht sie zur Disposition – ihr Gerät hat noch den alten Stand (seit > 0)
+  const bid = await a.evaluate(async () => (await api('benutzerListe', PIN)).find(b => b.login === 'perihan.kilic').id);
+  await a.evaluate(id => api('benutzerSpeichern', PIN, { id, login: 'perihan.kilic', name: 'Perihan Kilic', rolle: 'DISPO', aktiv: true }), bid);
+  await p.evaluate(() => einloggenMit('perihan.kilic', 'perihan-123'));
+  await abgleich(p); await abgleich(p);
+  assert.equal(await p.evaluate(() => rolle()), 'DISPO');
+  assert.equal(await p.evaluate(() => alle('mitarbeiter').length), 3, 'alle Mitarbeiter');
+  assert.equal(await p.evaluate(() => alle('touren').length), 1, 'alle Touren');
+  await k.close(); await a.close(); await cloud.schliessen();
+});
+
 // (läuft nach dem Logins-Test, nutzt eine eigene Test-Cloud)
 test('Persönlicher Anmeldelink: Fahrer tippt den Link an und ist angemeldet', async () => {
   const cloud = await starteCloud();
