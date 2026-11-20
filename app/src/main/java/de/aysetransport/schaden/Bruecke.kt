@@ -30,6 +30,7 @@ class Bruecke(
     private val geraet: () -> Geraet,
     private val antworte: (String) -> Unit,
     private val zielBereit: () -> Unit = {},
+    private val webUpdate: WebUpdate? = null,
 ) {
     @JavascriptInterface
     fun aufruf(id: String, name: String, argumente: String) {
@@ -65,6 +66,10 @@ class Bruecke(
             "pdf:erzeugen" -> JsonPrimitive(Base64.getEncoder().encodeToString(geraet().pdf(t(0).orEmpty())))
             "drucken" -> { geraet().drucke(t(0).orEmpty()); JsonPrimitive(true) }
             "ziel:bereit" -> { zielBereit(); JsonNull }
+            "web:info" -> webUpdate?.info() ?: JsonNull
+            "web:installieren" -> io { requireNotNull(webUpdate).installieren() }
+            "web:ok" -> { webUpdate?.ok(); JsonPrimitive(true) }
+            "web:zuruecksetzen" -> { webUpdate?.zuruecksetzen(); JsonPrimitive(true) }
             else -> throw IllegalArgumentException("Unbekannte Funktion: $name")
         }
     }

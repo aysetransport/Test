@@ -1,7 +1,7 @@
 {
   "name": "schadensfaelle",
   "productName": "Schadensfälle",
-  "version": "4.12.7",
+  "version": "4.13.0",
   "description": "Schadensfälle bei Transportaufträgen nachhaken und bearbeiten",
   "main": "main.js",
   "private": true,
@@ -10,7 +10,7 @@
   "scripts": {
     "vorbereiten": "node scripts/vorbereiten.js",
     "start": "npm run vorbereiten && electron .",
-    "test": "npm run vorbereiten && node --test --test-timeout=180000 --test-concurrency=1 test/mail.test.js test/app.test.js",
+    "test": "npm run vorbereiten && node --test --test-timeout=180000 --test-concurrency=1 test/mail.test.js test/webupdate.test.js test/app.test.js",
     "dist:win": "npm run vorbereiten && electron-builder --win nsis --publish never",
     "dist:win:linux": "npm run vorbereiten && electron-builder --win nsis --x64 --publish never"
   },
@@ -31,6 +31,7 @@
       "main.js",
       "preload.js",
       "mail.js",
+      "webupdate.js",
       "app/**",
       "package.json"
     ],

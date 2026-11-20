@@ -93,7 +93,8 @@ class MainActivity : ComponentActivity() {
         }
         geraet = Geraet(this, wurzel)
 
-        val lader = WebInhalt.lader(this)
+        val webUpdate = WebUpdate(applicationContext).also { it.beimStart() }
+        val lader = WebInhalt.lader(this, webUpdate)
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -153,6 +154,7 @@ class MainActivity : ComponentActivity() {
                 geraet = { geraet },
                 antworte = { js -> webView.evaluateJavascript(js, null) },
                 zielBereit = { zielBereit = true; offenesZiel?.let { zeigeZiel(it) } },
+                webUpdate = webUpdate,
             ),
             "AndroidBruecke",
         )

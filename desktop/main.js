@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const mail = require('./mail');
+const { webUpdate } = require('./webupdate');
 
 const ORDNER = path.join(__dirname, 'app');
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
@@ -18,6 +19,7 @@ if (process.env.SCHADEN_DATEN) app.setPath('userData', process.env.SCHADEN_DATEN
 if (!app.requestSingleInstanceLock()) app.quit();
 
 let fenster = null;
+let update = null; // In-App-Update der Oberfläche (webupdate.js), nach app.whenReady angelegt
 
 // ------------------------------ E-Mail-Konten ------------------------------
 // Zwei Postfächer wie in der Android-App: SCHADEN (Schadensfälle, bisherige Datei mailkonto.json)
@@ -42,6 +44,10 @@ function behandle(kanal, arbeit) {
 }
 
 behandle('mail:anbieter', () => mail.ANBIETER);
+behandle('web:info', () => update.info());
+behandle('web:installieren', () => update.installieren());
+behandle('web:ok', () => update.ok());
+behandle('web:zuruecksetzen', () => update.zuruecksetzen());
 behandle('mail:konto', a => ohnePasswort(ladeKonto(a)));
 behandle('mail:einrichten', async (konfig, pw, a) => {
   await mail.pruefe(konfig, pw);
@@ -127,8 +133,12 @@ function erstelleFenster() {
 app.on('second-instance', () => { if (fenster) { if (fenster.isMinimized()) fenster.restore(); fenster.focus(); } });
 app.on('window-all-closed', () => app.quit());
 app.whenReady().then(() => {
+  update = webUpdate({ datenOrdner: app.getPath('userData'), appOrdner: ORDNER, appVersion: app.getVersion(), holen: u => net.fetch(u, { cache: 'no-store' }) });
+  update.beimStart();
   protocol.handle('app', anfrage => {
     const pfad = decodeURIComponent(new URL(anfrage.url).pathname);
+    const neu = update.datei(pfad.replace(/^\/+/, '') || 'index.html');
+    if (neu) return net.fetch(pathToFileURL(neu).toString());
     const datei = path.normalize(path.join(ORDNER, pfad));
     if (!datei.startsWith(ORDNER + path.sep)) return new Response('Nicht gefunden', { status: 404 });
     return net.fetch(pathToFileURL(datei).toString());

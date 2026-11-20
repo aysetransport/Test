@@ -44,6 +44,7 @@
     speichere: (name, base64) => aufruf('datei:speichern', name, base64),
     drucke: html => aufruf('drucken', html),
     beiZiel: rueckruf => { ziele.push(rueckruf); aufruf('ziel:bereit').catch(() => {}); },
+    web: { info: () => aufruf('web:info'), installieren: () => aufruf('web:installieren'), ok: () => aufruf('web:ok'), zuruecksetzen: () => aufruf('web:zuruecksetzen') },
   };
 
   // Downloads (<a download> mit blob:-Adresse, z. B. CSV, Kalender, Sicherung) landen im Download-Ordner.

@@ -24,4 +24,6 @@ contextBridge.exposeInMainWorld('desktop', {
   pdf: html => aufruf('pdf:erzeugen', html),
   speichere: (name, base64) => aufruf('datei:speichern', name, base64),
   beiZiel: rueckruf => ipcRenderer.on('ziel', (_e, ziel) => rueckruf(ziel)),
+  // In-App-Update der Oberfläche
+  web: { info: () => aufruf('web:info'), installieren: () => aufruf('web:installieren'), ok: () => aufruf('web:ok'), zuruecksetzen: () => aufruf('web:zuruecksetzen') },
 });

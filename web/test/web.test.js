@@ -1589,6 +1589,68 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await s.close();
 });
 
+test('In-App-Update: neue Oberfläche wird geladen, zu neue Fassung verlangt App-Update, Einstellungen „Updates“', async () => {
+  const s = await geraet(null, { bereich: 'uebersicht' });
+  let manifest = { stand: 9999999999, version: '9.9.9', minNativ: 1, dateien: {} };
+  await s.context().route('https://aysetransport.github.io/schaden/app-update.json*', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify(manifest) }));
+  await s.evaluate(() => {
+    window.__upd = { installiert: 0 };
+    window.desktop = { web: { info: async () => ({ nativ: 1, app: '5.13.0', gebuendelt: 1, aktiv: 0 }), installieren: async () => { window.__upd.installiert++; return { stand: 9999999999, neu: true }; },
+      ok: async () => true, zuruecksetzen: async () => true } };
+  });
+  await s.evaluate(() => updatePruefen(false));
+  assert.equal(await s.evaluate(() => window.__upd.installiert), 1, 'automatisch geladen');
+  await s.locator('#dialog', { hasText: 'Update geladen' }).waitFor();
+  assert.ok(await s.locator('#upd-neu').isVisible());
+  await s.locator('#dialog [data-zu]').click();
+  // Fassung braucht neue App → nichts laden, Hinweis
+  manifest = { ...manifest, minNativ: 2 };
+  await s.evaluate(() => { UPD.bereit = false; return updatePruefen(true); });
+  assert.equal(await s.evaluate(() => window.__upd.installiert), 1, 'nicht geladen');
+  assert.equal(await s.evaluate(() => UPD.appNoetig), true);
+  const karte = await s.evaluate(() => updateKarte());
+  assert.ok(karte.includes('Jetzt nach Updates suchen') && karte.includes('App-Update') && karte.includes('5.13.0'), karte);
+  // Modus „nicht suchen“
+  manifest = { ...manifest, minNativ: 1 };
+  await s.evaluate(() => { UPD.appNoetig = false; S.einstellungen.updateModus = 'AUS'; return updatePruefen(false); });
+  assert.equal(await s.evaluate(() => window.__upd.installiert), 1, 'AUS: nichts geladen');
+  await s.close();
+});
+
+test('Externe Rechnung und Leistungszeitraum: Betrag anteilig nach Tagen auf die Monate, auch nachträglich', async () => {
+  const s = await geraet(null, { bereich: 'finanzen' });
+  await s.evaluate(() => { const id = uuid(); S.auftraggeber[id] = { id, name: 'Altkunde GmbH', geaendertAm: jetztIso() }; nachAenderung(); });
+  await s.locator('[data-externe-rechnung]').first().click();
+  await s.locator('#extern-form [name=nummer]').fill('RE-2026-0815');
+  await s.locator('#extern-form [name=datum]').fill('2026-11-20');
+  await s.locator('#extern-form [name=netto]').fill('3100,00');
+  await s.locator('#extern-form [name=von]').fill('2026-10-01');
+  await s.locator('#extern-form [name=bis]').fill('2026-11-30');
+  await s.locator('#extern-form [name=status]').selectOption('BEZAHLT');
+  await s.locator('#extern-form button.voll').click();
+  await s.locator('#toast', { hasText: 'Externe Rechnung erfasst' }).waitFor();
+  const r = await s.evaluate(() => {
+    const b = Object.values(S.belege).find(x => x.nummer === 'RE-2026-0815');
+    const z = belegZeilen().filter(v => v.belegId === b.id).map(v => [v.datum.slice(0, 7), tourRechnung(v).erloes]);
+    return { extern: b.extern, status: b.status, umsatz: umsatzNetto(b), z, pdf: !!document.querySelector('[data-beleg-akt="pdf"]') };
+  });
+  assert.equal(r.extern, true); assert.equal(r.status, 'BEZAHLT'); assert.equal(r.umsatz, 310000);
+  assert.deepEqual(r.z, [['2026-10', 157541], ['2026-11', 152459]], '31 + 30 von 61 Tagen → 1.575,41 € Oktober, 1.524,59 € November');
+  assert.equal(r.pdf, false, 'externe Rechnung wird nicht als eigene gedruckt');
+  // eigene, schon bezahlte Rechnung: Zeitraum nachträglich setzen
+  const id = await s.evaluate(() => { const f = Object.keys(S.auftraggeber)[0], id = BelegAktionen.neu('RECHNUNG', f);
+    BelegAktionen.speichern({ ...S.belege[id], status: 'BEZAHLT', datum: '2026-11-05', positionen: JSON.stringify([{ bez: 'x', menge: 1, einzelCent: 90000 }]) }); return id; });
+  await s.evaluate(i => { location.hash = '#/beleg/' + i; }, id);
+  await s.locator('[data-leistung="leistungVon"]').fill('2026-09-01');
+  await s.locator('[data-leistung="leistungVon"]').dispatchEvent('change');
+  await s.locator('[data-leistung="leistungBis"]').fill('2026-11-30');
+  await s.locator('[data-leistung="leistungBis"]').dispatchEvent('change');
+  const z2 = await s.evaluate(i => belegZeilen().filter(v => v.belegId === i).map(v => [v.datum.slice(0, 7), tourRechnung(v).erloes]), id);
+  assert.deepEqual(z2, [['2026-09', 29670], ['2026-10', 30659], ['2026-11', 29671]], 'nach Tagen (30/31/30 von 91) – Summe bleibt 900 €');
+  assert.ok((await s.evaluate(i => belegHtml(S.belege[i]), id)).includes('Leistungszeitraum'));
+  await s.close();
+});
+
 test('Ergebnisrechnung: jede verbuchte Rechnung zählt genau einmal, Rest geschätzt – Summen stimmen überall', async () => {
   const s = await geraet(null, { bereich: 'auswertung' });
   const r = await s.evaluate(() => {

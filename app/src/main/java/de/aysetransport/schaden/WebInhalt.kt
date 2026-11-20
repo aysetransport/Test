@@ -20,19 +20,27 @@ object WebInhalt {
         return html.substring(0, kopf.range.last + 1) + "<script src=\"android.js\"></script>" + html.substring(kopf.range.last + 1)
     }
 
-    fun lader(context: Context): WebViewAssetLoader {
+    private fun mime(pfad: String) = when (pfad.substringAfterLast('.').lowercase()) {
+        "html" -> "text/html"; "js" -> "text/javascript"; "json", "webmanifest" -> "application/json"; "png" -> "image/png"; "css" -> "text/css"
+        else -> "application/octet-stream"
+    }
+
+    /** Liefert zuerst die per In-App-Update geladene Fassung (falls vorhanden), sonst die mitgelieferte. */
+    fun lader(context: Context, update: WebUpdate? = null): WebViewAssetLoader {
         val assets = WebViewAssetLoader.AssetsPathHandler(context)
         return WebViewAssetLoader.Builder()
             .setDomain(HOST)
             .addPathHandler("/") { pfad ->
-                when (pfad) {
-                    "", "index.html" -> {
-                        val html = context.assets.open("index.html").use { it.readBytes().toString(Charsets.UTF_8) }
+                val neu = if (pfad == "android.js") null else update?.datei(if (pfad == "") "index.html" else pfad)
+                when {
+                    pfad == "" || pfad == "index.html" -> {
+                        val html = (neu?.readBytes() ?: context.assets.open("index.html").use { it.readBytes() }).toString(Charsets.UTF_8)
                         WebResourceResponse("text/html", "utf-8", ByteArrayInputStream(mitBruecke(html).toByteArray(Charsets.UTF_8)))
                             .apply { responseHeaders = mapOf("Cache-Control" to "no-store") }
                     }
                     // Ohne Service Worker: die Dateien liegen ohnehin in der App, ein Cache würde nur Altes zeigen.
-                    "sw.js" -> WebResourceResponse("text/plain", "utf-8", 404, "Nicht vorhanden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                    pfad == "sw.js" -> WebResourceResponse("text/plain", "utf-8", 404, "Nicht vorhanden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                    neu != null -> WebResourceResponse(mime(pfad), "utf-8", neu.inputStream()).apply { responseHeaders = mapOf("Cache-Control" to "no-store") }
                     else -> assets.handle(pfad)
                 }
             }
