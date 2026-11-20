@@ -1589,6 +1589,56 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await s.close();
 });
 
+test('Ergebnisrechnung: jede verbuchte Rechnung zählt genau einmal, Rest geschätzt – Summen stimmen überall', async () => {
+  const s = await geraet(null, { bereich: 'auswertung' });
+  const r = await s.evaluate(() => {
+    const tag = heute(), firma = n => { const id = uuid(); S.auftraggeber[id] = { id, name: n, geaendertAm: jetztIso() }; return id; };
+    const fA = firma('A GmbH'), fB = firma('B KG');
+    Aktionen.crmSpeichern('preise', { firmaId: fA, bezeichnung: 'Tourpauschale', betragCent: 50000, gueltigAb: '2020-01-01' });
+    PersonalAktionen.speichern({ name: 'Ali', rolle: 'FAHRER' }); const ali = maZumNamen('Ali').id;
+    const tour = (extra) => TourAktionen.speichern({ datum: tag, kennzeichen: 'RS-FK 1', fahrerId: ali, auftraggeberId: fA, ...extra });
+    const rechnung = (fid, cent, status = 'OFFEN', extra = {}) => { const id = BelegAktionen.neu('RECHNUNG', fid);
+      BelegAktionen.speichern({ ...S.belege[id], status, datum: tag, positionen: JSON.stringify([{ bez: 'x', menge: 1, einzelCent: cent }]), ...extra }); return id; };
+    const binde = (tid, bid) => merke('touren', { ...S.touren[tid], belegId: bid, geaendertAm: jetztIso() });
+    // 1) Rechnung über 2 gefahrene Touren (1.200 €), 2) eine davon mit Gutschrift 200 €
+    const t1 = tour({ name: 'T1' }), t2 = tour({ name: 'T2' }), r1 = rechnung(fA, 120000, 'BEZAHLT'); binde(t1, r1); binde(t2, r1);
+    const g1 = BelegAktionen.gutschrift(S.belege[r1], false); BelegAktionen.speichern({ ...S.belege[g1], status: 'OFFEN', datum: tag, positionen: JSON.stringify([{ bez: 'g', menge: 1, einzelCent: 20000 }]) });
+    // 3) Pauschalrechnung ohne Tour (bezahlt) 3.000 €
+    const r2 = rechnung(fB, 300000, 'BEZAHLT');
+    // 4) gefahrene Tour ohne Rechnung → Preisliste 500 € geschätzt
+    const t3 = tour({ name: 'T3' });
+    // 5) Tour an Entwurf-Rechnung → geschätzt, Entwurf zählt nicht
+    const t4 = tour({ name: 'T4' }), r3 = rechnung(fA, 99900, 'ENTWURF'); binde(t4, r3);
+    // 6) Tour ohne Fahrer an verbuchter Rechnung 400 €
+    const t5 = TourAktionen.speichern({ datum: tag, auftraggeberId: fA, name: 'T5' }), r4 = rechnung(fA, 40000, 'OFFEN'); binde(t5, r4);
+    // 7) stornierte Rechnung zählt nicht
+    rechnung(fB, 777700, 'STORNIERT');
+    nachAenderung();
+    const zr = { von: plusTage(tag, -1), bis: plusTage(tag, 1) };
+    const zeilen = ergebnisZeilen(zr.von, zr.bis), rr = x => tourRechnung(x);
+    const ist = alle('belege').reduce((n, b) => n + umsatzNetto(b), 0);
+    const abgerechnet = zeilen.filter(x => !rr(x).geschaetzt).reduce((n, x) => n + rr(x).erloes, 0);
+    const geschaetzt = zeilen.filter(x => rr(x).geschaetzt).reduce((n, x) => n + rr(x).erloes, 0);
+    const q = QUELLEN.touren, qz = q.zeilen().filter(x => q.datum(x) >= zr.von && q.datum(x) <= zr.bis);
+    const baukasten = qz.reduce((n, x) => n + q.masse.erloes[1](x), 0);
+    const firmen = Object.fromEntries([fA, fB].map(f => [S.auftraggeber[f].name, zeilen.filter(x => x.auftraggeberId === f).reduce((n, x) => n + rr(x).erloes, 0)]));
+    return { ist, abgerechnet, geschaetzt, baukasten, firmen, t1: rr(S.touren[t1]).erloes, t2: rr(S.touren[t2]).erloes, t3: rr(S.touren[t3]), t4: rr(S.touren[t4]), t5: rr(S.touren[t5]).erloes,
+      guv: guvHtml(zr), firmaB: firmaTourenHtml(S.auftraggeber[fB]) };
+  });
+  assert.equal(r.ist, 120000 - 20000 + 300000 + 40000, 'Ist-Umsatz');
+  assert.equal(r.abgerechnet, r.ist, 'jede verbuchte Rechnung genau einmal');
+  assert.equal(r.t1 + r.t2, 100000, 'Rechnung minus Gutschrift auf die beiden Touren verteilt');
+  assert.equal(r.t5, 40000, 'Tour ohne Fahrer bekommt ihren Rechnungsanteil');
+  assert.ok(r.t3.geschaetzt && r.t3.erloes === 50000, 'ohne Rechnung: Preisliste, geschätzt');
+  assert.ok(r.t4.geschaetzt && r.t4.erloes === 50000, 'Entwurf: noch geschätzt');
+  assert.equal(r.geschaetzt, 100000);
+  assert.equal(r.baukasten, r.ist + r.geschaetzt, 'Baukasten = Ist + geschätzt');
+  assert.deepEqual(r.firmen, { 'A GmbH': 100000 + 40000 + 100000, 'B KG': 300000 });
+  assert.ok(r.guv.includes('5.400,00'), 'G&V-Erlös 5.400 € (4.400 Ist + 1.000 geschätzt)');
+  assert.ok(r.firmaB.includes('Gewinn/Verlust') && r.firmaB.includes('3.000,00'), 'Firma nur mit Pauschalrechnung');
+  await s.close();
+});
+
 test('Statistik: „Kosten pro Einsatz“ bei Mitarbeiter und Fahrzeug haben Vorrang', async () => {
   const s = await geraet(null, { bereich: 'auswertung' });
   const r = await s.evaluate(() => {
@@ -1627,7 +1677,7 @@ test('Statistik: „Kosten pro Einsatz“ bei Mitarbeiter und Fahrzeug haben Vor
   assert.equal(r.team, 2, 'zwei im Team');
   assert.equal(r.virtErloes, 250000, 'Rechnung ohne Tour zählt als Erlös');
   assert.ok(r.guvHatPauschale, 'Gewinn & Verlust zeigt Rechnungen ohne Tourbezug');
-  assert.equal(r.anzahl, 2, 'Rechnungen zählen nicht als Tour (2 Touren mit Fahrzeug/Team)');
+  assert.equal(r.anzahl, 3, 'Rechnungen zählen nicht als Tour (3 Touren: 2 mit Fahrzeug/Team, 1 mit Rechnungserlös)');
   assert.deepEqual(r.entwurfHinweis, { vor: true, zaehltVorher: false, nachher: 'OFFEN', zaehlt: true, weg: true }, 'Entwurf: Hinweis, nach Druck/PDF zählt er');
   assert.ok(r.firmaNurRechnung.includes('Gewinn/Verlust') && r.firmaNurRechnung.includes('1.200,00'), 'bezahlte Rechnung ohne Tour im Firmen-Gewinn: ' + r.firmaNurRechnung);
   assert.equal(r.gesamt, r.belegSumme, 'jede verbuchte Rechnung zählt genau einmal – auch mit Touren ohne Fahrer');
