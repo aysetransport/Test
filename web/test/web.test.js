@@ -1589,6 +1589,51 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await s.close();
 });
 
+test('E-Rechnung: XRechnung (CII) aus Rechnung und Gutschrift – Pflichtangaben, Schema und Geschäftsregeln; Empfang lesbar', async () => {
+  const s = await geraet(null, { bereich: 'finanzen' });
+  const r = await s.evaluate(() => {
+    S.einstellungen.bearbeiter = 'Max Mustermann';
+    const fid = uuid(); S.auftraggeber[fid] = { id: fid, name: 'Muster Möbel', rechtsform: 'GmbH', ustId: 'DE123456789', kundennummer: 'K-100', geaendertAm: jetztIso() };
+    const id = BelegAktionen.neu('RECHNUNG', fid);
+    BelegAktionen.speichern({ ...S.belege[id], status: 'OFFEN', datum: '2026-11-20', faelligAm: '2026-12-04', leistungVon: '2026-11-01', leistungBis: '2026-11-15',
+      positionen: JSON.stringify([{ bez: 'Tourpauschale Krefeld & Umgebung', einheit: 'pro Tour', menge: 12, einzelCent: 55025 }, { bez: 'Montage', einheit: 'Std', menge: 3.5, einzelCent: 4500 }]) });
+    const luecken = eRechnungLuecken(S.belege[id]);
+    S.einstellungen.rechnung = { ...rechnungsDaten(), name: 'Ayse Transport UG', strasse: 'Musterstraße 1', plzOrt: '12345 Musterstadt', telefon: '0123 456789', email: 'info@example.de',
+      ustId: 'DE987654321', steuer: '126/5000/1234', iban: 'DE89 3704 0044 0532 0130 00', bic: 'COBADEFFXXX', bank: 'Musterbank' };
+    Aktionen.crmSpeichern('adressen', { firmaId: fid, art: 'RECHNUNG', strasse: 'Industriestraße 5', plz: '47803', ort: 'Krefeld' });
+    Aktionen.crmSpeichern('ansprechpartner', { firmaId: fid, name: 'Buchhaltung', thema: 'Abrechnung', email: 'rechnung@example.com' });
+    const xml = eRechnungXml(S.belege[id]);
+    const gid = BelegAktionen.gutschrift(S.belege[id], false);
+    BelegAktionen.speichern({ ...S.belege[gid], status: 'OFFEN', datum: '2026-11-25', positionen: JSON.stringify([{ bez: 'Gutschrift Wartezeit', einheit: '', menge: 1, einzelCent: 5000 }]) });
+    const gxml = eRechnungXml(S.belege[gid]);
+    const gelesen = eRechnungLesen(xml);
+    return { luecken, nachher: eRechnungLuecken(S.belege[id]), xml, gxml, gelesen, summe: belegSummen(S.belege[id]) };
+  });
+  assert.ok(r.luecken.some(x => /Eigene Firmendaten/.test(x)) && r.luecken.some(x => /E-Mail des Kunden/.test(x)), 'fehlende Angaben werden genannt');
+  assert.deepEqual(r.nachher, [], 'alles da');
+  assert.equal(r.gelesen.nummer.length > 0, true); assert.equal(r.gelesen.verkaeufer.name, 'Ayse Transport UG'); assert.equal(r.gelesen.positionen.length, 2);
+  assert.equal(Math.round(Number(r.gelesen.brutto) * 100), r.summe.brutto, 'Empfang liest den Gesamtbetrag');
+  assert.ok(r.xml.includes('<ram:BillingSpecifiedPeriod>') && r.xml.includes('unitCode="HUR"') && r.xml.includes('xrechnung_3.0'));
+  assert.ok(r.gxml.includes('<ram:TypeCode>381</ram:TypeCode>') && r.gxml.includes('<ram:InvoiceReferencedDocument>'));
+  // offizielle Prüfung (Schema + EN 16931 + XRechnung), wenn die Regelwerke vorliegen (ERECHNUNG_REGELN)
+  const regeln = process.env.ERECHNUNG_REGELN;
+  if (regeln) {
+    const fs = require('node:fs'), os = require('node:os'), { execFileSync } = require('node:child_process');
+    for (const [name, xml] of [['rechnung', r.xml], ['gutschrift', r.gxml]]) {
+      const datei = path.join(os.tmpdir(), `xrechnung-${name}.xml`); fs.writeFileSync(datei, xml);
+      let aus;
+      try { aus = execFileSync('python3', [path.join(__dirname, '../../tools/erechnung-pruefen.py'), datei, regeln], { encoding: 'utf8' }); }
+      catch (e) { aus = e.stdout; }
+      const erg = JSON.parse(aus);
+      assert.deepEqual({ xsd: erg.xsd, fehler: erg.fehler }, { xsd: [], fehler: [] }, name + ': ' + aus);
+    }
+  }
+  // Empfang: Datei öffnen zeigt die Rechnung lesbar
+  await s.locator('#er-datei').setInputFiles({ name: 'eingang.xml', mimeType: 'application/xml', buffer: Buffer.from(r.xml) });
+  await s.locator('#er-ansicht', { hasText: 'Ayse Transport UG' }).waitFor();
+  await s.close();
+});
+
 test('In-App-Update: neue Oberfläche wird geladen, zu neue Fassung verlangt App-Update, Einstellungen „Updates“', async () => {
   const s = await geraet(null, { bereich: 'uebersicht' });
   let manifest = { stand: 9999999999, version: '9.9.9', minNativ: 1, dateien: {} };
@@ -1753,8 +1798,8 @@ test('Statistik: „Kosten pro Einsatz“ bei Mitarbeiter und Fahrzeug haben Vor
 test('Rechnung: Unterschrift vom Geschäftsführer statt Bearbeiter, Hinweis „elektronisch erstellt“', async () => {
   const s = await geraet(null, { bereich: 'finanzen' });
   const r = await s.evaluate(() => {
-    S.einstellungen.bearbeiter = 'Niclas Lueg';
-    S.einstellungen.rechnung = { ...rechnungsDaten(), name: 'Ayse Transport UG', geschaeftsfuehrer: 'Seyit Muhammed Batihan' };
+    S.einstellungen.bearbeiter = 'Max Mustermann';
+    S.einstellungen.rechnung = { ...rechnungsDaten(), name: 'Ayse Transport UG', geschaeftsfuehrer: 'Erika Musterfrau' };
     const fid = uuid(); S.auftraggeber[fid] = { id: fid, name: 'Kunde GmbH', geaendertAm: jetztIso() };
     const id = BelegAktionen.neu('RECHNUNG', fid);
     const b = S.belege[id], vorher = belegHtml(b);
@@ -1763,24 +1808,24 @@ test('Rechnung: Unterschrift vom Geschäftsführer statt Bearbeiter, Hinweis „
     S.einstellungen.rechnung = { ...rechnungsDaten(), hinweisElektronisch: '' };
     return { vorher, gf, gsUnterz: gs.unterzeichner, ohneHinweis: belegHtml(b) };
   });
-  assert.ok(r.vorher.includes('Niclas Lueg<br>Ayse Transport UG'), 'Standard: Bearbeiter');
+  assert.ok(r.vorher.includes('Max Mustermann<br>Ayse Transport UG'), 'Standard: Bearbeiter');
   assert.ok(r.vorher.includes('ohne Unterschrift und Stempel gültig'), 'Hinweis standardmäßig drin');
-  assert.ok(r.gf.includes('Seyit Muhammed Batihan<br>Geschäftsführer<br>Ayse Transport UG'), 'Geschäftsführer unterschreibt');
-  assert.ok(!r.gf.includes('Niclas Lueg<br>Ayse'), 'Bearbeiter nicht mehr in der Unterschrift');
-  assert.ok(r.gf.includes('Geschäftsführer: Seyit Muhammed Batihan'), 'Geschäftsführer in der Fußzeile');
+  assert.ok(r.gf.includes('Erika Musterfrau<br>Geschäftsführer<br>Ayse Transport UG'), 'Geschäftsführer unterschreibt');
+  assert.ok(!r.gf.includes('Max Mustermann<br>Ayse'), 'Bearbeiter nicht mehr in der Unterschrift');
+  assert.ok(r.gf.includes('Geschäftsführer: Erika Musterfrau'), 'Geschäftsführer in der Fußzeile');
   assert.equal(r.gsUnterz, 'GF', 'Gutschrift übernimmt die Unterschrift');
   assert.ok(!r.ohneHinweis.includes('ohne Unterschrift und Stempel'), 'Hinweis abschaltbar');
   // abweichende IBAN je Auftraggeber
   const bank = await s.evaluate(() => {
-    S.einstellungen.rechnung = { ...rechnungsDaten(), iban: 'DE07 3405 0000 0000 1655 71', bank: 'Stadtsparkasse Remscheid' };
+    S.einstellungen.rechnung = { ...rechnungsDaten(), iban: 'DE89 3704 0044 0532 0130 00', bank: 'Musterbank' };
     const b = Object.values(S.belege).find(x => x.art === 'RECHNUNG'), f = S.auftraggeber[b.firmaId];
     const normal = belegHtml(b);
     S.auftraggeber[b.firmaId] = { ...f, rechnungIban: 'DE28 1234 5678 9012 3456 78', rechnungBank: 'Volksbank', rechnungBic: 'GENODED1XXX' };
     return { normal, abw: belegHtml(b) };
   });
-  assert.ok(bank.normal.includes('IBAN DE07 3405') && bank.normal.includes('Stadtsparkasse'), 'Standard-IBAN');
+  assert.ok(bank.normal.includes('IBAN DE89 3704') && bank.normal.includes('Musterbank'), 'Standard-IBAN');
   assert.ok(bank.abw.includes('IBAN DE28 1234') && bank.abw.includes('Volksbank') && bank.abw.includes('GENODED1XXX'), 'abweichende IBAN');
-  assert.ok(!bank.abw.includes('DE07 3405'), 'Standard-IBAN nicht mehr drin');
+  assert.ok(!bank.abw.includes('DE89 3704'), 'Standard-IBAN nicht mehr drin');
   // Auswahl im Formular wird gespeichert
   const id = await s.evaluate(() => Object.keys(S.belege).find(k => S.belege[k].art === 'RECHNUNG'));
   await s.evaluate(i => { location.hash = '#/beleg/' + i; }, id);

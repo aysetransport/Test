@@ -29,3 +29,17 @@ for (const d of DATEIEN) {
 }
 fs.writeFileSync(path.join(WEB, 'app-update.json'), JSON.stringify({ stand, version, minNativ, dateien }, null, 1) + '\n');
 console.log(`app-update.json: Version ${version}, Stand ${stand}, minNativ ${minNativ}`);
+
+// Cloud-Skript für das Selbst-Update: Code.gs + appsscript.json auf die Webseite, mit Prüfsummen in cloud-update.json
+const CLOUD = path.join(__dirname, '..', 'cloud');
+const code = fs.readFileSync(path.join(CLOUD, 'Code.gs'), 'utf8'), manifest = fs.readFileSync(path.join(CLOUD, 'appsscript.json'), 'utf8');
+const api = Number((code.match(/var API_VERSION = (\d+);/) || [])[1]);
+if (!api) throw new Error('API_VERSION in Code.gs nicht gefunden');
+const sha = t => crypto.createHash('sha256').update(t, 'utf8').digest('hex');
+const altCloud = (() => { try { return JSON.parse(fs.readFileSync(path.join(WEB, 'cloud-update.json'), 'utf8')); } catch { return {}; } })();
+const cloudStand = altCloud.sha256 === sha(code) && altCloud.manifestSha256 === sha(manifest) ? altCloud.stand : stand;
+fs.mkdirSync(path.join(WEB, 'cloud'), { recursive: true });
+fs.writeFileSync(path.join(WEB, 'cloud', 'Code.gs'), code);
+fs.writeFileSync(path.join(WEB, 'cloud', 'appsscript.json'), manifest);
+fs.writeFileSync(path.join(WEB, 'cloud-update.json'), JSON.stringify({ stand: cloudStand, api, version, sha256: sha(code), manifestSha256: sha(manifest) }, null, 1) + '\n');
+console.log(`cloud-update.json: API ${api}, Stand ${cloudStand}`);
