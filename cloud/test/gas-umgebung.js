@@ -16,7 +16,7 @@ function iterator(liste) {
   return { hasNext: () => i < liste.length, next: () => liste[i++] };
 }
 
-function erstelleUmgebung() {
+function erstelleUmgebung(zusatz = {}) {
   let laufendeId = 1;
   let zeitversatz = 0;
   const nachId = new Map();
@@ -93,6 +93,8 @@ function erstelleUmgebung() {
       }),
     },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    // Selbst-Update: Tests geben UrlFetchApp/ScriptApp vor (sonst nicht vorhanden)
+    ...zusatz,
     ContentService: {
       MimeType: { JSON: 'application/json' },
       createTextOutput: text => ({ text, mime: 'text/plain', setMimeType(m) { this.mime = m; return this; }, getContent() { return this.text; } }),

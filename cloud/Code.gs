@@ -30,7 +30,7 @@ var SPERRE_MINUTEN = 60;
 
 var MAX_ANLAGE_BYTES = 25 * 1024 * 1024;
 var MAX_TEXT = 20000;
-var API_VERSION = 13; // 13: Hauptadmin, Cloud-PIN abschaltbar; 12: Auftragsnummer, Betrag und Ankunftszeit an Stopps (Rollkarte); 11: Stopps (mehrere Kunden je Tour); 10: Statuslink, Lieferavis-Felder und Kundenbewertung an Touren; 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
+var API_VERSION = 14; // 14: Selbst-Update, E-Rechnung (Leitweg-ID), externe Rechnungen/Leistungszeitraum; 13: Hauptadmin, Cloud-PIN abschaltbar; 12: Auftragsnummer, Betrag und Ankunftszeit an Stopps (Rollkarte); 11: Stopps (mehrere Kunden je Tour); 10: Statuslink, Lieferavis-Felder und Kundenbewertung an Touren; 9: Benutzer-Logins mit Rollen; 8: Zeiterfassung, Aufgaben, Tour-Status und Fahrtenbuch; 7: Tourenplanung und Personal; 6: Fuhrpark; 2: Kontaktdaten des Auftraggebers und Auftraggeber-Liste; 3: Zeichen des Auftraggebers; 4: CRM; 5: Verkaufschancen, Schlagworte
 
 /**
  * CRM-Tabellen: alle hängen über firmaId an einem Auftraggeber (Tabelle „auftraggeber“).
@@ -46,7 +46,7 @@ var CRM_TABELLEN = {
   chancen: { titel: 'text', wertCent: 'cent', phase: 'wort:ANFRAGE', erwartetAm: 'datum', notiz: 'text' },
   // Angebote und Rechnungen (bisher nur Web-/Windows-App); positionen als JSON-Text
   belege: { art: 'wort:RECHNUNG', nummer: 'text', datum: 'datum', faelligAm: 'datum', status: 'wort:OFFEN', positionen: 'text', mwstProzent: 'cent',
-    einleitung: 'text', schluss: 'text', bezahltCent: 'cent', bezahltAm: 'datum', mahnstufe: 'cent', bezug: 'text', notiz: 'text', fallId: 'text', unterzeichner: 'text', extern: 'bool', leistungVon: 'datum', leistungBis: 'datum' },
+    einleitung: 'text', schluss: 'text', bezahltCent: 'cent', bezahltAm: 'datum', mahnstufe: 'cent', bezug: 'text', notiz: 'text', fallId: 'text', unterzeichner: 'text', extern: 'bool', leistungVon: 'datum', leistungBis: 'datum', bestellnummer: 'text' },
   // Fuhrpark (ohne Firma): Fahrzeuge mit den Angaben aus dem Fahrzeugschein, Fristen und Fahrzeugakte.
   // Zahlen (km, kg, kW, Cent, Liter × 100) als ganze Zahlen.
   fahrzeuge: { kennzeichen: 'text', bezeichnung: 'text', art: 'wort:TRANSPORTER', status: 'wort:AKTIV', fahrer: 'text', kmStand: 'cent', wartungKm: 'cent',
@@ -85,7 +85,7 @@ var CRM_TABELLEN = {
     auftragNr: 'text', betragCent: 'cent', eta: 'text' }
 };
 /** Felder einer Firma, die nicht jede App kennt: Fehlen sie in einer Änderung, bleibt der bisherige Wert. */
-var FIRMEN_ZUSATZ = ['kundennummer', 'ustId', 'zahlungszielTage', 'schlagworte', 'rechnungBank', 'rechnungIban', 'rechnungBic'];
+var FIRMEN_ZUSATZ = ['kundennummer', 'ustId', 'zahlungszielTage', 'schlagworte', 'rechnungBank', 'rechnungIban', 'rechnungBic', 'leitwegId', 'eRechnungEmail'];
 var CRM_NAMEN = Object.keys(CRM_TABELLEN);
 
 // ============================== Einstieg ==============================
@@ -119,7 +119,10 @@ var GESCHUETZT = {
   stand: stand,
   sync: sync,
   anlageHochladen: anlageHochladen,
-  anlageLaden: anlageLaden
+  anlageLaden: anlageLaden,
+  cloudUpdateInfo: cloudUpdateInfo,
+  cloudAktualisieren: cloudAktualisieren,
+  cloudAutoUpdate: cloudAutoUpdate
 };
 
 function aufruf_(fn, args) {
@@ -358,8 +361,104 @@ function status() {
     api: API_VERSION,
     eingerichtet: !!PropertiesService.getScriptProperties().getProperty('PIN_HASH'),
     benutzer: Object.keys(benutzer_()).length > 0,
-    pinAus: pinAus_()
+    pinAus: pinAus_(),
+    selbstUpdate: true
   };
+}
+
+// ============================== Selbst-Update ==============================
+/**
+ * Das Skript aktualisiert sich selbst (ohne Kopieren in den Apps-Script-Editor): Es lädt Code.gs von der festen Adresse
+ * der Web-App, prüft die SHA-256-Prüfsumme aus cloud-update.json, ersetzt seinen Code über die Apps Script API, legt eine
+ * neue Version an und stellt sie auf DERSELBEN Bereitstellung bereit (Adresse bleibt gleich). Antwortet die neue Version
+ * nicht, wird die vorherige wieder bereitgestellt. Einmalig nötig: Apps Script API einschalten
+ * (script.google.com/home/usersettings) und appsscript.json mit den Berechtigungen script.projects/script.deployments.
+ */
+var UPDATE_BASIS = 'https://aysetransport.github.io/schaden/';
+var SKRIPT_API = 'https://script.googleapis.com/v1/projects/';
+
+function holeText_(url) {
+  var r = UrlFetchApp.fetch(url + (url.indexOf('?') < 0 ? '?' : '&') + 't=' + Date.now(), { muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('Update-Server nicht erreichbar (' + r.getResponseCode() + ')');
+  return r.getContentText();
+}
+function hex_(bytes) { return bytes.map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join(''); }
+function skriptApi_(methode, pfad, inhalt) {
+  var r = UrlFetchApp.fetch(SKRIPT_API + ScriptApp.getScriptId() + pfad, {
+    method: methode, contentType: 'application/json', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, payload: inhalt == null ? undefined : JSON.stringify(inhalt)
+  });
+  var code = r.getResponseCode(), text = r.getContentText();
+  if (code >= 300) {
+    if (code === 403 && /has not been used|disabled|SERVICE_DISABLED/i.test(text)) throw new Error('Bitte einmalig die Google Apps Script API einschalten: script.google.com/home/usersettings');
+    if (code === 403 || code === 401) throw new Error('Dem Skript fehlt die Berechtigung zum Selbst-Update – bitte appsscript.json einmalig mit den neuen Berechtigungen einsetzen und neu bereitstellen.');
+    throw new Error('Apps Script API: ' + code + ' ' + text.slice(0, 200));
+  }
+  return text ? JSON.parse(text) : {};
+}
+function bereitstellungsId_() {
+  var gemerkt = PropertiesService.getScriptProperties().getProperty('BEREITSTELLUNG');
+  if (gemerkt) return gemerkt;
+  var m = String(ScriptApp.getService().getUrl() || '').match(/\/s\/([^/]+)\/(exec|dev)/);
+  if (!m) throw new Error('Bereitstellung nicht gefunden');
+  return m[1];
+}
+function cloudUpdateInfo() {
+  nurHauptadmin_();
+  var props = PropertiesService.getScriptProperties(), m = null, fehler = '';
+  try { m = JSON.parse(holeText_(UPDATE_BASIS + 'cloud-update.json')); } catch (e) { fehler = String(e.message || e); }
+  return { api: API_VERSION, stand: Number(props.getProperty('CODE_STAND') || 0), verfuegbar: m, fehler: fehler,
+    automatisch: props.getProperty('AUTO_UPDATE') === '1', letzterFehler: props.getProperty('UPDATE_FEHLER') || '' };
+}
+function cloudAktualisieren(erzwingen) { nurHauptadmin_(); return selbstUpdate_(!!erzwingen); }
+function selbstUpdate_(erzwingen) {
+  var props = PropertiesService.getScriptProperties();
+  var m = JSON.parse(holeText_(UPDATE_BASIS + 'cloud-update.json'));
+  if (!erzwingen && Number(m.stand) <= Number(props.getProperty('CODE_STAND') || 0)) return { neu: false, api: API_VERSION };
+  var code = holeText_(UPDATE_BASIS + 'cloud/Code.gs');
+  if (hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, code, Utilities.Charset.UTF_8)) !== m.sha256) throw new Error('Prüfsumme des Cloud-Skripts stimmt nicht – Update abgebrochen');
+  var manifest = null;
+  if (m.manifestSha256) {
+    manifest = holeText_(UPDATE_BASIS + 'cloud/appsscript.json');
+    if (hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, manifest, Utilities.Charset.UTF_8)) !== m.manifestSha256) throw new Error('Prüfsumme von appsscript.json stimmt nicht');
+  }
+  var inhalt = skriptApi_('get', '/content'), dateien = inhalt.files || [];
+  var js = dateien.filter(function (f) { return f.type === 'SERVER_JS'; });
+  var ziel = js.filter(function (f) { return f.name === 'Code'; })[0] || (js.length === 1 ? js[0] : null);
+  if (!ziel) throw new Error('Datei „Code“ im Skriptprojekt nicht gefunden');
+  ziel.source = code;
+  if (manifest) dateien.forEach(function (f) { if (f.type === 'JSON' && f.name === 'appsscript') f.source = manifest; });
+  skriptApi_('put', '/content', { files: dateien });
+  var version = skriptApi_('post', '/versions', { description: 'Ayse CRM ' + (m.version || '') + ' (API ' + m.api + ')' }).versionNumber;
+  var id = bereitstellungsId_(), alt = skriptApi_('get', '/deployments/' + id);
+  var vorher = alt.deploymentConfig && alt.deploymentConfig.versionNumber;
+  var konfig = function (v, text) { return { deploymentConfig: { scriptId: ScriptApp.getScriptId(), versionNumber: v, manifestFileName: 'appsscript', description: text } }; };
+  skriptApi_('put', '/deployments/' + id, konfig(version, 'Ayse CRM ' + (m.version || '')));
+  // Antwortet die neue Version? Sonst zurück auf die vorherige.
+  var ok = false;
+  try {
+    var r = UrlFetchApp.fetch(ScriptApp.getService().getUrl(), { method: 'post', contentType: 'text/plain', payload: JSON.stringify({ fn: 'status', args: [] }), muteHttpExceptions: true });
+    var j = JSON.parse(r.getContentText()); ok = !!(j.ok && Number(j.ok.api) >= Number(m.api));
+  } catch (e) { ok = false; }
+  if (!ok) {
+    if (vorher) skriptApi_('put', '/deployments/' + id, konfig(vorher, 'zurückgesetzt nach fehlgeschlagenem Update'));
+    throw new Error('Die neue Version antwortet nicht – die vorherige Version ist wieder aktiv.');
+  }
+  props.setProperty('BEREITSTELLUNG', id);
+  props.setProperty('CODE_STAND', String(m.stand));
+  props.deleteProperty('UPDATE_FEHLER');
+  return { neu: true, vorher: API_VERSION, api: Number(m.api), version: version };
+}
+/** Zeitgesteuert (nachts): Update einspielen, Fehler merken statt abbrechen. */
+function nachtsUpdate() {
+  try { selbstUpdate_(false); } catch (e) { PropertiesService.getScriptProperties().setProperty('UPDATE_FEHLER', new Date().toISOString().slice(0, 16) + ' ' + String(e.message || e)); }
+}
+function cloudAutoUpdate(an) {
+  nurHauptadmin_();
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'nachtsUpdate') ScriptApp.deleteTrigger(t); });
+  if (an) ScriptApp.newTrigger('nachtsUpdate').timeBased().everyDays(1).atHour(3).create();
+  PropertiesService.getScriptProperties().setProperty('AUTO_UPDATE', an ? '1' : '0');
+  return !!an;
 }
 
 /** Legt die PIN fest – nur möglich, solange noch keine vergeben ist. */
@@ -572,6 +671,8 @@ function uebernehmeAuftraggeber_(d, roh, zurueck) {
   neu.rechnungBank = text_(roh.rechnungBank).slice(0, 100);
   neu.rechnungIban = text_(roh.rechnungIban).slice(0, 40);
   neu.rechnungBic = text_(roh.rechnungBic).slice(0, 15);
+  neu.leitwegId = text_(roh.leitwegId).slice(0, 60);
+  neu.eRechnungEmail = text_(roh.eRechnungEmail).slice(0, 200);
   // Ältere Apps schicken diese Felder nicht mit – dann den bisherigen Wert behalten statt ihn zu leeren.
   FIRMEN_ZUSATZ.forEach(function (k) { if (roh[k] === undefined && alt && alt[k] !== undefined) neu[k] = alt[k]; });
   if (alt && zeit_(neu.geaendertAm) <= zeit_(alt.geaendertAm)) {
