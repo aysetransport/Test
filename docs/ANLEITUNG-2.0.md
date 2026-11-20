@@ -184,6 +184,13 @@ Android-App kennt sie noch nicht (sie lässt sie unverändert).
 - **Abmelden und wieder Anmelden** funktioniert zuverlässig: oben auf „Anmeldung nötig“ tippen. Im PIN-Fenster gibt es jetzt „Später“.
 - **Schnellerer Cloud-Abgleich:** Die Nachfrage „gibt es Neues?“ liest die große Daten-Datei nicht mehr jedes Mal. Mail-Texte in Kontakthistorie und Fallverlauf werden gekürzt (die ganze Mail bleibt im Postfach), schon gespeicherte lange Mails einmalig auch. Die Anzeige springt bei reinen Hintergrund-Prüfungen nicht mehr auf „Gleiche ab …“.
 
+## Neu in 4.12 (Windows-App 4.12, Android-App 5.12, Web-App) – Kfz-Steuer und Versicherung im Fuhrpark
+
+- Je Fahrzeug: Kfz-Steuer pro Jahr, Kfz-Steuernummer, „fällig ab“ und Versicherungsbeitrag pro Jahr.
+- Neue Frist „Kfz-Steuer (nächste Abbuchung)“ – springt nach der Abbuchung von selbst auf den Jahrestag im nächsten Jahr.
+- Neue Dokumentart „Kfz-Steuerbescheid“; CSV-Export mit Steuer und Versicherungsbeitrag.
+- Cloud-Skript (Code.gs) muss ersetzt und neu bereitgestellt werden, sonst gehen die neuen Felder beim Abgleich verloren.
+
 ## Neu in 4.11 (Windows-App 4.11, Android-App 5.11, Web-App) – Übersetzungen ohne App-Update, Personalakte für die Disposition
 
 - **Übersetzungen kommen ohne App-Update**: Die Windows- und Android-App holen neuere Übersetzungen selbst aus dem Netz (nur Daten, kein Programmcode) und merken sie sich für offline. Die Web-App hatte sie schon immer frisch.
