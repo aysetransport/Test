@@ -52,11 +52,11 @@ var CRM_TABELLEN = {
   fahrzeuge: { kennzeichen: 'text', bezeichnung: 'text', art: 'wort:TRANSPORTER', status: 'wort:AKTIV', fahrer: 'text', kmStand: 'cent', wartungKm: 'cent',
     halter: 'text', marke: 'text', modell: 'text', fin: 'text', erstzulassung: 'datum', zgg: 'cent', leergewicht: 'cent', hsn: 'text', tsn: 'text',
     leistungKw: 'cent', kraftstoff: 'text', schadstoffklasse: 'text', achsen: 'cent', farbe: 'text', teil2Nr: 'text',
-    huBis: 'datum', spBis: 'datum', uvvBis: 'datum', tachoBis: 'datum', ladeBis: 'datum', wartungBis: 'datum', versicherungBis: 'datum', leasingBis: 'datum', steuerBis: 'datum', kfzSteuerCent: 'cent', kfzSteuerNr: 'text', kfzSteuerAb: 'datum', versicherungCent: 'cent',
+    huBis: 'datum', spBis: 'datum', uvvBis: 'datum', tachoBis: 'datum', ladeBis: 'datum', wartungBis: 'datum', versicherungBis: 'datum', leasingBis: 'datum', steuerBis: 'datum', kfzSteuerCent: 'cent', kfzSteuerNr: 'text', kfzSteuerAb: 'datum', versicherungCent: 'cent', einsatzKostenCent: 'cent',
     versicherung: 'text', versicherungsNr: 'text', leasinggeber: 'text', leasingRateCent: 'cent', notiz: 'text', leihfahrzeug: 'bool', aliase: 'text' },
   fahrzeugeintraege: { fahrzeugId: 'text', art: 'wort:WARTUNG', datum: 'datum', kmStand: 'cent', betragCent: 'cent', menge: 'cent', werkstatt: 'text', text: 'text' },
   // Personal und Tourenplanung (ohne Firma). Team und Auftraggeber einer Tour über Kennungen, Beifahrer durch Komma getrennt.
-  mitarbeiter: { name: 'text', rolle: 'wort:FAHRER', telefon: 'text', email: 'text', adresse: 'text', monteur: 'bool', nichtBei: 'text', aktiv: 'bool',
+  mitarbeiter: { einsatzKostenCent: 'cent', name: 'text', rolle: 'wort:FAHRER', telefon: 'text', email: 'text', adresse: 'text', monteur: 'bool', nichtBei: 'text', aktiv: 'bool',
     fuehrerschein: 'text', fuehrerscheinBis: 'datum', fahrerkarteBis: 'datum', modul95Bis: 'datum', eintritt: 'datum', austritt: 'datum', geburtstag: 'datum', notiz: 'text',
     personalnummer: 'text', anstellung: 'wort:VOLLZEIT', wochenstunden: 'cent', stundenlohnCent: 'cent', urlaubstage: 'cent', resturlaub: 'cent', notfallkontakt: 'text',
     fuehrerscheinKontrolle: 'datum', unterweisungBis: 'datum', arbeitsmedizinBis: 'datum', aliase: 'text', fahrerkarteNr: 'text' },
@@ -467,7 +467,7 @@ function sync(anfrage) {
         var alt = x && d.personaleintraege[String(x.id).toLowerCase()];
         return x && x.art !== 'LOHN' && !(alt && alt.art === 'LOHN');
       }).map(function (x) { var k = {}; Object.keys(x).forEach(function (f) { if (['bruttoCent', 'nettoCent', 'kostenCent', 'stunden'].indexOf(f) < 0) k[f] = x[f]; }); return k; });
-      anfrage.mitarbeiter = liste_(anfrage.mitarbeiter).map(function (m) { var alt = m && d.mitarbeiter[String(m.id).toLowerCase()]; if (m) m.stundenlohnCent = alt ? alt.stundenlohnCent : null; return m; });
+      anfrage.mitarbeiter = liste_(anfrage.mitarbeiter).map(function (m) { var alt = m && d.mitarbeiter[String(m.id).toLowerCase()]; if (m) { m.stundenlohnCent = alt ? alt.stundenlohnCent : null; m.einsatzKostenCent = alt ? alt.einsatzKostenCent : null; } return m; });
     }
     // Kennt das Gerät einen anderen Datenbestand (z. B. nach neu angelegtem Ordner), bekommt es alles.
     var seit = anfrage.kennung === d.kennung ? Math.max(0, Number(anfrage.seit) || 0) : 0;
@@ -508,7 +508,7 @@ function sync(anfrage) {
       // vollständige Personalakte ohne Lohnabrechnungen (die App gleicht sie für die Disposition komplett ab)
       antwort.personaleintraege = Object.keys(d.personaleintraege).map(function (k) { return d.personaleintraege[k]; }).filter(function (x) { return !x.geloescht && x.art !== 'LOHN'; });
       antwort.anlagen = antwort.anlagen.filter(function (a) { return !lohnAnlage_(d, a); });
-      antwort.mitarbeiter = antwort.mitarbeiter.map(function (m) { var k = {}; Object.keys(m).forEach(function (f) { if (f !== 'stundenlohnCent') k[f] = m[f]; }); return k; });
+      antwort.mitarbeiter = antwort.mitarbeiter.map(function (m) { var k = {}; Object.keys(m).forEach(function (f) { if (f !== 'stundenlohnCent' && f !== 'einsatzKostenCent') k[f] = m[f]; }); return k; });
       antwort.ansicht = 'DISPO';
     }
     antwort.rolle = rolle;

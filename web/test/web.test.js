@@ -1589,6 +1589,38 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await s.close();
 });
 
+test('Statistik: „Kosten pro Einsatz“ bei Mitarbeiter und Fahrzeug haben Vorrang', async () => {
+  const s = await geraet(null, { bereich: 'auswertung' });
+  const r = await s.evaluate(() => {
+    PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER' }); PersonalAktionen.speichern({ name: 'Veli Kaya', rolle: 'FAHRER' });
+    const ali = maZumNamen('Ali Demir'), veli = maZumNamen('Veli Kaya');
+    PersonalAktionen.speichern({ ...ali, einsatzKostenCent: 18000 });
+    FuhrparkAktionen.speichern({ kennzeichen: 'RS-FK 4201', art: 'LKW', status: 'AKTIV', einsatzKostenCent: 9500 });
+    const id = TourAktionen.speichern({ datum: heute(), kennzeichen: 'RS-FK 4201', fahrerId: ali.id, beifahrerIds: veli.id, beifahrer: veli.id, name: 'Test' });
+    const t = S.touren[id], k = tourRechnung(t);
+    // Rechnung ohne Tourbezug (Pauschale) fließt als Erlös in Gewinn & Verlust ein
+    const fid = uuid(); S.auftraggeber[fid] = { id: fid, name: 'Pauschal GmbH', geaendertAm: jetztIso() };
+    const rid = BelegAktionen.neu('RECHNUNG', fid);
+    BelegAktionen.speichern({ ...S.belege[rid], status: 'OFFEN', datum: heute(), positionen: JSON.stringify([{ bez: 'Montagepauschale November', menge: 1, einzelCent: 250000 }]) });
+    const zr = { von: plusTage(heute(), -1), bis: plusTage(heute(), 1) };
+    const virt = belegZeilen().find(v => v.belegId === rid), guv = guvHtml(zr);
+    const qz = QUELLEN.touren.zeilen().filter(r => r.datum === heute());
+    const anzahl = qz.reduce((n, r) => n + QUELLEN.touren.masse.anzahl[1](r), 0), erloes = qz.reduce((n, r) => n + QUELLEN.touren.masse.erloes[1](r), 0);
+    return { personal: k.personal, fahrzeug: k.fahrzeug, tag: kostenAnnahmen().personalTag, gefahren: k.gefahren, team: teamVon(t).length,
+      virtErloes: virt && tourRechnung(virt).erloes, guvHatPauschale: guv.includes('ohne Tourbezug'), anzahl, erloes, tourErloes: k.erloes };
+  });
+  assert.equal(r.team, 2, 'zwei im Team');
+  assert.equal(r.virtErloes, 250000, 'Rechnung ohne Tour zählt als Erlös');
+  assert.ok(r.guvHatPauschale, 'Gewinn & Verlust zeigt Rechnungen ohne Tourbezug');
+  assert.equal(r.anzahl, 1, 'Rechnung zählt nicht als Tour');
+  assert.equal(r.erloes, 250000 + r.tourErloes, 'Erlös im Baukasten enthält die Pauschale');
+  if (r.gefahren) {
+    assert.equal(r.fahrzeug, 9500, 'Fahrzeug: Kosten pro Einsatz');
+    assert.equal(r.personal, 18000 + r.tag, 'Ali mit Kosten pro Einsatz, Veli mit Tagessatz');
+  }
+  await s.close();
+});
+
 test('Rechnung: Unterschrift vom Geschäftsführer statt Bearbeiter, Hinweis „elektronisch erstellt“', async () => {
   const s = await geraet(null, { bereich: 'finanzen' });
   const r = await s.evaluate(() => {
