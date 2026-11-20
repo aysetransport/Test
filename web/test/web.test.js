@@ -685,7 +685,7 @@ test('Fuhrpark: Fahrzeug mit Fahrzeugschein und Fristen, Tanken, Dokument, Termi
 
   // Import aus eingelesenen Fahrzeugscheinen: neues Fahrzeug, vorhandenes nur ergänzen, Dokument nicht doppelt
   const datei = { name: 'fuhrpark.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({
-    fahrzeuge: [{ kennzeichen: 'RS-FK 4204', art: 'TRANSPORTER', marke: 'Mercedes-Benz', huBis: '2028-01-31', zgg: 3500 }, { kennzeichen: 'KR AT 123', marke: 'Andere Marke', farbe: 'Weiß' }],
+    fahrzeuge: [{ kennzeichen: 'RS-FK 4204', art: 'TRANSPORTER', marke: 'Mercedes-Benz', huBis: '2028-01-31', zgg: 3500, kfzSteuerCent: 21000, kfzSteuerNr: 'K126.8195.7793', kfzSteuerAb: '2024-10-29', steuerBis: '2024-12-09' }, { kennzeichen: 'KR AT 123', marke: 'Andere Marke', farbe: 'Weiß' }],
     dokumente: [{ kennzeichen: 'RS-FK 4204', art: 'Fahrzeugschein (Teil I)', name: 'Schein.pdf', mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.4').toString('base64') }] })) };
   await a.locator('#navi [data-bereich=fuhrpark]:visible').click();
   await a.locator('#fuhrpark-import').setInputFiles(datei);
@@ -694,6 +694,12 @@ test('Fuhrpark: Fahrzeug mit Fahrzeugschein und Fristen, Tanken, Dokument, Termi
   await a.locator('#toast', { hasText: '0 Fahrzeuge neu, 0 ergänzt, 0 Dokumente' }).waitFor();
   const imp = await a.evaluate(() => alle('fahrzeuge').map(z => [z.kennzeichen, z.marke, z.farbe || '', anlagenVon(z.id).length]).sort());
   assert.deepEqual(imp, [['KR-AT 123', 'Mercedes-Benz', 'Weiß', 1], ['RS-FK 4204', 'Mercedes-Benz', '', 1]]);
+  // Kfz-Steuer: Betrag und Nummer übernommen, Abbuchung wiederholt sich jedes Jahr am Jahrestag (nie überfällig)
+  const steuer = await a.evaluate(() => { const z = alle('fahrzeuge').find(x => x.kennzeichen === 'RS-FK 4204'); const f = fristenVon(z).find(x => x.feld === 'steuerBis');
+    const j = Number(heute().slice(0, 4)), erwartet = heute() <= j + '-10-29' ? j + '-10-29' : (j + 1) + '-10-29';
+    return { cent: z.kfzSteuerCent, nr: z.kfzSteuerNr, datum: f.datum, erwartet, tage: f.tage }; });
+  assert.equal(steuer.cent, 21000); assert.equal(steuer.nr, 'K126.8195.7793');
+  assert.equal(steuer.datum, steuer.erwartet); assert.ok(steuer.tage >= 0);
   await cloud.schliessen();
 });
 
