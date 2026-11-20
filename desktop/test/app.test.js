@@ -218,7 +218,8 @@ test('Windows-App: zweites Postfach, Zuordnung zur Firma, Eingang „Nicht zugeo
 
     // Postfach: „Nicht zugeordnet“ und von Hand dem Fall zuordnen – der Anhang wird Anlage des Falls.
     await s.locator('#navi [data-bereich=postfach]:visible').click();
-    await s.locator('[data-postfach-filter=OFFEN]', { hasText: 'Nicht zugeordnet (1)' }).waitFor();
+    await s.locator('.pf-o[data-pf-ordner="V:OFFEN"]', { hasText: 'Nicht zugeordnet' }).locator('.pf-n', { hasText: '1' }).waitFor();
+    await s.locator('.pf-o[data-pf-ordner="V:OFFEN"]').click();
     await s.locator('#postfach').getByText('Anfrage Umzug').click();
     await s.locator('[data-mail-zuordnen]').click();
     await s.locator('#zuordnen-form [name=fallId]').selectOption({ index: 1 });
@@ -232,8 +233,9 @@ test('Windows-App: zweites Postfach, Zuordnung zur Firma, Eingang „Nicht zugeo
     await s.evaluate(id => gehe('#/firma/' + id), ergebnis.firmaId);
     await s.locator('[data-oeffne="mailto:jana@seats-sofas.example"]').click();
     assert.equal(await s.locator('#mail-form [name=konto]').inputValue(), 'ALLGEMEIN');
-    assert.equal(await s.locator('#mail-form [name=an]').inputValue(), 'jana@seats-sofas.example');
-    assert.match(await s.locator('#mail-form [name=text]').inputValue(), /^Guten Tag Jana Krüger,/);
+    await s.locator('#mail-form [data-adressen=an] .vf-chip').first().waitFor();
+    assert.deepEqual(await s.locator('#mail-form [data-adressen=an] .vf-chip').evaluateAll(l => l.map(c => c.dataset.wert)), ['jana@seats-sofas.example']);
+    assert.match(await s.locator('#vf-editor').innerText(), /^Guten Tag Jana Krüger,/);
     await s.locator('#mail-form [name=betreff]').fill('Angebot 2027');
     await s.locator('#mail-senden').click();
     await s.getByText('E-Mail gesendet').first().waitFor({ timeout: 30000 });
@@ -266,7 +268,8 @@ test('Windows-App: Rechnung als PDF speichern und per E-Mail mit PDF-Anhang send
 
     // Per Mail: an die Abrechnung, mit PDF, danach gilt die Rechnung als versendet
     await s.locator('[data-beleg-akt=mail]').click();
-    assert.equal(await s.locator('#mail-form [name=an]').inputValue(), 'buchhaltung@seats-sofas.example');
+    await s.locator('#mail-form [data-adressen=an] .vf-chip').first().waitFor();
+    assert.deepEqual(await s.locator('#mail-form [data-adressen=an] .vf-chip').evaluateAll(l => l.map(c => c.dataset.wert)), ['buchhaltung@seats-sofas.example']);
     assert.match(await s.locator('#mail-form [name=betreff]').inputValue(), /^Rechnung R\d{4}-\d{4}$/);
     await s.locator('#mail-senden').click();
     await s.getByText('E-Mail gesendet').first().waitFor({ timeout: 30000 });

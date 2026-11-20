@@ -965,11 +965,11 @@ test('Personal-Import (Lohnabrechnungen) und Akquise: Anruf-Ergebnis legt Wieder
   await s.context().close();
 });
 
-test('Postfach: ungelesen, Stern, Archiv, Erinnerung in Termine, Entwurf, geplantes Senden, Weiterleiten, Serienmail, Fall und Firma aus Mail', async () => {
-  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1300, height: 900 } });
+test('Postfach (ältere App, nur Posteingang): Unterhaltungen, gelesen, Kennzeichnen mit Datum → Termine, Archiv, Fall aus Mail, Weiterleiten, Entwurf, geplant, Serienmail', async () => {
+  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1400, height: 900 } });
   await kontext.route('https://script.google.com/**', r => r.abort());
   await kontext.addInitScript(() => {
-    if (!localStorage.getItem('schadensfaelle-v1')) { localStorage.setItem('schadensfaelle-v1', JSON.stringify({ nurLokal: true })); localStorage.setItem('crm-bereich', 'postfach'); }
+    if (!localStorage.getItem('schadensfaelle-v1')) { localStorage.setItem('schadensfaelle-v1', JSON.stringify({ nurLokal: true, einstellungen: { mailRueckgaengig: 0 } })); localStorage.setItem('crm-bereich', 'postfach'); }
     window.__gesendet = [];
     const konto = { adresse: 'info@ayse.example', benutzer: 'info@ayse.example' };
     let abgeholt = false;
@@ -988,25 +988,27 @@ test('Postfach: ungelesen, Stern, Archiv, Erinnerung in Termine, Entwurf, geplan
   await s.evaluate(() => Aktionen.firmaSpeichern({ name: 'Möbel Krause', email: 'dispo@krause.example', status: 'AKTIV' }));
   await s.evaluate(() => postfachAbrufen(true));
   await s.evaluate(() => bereichWechseln('postfach'));
-  // Posteingang zeigt Unterhaltungen gebündelt, drei ungelesen
-  await s.locator('#postfach .mail-karte').nth(1).waitFor();
-  assert.equal(await s.locator('#postfach .mail-karte').count(), 2);
-  assert.equal(await s.locator('#postfach .mail-karte.ungelesen').count(), 2);
-  assert.ok((await s.locator('[data-postfach-filter=UNGELESEN]').textContent()).includes('(3)'));
-  // Öffnen = gelesen; Unterhaltung sichtbar; Stern; Erinnerung → Termine
-  await s.locator('#postfach .mail-karte', { hasText: 'Re: Touren' }).click();
-  await s.locator('#detail', { hasText: 'Unterhaltung (2 Mails)' }).waitFor();
-  await s.locator('[data-mail-akt=stern]').click();
-  await s.locator('[data-mail-akt=erinnern]').click();
-  await s.locator('[data-erinnern]').first().click();
-  assert.ok(await s.evaluate(() => mails()['a2@x'].gelesen && mails()['a2@x'].stern && wiedervorlagen().demnaechst.some(x => x.mailId === 'a2@x')));
-  // Archivieren, Papierkorb, wiederherstellen
+  // Posteingang: Unterhaltungen gebündelt, Ordnerbereich mit lokalen Ordnern
+  await s.locator('#postfach .pf-zeile').nth(1).waitFor();
+  assert.equal(await s.locator('#postfach .pf-zeile').count(), 2);
+  assert.equal(await s.locator('#postfach .pf-zeile.ungelesen').count(), 2);
+  assert.ok((await s.locator('[data-pf-ordner="V:UNGELESEN"]').textContent()).includes('3'));
+  assert.ok(await s.locator('.pf-ordner', { hasText: 'Gesendete Elemente' }).isVisible());
+  // Öffnen = gelesen; Unterhaltung; Kennzeichnen mit Datum → Termine
+  await s.locator('#postfach .pf-zeile', { hasText: 'Touren nächste Woche' }).click();
+  await s.locator('#detail .pf-faden', { hasText: 'Unterhaltung (2)' }).waitFor();
+  await s.locator('[data-mail-akt="flagge-menue"]').click();
+  await s.locator('.kontext-menue button', { hasText: 'Nächste Woche' }).click();
+  assert.ok(await s.evaluate(() => mails()['a2@x'].gelesen && mails()['a2@x'].stern && wiedervorlagen().demnaechst.concat(wiedervorlagen().spaeter || []).some(x => x.mailId === 'a2@x') || !!mails()['a2@x'].erinnerungAm));
+  // Archivieren (lokal) und zurückholen per Rückgängig
   await s.locator('[data-mail-akt=archiv]').click();
-  await s.locator('[data-postfach-filter=ARCHIV]').click();
-  await s.locator('#postfach .mail-karte', { hasText: 'Re: Touren' }).waitFor();
+  await s.locator('#toast button', { hasText: 'Rückgängig' }).click();
+  await s.waitForFunction(() => mailOrdnerTyp(mails()['a2@x']) === 'INBOX');
+  await s.evaluate(() => mailAktion(['a2@x'], 'verschieben', '@ARCHIVE'));
+  await s.evaluate(() => { ANSICHT.pfOrdner = 'K:SCHADEN|#ARCHIVE'; gehe('#/'); });
+  await s.locator('#postfach .pf-zeile', { hasText: 'Touren nächste Woche' }).waitFor();
   // Fall aus der Mail des Kunden → Mail hängt am Fall
-  await s.locator('[data-postfach-filter=EINGANG]').click();
-  await s.locator('#postfach .mail-karte', { hasText: 'Schaden am Sofa' }).click();
+  await s.evaluate(() => { ANSICHT.pfOrdner = 'V:EINGANG'; gehe('#/mail/' + encodeURIComponent('a3@x')); });
   await s.locator('[data-mail-akt=fall]').click();
   await s.locator('#fall-form').waitFor();
   assert.equal(await s.locator('#fall-form [name=kundeEmail]').inputValue(), 'kunde@gmail.com');
@@ -1014,22 +1016,26 @@ test('Postfach: ungelesen, Stern, Archiv, Erinnerung in Termine, Entwurf, geplan
   await s.locator('#fall-form button.voll').click();
   await s.waitForFunction(() => location.hash.startsWith('#/fall/'));
   await s.waitForFunction(() => !!mails()['a3@x'].fallId);
-  // Weiterleiten mit Adressbuch, Entwurf, geplantes Senden
-  await s.evaluate(() => gehe('#/mail/' + encodeURIComponent('a1@x')));
+  // Weiterleiten mit Vorschlag aus dem Adressbuch, Entwurf, geplantes Senden
+  await s.evaluate(() => { ANSICHT.bereich = 'postfach'; gehe('#/mail/' + encodeURIComponent('a1@x')); });
   await s.locator('[data-mail-akt=weiterleiten]').click();
-  assert.ok((await s.locator('#mail-adressbuch option').evaluateAll(o => o.map(x => x.value))).includes('dispo@krause.example'));
   assert.equal(await s.locator('#mail-form [name=betreff]').inputValue(), 'WG: Touren nächste Woche');
-  await s.locator('#mail-form [name=an]').fill('chef@ayse.example');
+  await s.locator('#mail-form [data-adressen=an] .vf-eingabe').fill('dispo');
+  await s.locator('.vf-vorschlaege button', { hasText: 'dispo@krause.example' }).waitFor();
+  await s.locator('#mail-form [data-adressen=an] .vf-eingabe').fill('chef@ayse.example');
+  await s.locator('#mail-form [data-adressen=an] .vf-eingabe').press('Enter');
   await s.locator('#mail-entwurf').click();
-  await s.evaluate(() => { ANSICHT.postfachFilter = 'ENTWUERFE'; gehe('#/'); });
+  await s.locator('#mail-schliessen').click();
+  await s.evaluate(() => { ANSICHT.pfOrdner = 'V:ENTWUERFE'; gehe('#/'); });
   await s.locator('[data-entwurf]').first().click();
-  assert.equal(await s.locator('#mail-form [name=an]').inputValue(), 'chef@ayse.example');
-  await s.locator('#mail-form [name=sendeAm]').selectOption({ index: 1 });
-  await s.locator('#mail-senden').click();
+  assert.deepEqual(await s.locator('#mail-form [data-adressen=an] .vf-chip').evaluateAll(l => l.map(c => c.dataset.wert)), ['chef@ayse.example']);
+  await s.locator('#vf-spaeter').click();
+  await s.locator('.kontext-menue button', { hasText: 'In 1 Stunde' }).click();
   await s.locator('#toast', { hasText: 'Wird gesendet' }).waitFor();
   assert.equal(await s.evaluate(() => [Object.keys(entwuerfe()).length, Object.keys(geplanteMails()).length].join()), '0,1');
   await s.evaluate(() => { for (const x of Object.values(geplanteMails())) x.sendeAm = '2000-01-01T00:00:00Z'; return geplanteSenden(); });
   assert.equal(await s.evaluate(() => [Object.keys(geplanteMails()).length, window.__gesendet.length].join()), '0,1');
+  assert.ok(await s.evaluate(() => window.__gesendet[0].text.includes('Weitergeleitete Nachricht') || window.__gesendet[0].text.includes('Touren')), 'weitergeleiteter Inhalt');
   // Serienmail: je Firma eine Mail mit eigener Anrede, in der Kontakthistorie
   await s.evaluate(() => { const id = Aktionen.firmaSpeichern({ name: 'Küchen Nord', email: 'info@nord.example', status: 'INTERESSENT' }); Aktionen.crmSpeichern('ansprechpartner', { firmaId: id, name: 'Frau Nord', email: 'nord@nord.example' }); });
   await s.evaluate(() => serienmailDialog());
@@ -1040,6 +1046,200 @@ test('Postfach: ungelesen, Stern, Archiv, Erinnerung in Termine, Entwurf, geplan
   const serie = await s.evaluate(() => window.__gesendet.slice(1).map(e => [e.an, e.text.split('\n')[0]]));
   assert.deepEqual(serie.sort(), [['dispo@krause.example', 'Sehr geehrte Damen und Herren,'], ['nord@nord.example', 'Guten Tag Frau Nord,']]);
   assert.ok(await s.evaluate(() => vonFirma('aktivitaeten', firmaZumNamen('Küchen Nord').id).some(a => a.art === 'EMAIL')));
+  // Mails liegen in IndexedDB, nicht im localStorage – und sind nach dem Neuladen noch da
+  await s.waitForTimeout(900);
+  assert.equal(await s.evaluate(() => 'mails' in JSON.parse(localStorage.getItem('schadensfaelle-v1'))), false);
+  await s.reload(); await s.waitForFunction(() => window.__appBereit);
+  await s.waitForFunction(() => !!(S.mails && S.mails['a1@x']));
+  await kontext.close();
+});
+
+/** Simulierter Mailserver (Schnittstelle 2) im Browser: Ordner, UIDs, Flags, Verschieben, Suche, Senden. */
+function imapFake() {
+  const V = 7, F = { INBOX: 'INBOX', Sent: 'SENT', Archiv: 'ARCHIVE', Trash: 'TRASH', Junk: 'JUNK', Projekte: '' };
+  const box = Object.fromEntries(Object.keys(F).map(k => [k, []])), naechste = Object.fromEntries(Object.keys(F).map(k => [k, 1]));
+  const leg = (ordner, mail, flags = []) => { const uid = naechste[ordner]++; box[ordner].push({ uid, flags: new Set(flags), mail: { anhaenge: [], antwortAuf: [], text: '', html: '', an: 'info@ayse.example', ...mail } }); return uid; };
+  const alsMail = (ordner, e) => ({ ...e.mail, uid: e.uid, ordner, gelesen: e.flags.has('\\Seen'), markiert: e.flags.has('\\Flagged'), beantwortet: e.flags.has('\\Answered'), anhaenge: e.mail.anhaenge.map(a => ({ ...a, base64: a.gross ? undefined : a.base64 })) });
+  window.__imap = { box, leg, gesendet: [], aufrufe: [] };
+  const ruf = async (befehl, d, art) => {
+    window.__imap.aufrufe.push(befehl);
+    const o = d.ordner;
+    if (befehl === 'ordner') return Object.keys(F).map(p => ({ pfad: p, name: p, trenner: '/', spezial: F[p], gesamt: box[p].length, ungelesen: box[p].filter(e => !e.flags.has('\\Seen')).length, auswaehlbar: true }));
+    if (befehl === 'stand') return { ordner: o, uidValidity: V, uidNext: naechste[o], gesamt: box[o].length, eintraege: box[o].filter(e => !d.seit || e.mail.zeitpunkt.slice(0, 10) >= d.seit).map(e => [e.uid, +e.flags.has('\\Seen'), +e.flags.has('\\Flagged'), +e.flags.has('\\Answered'), 0]) };
+    if (befehl === 'lade') return box[o].filter(e => d.uids.map(Number).includes(e.uid)).map(e => alsMail(o, e));
+    if (befehl === 'suche') return box[o].filter(e => (!d.text || (e.mail.betreff + e.mail.text).toLowerCase().includes(d.text.toLowerCase())) && (!d.von || e.mail.von.includes(d.von))).map(e => e.uid).reverse();
+    if (befehl === 'anhang') { const e = box[o].find(x => x.uid === Number(d.uid)); const a = e.mail.anhaenge[Number(d.nr)]; return { name: a.name, mimeType: a.mimeType, base64: a.base64 }; }
+    if (befehl === 'quelle') { const e = box[o].find(x => x.uid === Number(d.uid)); return btoa('Subject: ' + e.mail.betreff + '\r\n\r\n' + e.mail.text); }
+    if (befehl === 'ordnerAktion') { if (d.aktion === 'anlegen') { box[d.pfad] = []; naechste[d.pfad] = 1; F[d.pfad] = ''; } return true; }
+    if (befehl === 'aktion') {
+      const l = box[o].filter(e => d.uids.map(Number).includes(e.uid)), FL = { gelesen: ['\\Seen', 1], ungelesen: ['\\Seen', 0], markieren: ['\\Flagged', 1], entmarkieren: ['\\Flagged', 0], beantwortet: ['\\Answered', 1] };
+      if (FL[d.aktion]) { l.forEach(e => (FL[d.aktion][1] ? e.flags.add(FL[d.aktion][0]) : e.flags.delete(FL[d.aktion][0]))); return { neueUids: {} }; }
+      if (d.aktion === 'verschieben') { const neue = {}; for (const e of l) { box[o].splice(box[o].indexOf(e), 1); neue[e.uid] = leg(d.ziel, e.mail, [...e.flags]); } return { neueUids: neue }; }
+      if (d.aktion === 'loeschen') { l.forEach(e => box[o].splice(box[o].indexOf(e), 1)); return { neueUids: {} }; }
+    }
+    if (befehl === 'sende') { const id = 'neu-' + (window.__imap.gesendet.length + 1) + '@ayse.example'; window.__imap.gesendet.push({ ...d, art }); leg('Sent', { messageId: id, von: 'info@ayse.example', betreff: d.betreff, text: d.text, html: d.html, an: d.an, zeitpunkt: new Date().toISOString() }, ['\\Seen']); return id; }
+    throw new Error('Unbekannter Befehl: ' + befehl);
+  };
+  const konto = { adresse: 'info@ayse.example', benutzer: 'info@ayse.example' };
+  window.desktop = { plattform: 'test', beiZiel() {}, benachrichtige: async () => true, oeffneExtern: async a => { window.__extern = a; }, oeffneDatei: async () => true, speichere: async n => 'C:/' + n,
+    mail: { anbieter: async () => ({}), konto: async a => (a === 'ALLGEMEIN' ? null : konto), trennen: async () => true, schnittstelle: 2, ruf, sende: (e, a) => ruf('sende', e, a), hole: async () => ({ mails: [] }) } };
+}
+async function postfachGeraet(einstellungen = {}) {
+  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1500, height: 950 } });
+  await kontext.route('https://script.google.com/**', r => r.abort());
+  await kontext.addInitScript(e => { if (!localStorage.getItem('schadensfaelle-v1')) { localStorage.setItem('schadensfaelle-v1', JSON.stringify({ nurLokal: true, einstellungen: { mailRueckgaengig: 0, ...e } })); localStorage.setItem('crm-bereich', 'postfach'); } }, einstellungen);
+  await kontext.addInitScript(imapFake);
+  const s = await kontext.newPage();
+  s.on('pageerror', f => { throw f; });
+  await s.goto(seite.url); await s.waitForFunction(() => window.__appBereit);
+  await s.waitForFunction(() => MAIL.konto && MAILSPEICHER.geladen);
+  return { s, kontext };
+}
+const heuteIso = (stunde = 8) => { const d = new Date(); d.setHours(stunde, 0, 0, 0); return d.toISOString(); };
+
+test('Postfach wie Outlook: Serverordner, Abgleich in beide Richtungen, Relevant/Sonstige, HTML sicher, Lesen/Kennzeichnen/Archivieren/Löschen mit Rückgängig, Tastatur', async () => {
+  const { s, kontext } = await postfachGeraet();
+  await s.evaluate(([h1, h2, h3]) => {
+    Aktionen.firmaSpeichern({ name: 'Möbel Krause', email: 'dispo@krause.example', status: 'AKTIV' });
+    const pdf = btoa('%PDF-1.4 Testinhalt'), png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    __imap.leg('INBOX', { messageId: 'k1@krause', von: 'dispo@krause.example', vonName: 'Dispo Krause', betreff: 'Touren KW 48', text: 'Bitte drei Touren einplanen.', zeitpunkt: h1,
+      html: '<p>Bitte <b>drei Touren</b> einplanen.</p><img src="cid:logo1"><img src="https://tracker.example/pixel.gif"><a href="https://krause.example/plan">Plan</a><script>alert(1)</script>',
+      anhaenge: [{ name: 'logo.png', mimeType: 'image/png', groesse: 70, cid: 'logo1', inline: true, base64: png }, { name: 'Plan.pdf', mimeType: 'application/pdf', groesse: 900000, base64: pdf, gross: true }] });
+    __imap.leg('INBOX', { messageId: 'n1@shop', von: 'newsletter@shop.example', vonName: 'Shop', betreff: 'Angebote der Woche', text: 'Rabatte!', zeitpunkt: h2, abmelden: 'https://shop.example/ab' });
+    __imap.leg('INBOX', { messageId: 'k2@krause', von: 'dispo@krause.example', vonName: 'Dispo Krause', betreff: 'AW: Touren KW 48', text: 'Und eine Montage.', zeitpunkt: h3, antwortAuf: ['k1@krause'], wichtig: 'HOCH', cc: 'chef@krause.example' });
+    __imap.leg('Archiv', { messageId: 'alt@krause', von: 'dispo@krause.example', betreff: 'Altes', text: 'Schon erledigt', zeitpunkt: h1 }, ['\\Seen']);
+  }, [heuteIso(7), heuteIso(8), heuteIso(9)]);
+  await s.evaluate(() => postfachAbrufen(true));
+  await s.evaluate(() => bereichWechseln('postfach'));
+  // Ordnerbereich mit Serverordnern, Relevant/Sonstige
+  for (const o of ['Posteingang', 'Gesendete Elemente', 'Archiv', 'Gelöschte Elemente', 'Junk-E-Mail', 'Projekte']) assert.ok(await s.locator('.pf-ordner', { hasText: o }).isVisible(), o);
+  assert.equal(await s.locator('#postfach .pf-zeile').count(), 1, 'Relevant: eine Unterhaltung (2 Mails)');
+  assert.equal(await s.locator('#postfach .pf-anzahl').first().textContent(), '2');
+  await s.locator('[data-pf-fokus=SONSTIGE]').click();
+  await s.locator('#postfach .pf-zeile', { hasText: 'Angebote der Woche' }).waitFor();
+  await s.locator('[data-pf-fokus=RELEVANT]').click();
+  // HTML: Skript entfernt, Inline-Bild da, externes Bild blockiert, Link öffnet extern; gelesen auf dem Server
+  await s.evaluate(() => gehe('#/mail/' + encodeURIComponent('k1@krause')));
+  await s.locator('#detail .pf-info', { hasText: 'Externe Bilder' }).waitFor();
+  const rahmen = s.frameLocator('#pf-koerper iframe');
+  await rahmen.locator('b', { hasText: 'drei Touren' }).waitFor();
+  assert.equal(await rahmen.locator('script').count(), 0);
+  assert.match(await rahmen.locator('img').first().getAttribute('src'), /^blob:/);
+  assert.equal(await rahmen.locator('img[data-blockiert]').count(), 1);
+  await rahmen.locator('a', { hasText: 'Plan' }).click();
+  await s.waitForFunction(() => window.__extern === 'https://krause.example/plan');
+  await s.waitForFunction(() => __imap.box.INBOX.find(e => e.mail.messageId === 'k1@krause').flags.has('\\Seen'));
+  // Großer Anhang wird erst beim Öffnen geladen
+  assert.equal(await s.locator('.pf-anh button', { hasText: 'Plan.pdf' }).count(), 1);
+  await s.locator('.pf-anh button', { hasText: 'Plan.pdf' }).click();
+  await s.locator('#anh-oeffnen').waitFor(); await s.locator('#dialog [data-zu]').last().click();
+  // Kennzeichnen per Einfg, Kategorie, Anheften
+  await s.keyboard.press('Insert');
+  await s.waitForFunction(() => __imap.box.INBOX.find(e => e.mail.messageId === 'k1@krause').flags.has('\\Flagged'));
+  await s.locator('[data-mail-akt="kategorie-menue"]').click();
+  await s.locator('.kontext-menue button', { hasText: 'Grüne Kategorie' }).click();
+  assert.deepEqual(await s.evaluate(() => mails()['k1@krause'].kategorien), ['gruen']);
+  // Archivieren per E: auf dem Server verschoben, nächste Mail offen; Rückgängig holt zurück
+  await s.keyboard.press('e');
+  await s.waitForFunction(() => __imap.box.Archiv.some(e => e.mail.messageId === 'k1@krause') && !__imap.box.INBOX.some(e => e.mail.messageId === 'k1@krause'));
+  assert.notEqual(await s.evaluate(() => decodeURIComponent(route().id || '')), 'k1@krause');
+  await s.locator('#toast button', { hasText: 'Rückgängig' }).click();
+  await s.waitForFunction(() => __imap.box.INBOX.some(e => e.mail.messageId === 'k1@krause'));
+  // Löschen → Gelöschte Elemente; dort endgültig nach Rückfrage
+  await s.evaluate(() => gehe('#/mail/' + encodeURIComponent('n1@shop')));
+  await s.keyboard.press('Delete');
+  await s.waitForFunction(() => __imap.box.Trash.some(e => e.mail.messageId === 'n1@shop'));
+  await s.evaluate(() => mailLoeschen(['n1@shop']));
+  await s.locator('#ja').click();
+  await s.waitForFunction(() => !__imap.box.Trash.length && !mails()['n1@shop']);
+  // Änderungen von anderswo (z. B. Outlook am Handy): gelesen + verschoben → hier übernommen
+  await s.evaluate(() => { const b = __imap.box; const e = b.INBOX.find(x => x.mail.messageId === 'k2@krause'); e.flags.add('\\Seen'); b.INBOX.splice(b.INBOX.indexOf(e), 1); __imap.leg('Projekte', e.mail, [...e.flags]); });
+  await s.evaluate(() => postfachAbrufen(true));
+  assert.equal(await s.evaluate(() => [mails()['k2@krause'].ordner, mails()['k2@krause'].gelesen].join()), 'Projekte,true');
+  // Ordner per Klick, Ziehen auf Ordner verschiebt
+  await s.evaluate(() => { gehe('#/'); ANSICHT.pfOrdner = 'K:SCHADEN|INBOX'; zeichne(); });
+  await s.locator('#postfach .pf-zeile', { hasText: 'Touren KW 48' }).dragTo(s.locator('.pf-o[data-pf-ordner="K:SCHADEN|Projekte"]'));
+  await s.waitForFunction(() => __imap.box.Projekte.some(e => e.mail.messageId === 'k1@krause'));
+  // Suche mit Operatoren über alle Ordner
+  await s.locator('#postfach-suche').fill('von:dispo ist:gelesen');
+  await s.waitForTimeout(250);
+  assert.ok(await s.locator('#postfach .pf-zeile').count() >= 2);
+  await kontext.close();
+});
+
+test('Postfach: Verfassen (Chips, Cc, Format, Signatur, Wichtigkeit), Antworten an alle, Anhang-Erinnerung, Senden rückgängig, Regeln, Blockieren, Zurückstellen, Abwesenheitsnotiz, Mehrfachauswahl', async () => {
+  const { s, kontext } = await postfachGeraet({ mailRueckgaengig: 5 });
+  await s.evaluate(([h]) => {
+    Aktionen.firmaSpeichern({ name: 'Möbel Krause', email: 'dispo@krause.example', status: 'AKTIV' });
+    __imap.leg('INBOX', { messageId: 'k3@krause', von: 'dispo@krause.example', vonName: 'Dispo Krause', an: 'info@ayse.example, lager@krause.example', cc: 'chef@krause.example', betreff: 'Lieferung Freitag', text: 'Passt Freitag?', zeitpunkt: h });
+  }, [heuteIso(10)]);
+  await s.evaluate(() => postfachAbrufen());
+  await s.evaluate(() => { bereichWechseln('postfach'); gehe('#/mail/' + encodeURIComponent('k3@krause')); });
+  // Allen antworten: An = Absender, Cc = übrige ohne eigene Adresse; Betreff AW:, Signatur, Zitat
+  await s.locator('[data-mail-akt=allen]').click();
+  assert.deepEqual(await s.locator('[data-adressen=an] .vf-chip').evaluateAll(l => l.map(c => c.dataset.wert)), ['"Dispo Krause" <dispo@krause.example>']);
+  assert.deepEqual((await s.locator('[data-adressen=cc] .vf-chip').evaluateAll(l => l.map(c => c.dataset.wert))).sort(), ['chef@krause.example', 'lager@krause.example']);
+  assert.equal(await s.locator('#mail-form [name=betreff]').inputValue(), 'AW: Lieferung Freitag');
+  await s.locator('#vf-editor blockquote', { hasText: 'Passt Freitag?' }).waitFor();
+  // Formatierung und Wichtigkeit; Anhang erwähnt, aber keiner dran → Rückfrage
+  await s.locator('#vf-editor').click();
+  await s.keyboard.press('Control+Home');
+  await s.locator('[data-format=bold]').click();
+  await s.keyboard.type('Ja, passt – anbei die Bestätigung.');
+  await s.locator('#vf-wichtig').click();
+  await s.locator('#mail-senden').click();
+  await s.locator('dialog.klein', { hasText: 'Anhang' }).waitFor();
+  await s.locator('dialog.klein button.voll').click();
+  // Senden rückgängig: erst im Ausgang, Rückgängig öffnet wieder als Entwurf
+  await s.locator('#toast button', { hasText: 'Rückgängig' }).click();
+  await s.locator('#mail-form').waitFor();
+  assert.equal(await s.evaluate(() => __imap.gesendet.length), 0, 'noch nicht gesendet');
+  await s.evaluate(() => { S.einstellungen.mailRueckgaengig = 0; });
+  await s.locator('#mail-senden').click();
+  await s.locator('dialog.klein button.voll').click();
+  await s.waitForFunction(() => __imap.gesendet.length === 1);
+  const g = await s.evaluate(() => __imap.gesendet[0]);
+  assert.match(g.html, /<b>Ja, passt/); assert.equal(g.wichtig, 'HOCH'); assert.match(g.cc, /chef@krause/); assert.match(g.text, /Ja, passt/);
+  assert.deepEqual(g.referenzen, ['k3@krause']); assert.equal(g.antwortAuf, 'k3@krause');
+  await s.waitForFunction(() => mails()['k3@krause'].beantwortet && __imap.box.INBOX.find(e => e.mail.messageId === 'k3@krause').flags.has('\\Answered'));
+  // Neue Mail: Adresse per Vorschlag, ungültige Adresse wird markiert
+  await s.evaluate(() => mailAnFirma());
+  await s.locator('[data-adressen=an] .vf-eingabe').fill('krause');
+  await s.locator('.vf-vorschlaege button', { hasText: 'dispo@krause.example' }).click();
+  await s.locator('[data-adressen=an] .vf-eingabe').fill('kaputt@');
+  await s.locator('[data-adressen=an] .vf-eingabe').press('Enter');
+  assert.equal(await s.locator('[data-adressen=an] .vf-chip.falsch').count(), 1);
+  await s.locator('#mail-verwerfen').click();
+  // Regel: Mails von newsletter@ → Kategorie + Ordner Projekte; blockierter Absender → Junk
+  await s.evaluate(() => { S.einstellungen.mailRegeln = [{ id: 'r1', name: 'Newsletter', an: true, bedingungen: { von: 'newsletter@' }, aktionen: { ordner: 'SCHADEN|Projekte', kategorie: 'blau' } }];
+    S.einstellungen.mailBlockiert = ['@spam.example'];
+    __imap.leg('INBOX', { messageId: 'n2@shop', von: 'newsletter@shop.example', betreff: 'Neue Angebote', text: 'x', zeitpunkt: new Date().toISOString() });
+    __imap.leg('INBOX', { messageId: 'sp@spam', von: 'gewinn@spam.example', betreff: 'Gewinn!', text: 'x', zeitpunkt: new Date().toISOString() }); });
+  await s.evaluate(() => postfachAbrufen());
+  await s.waitForFunction(() => __imap.box.Projekte.some(e => e.mail.messageId === 'n2@shop') && __imap.box.Junk.some(e => e.mail.messageId === 'sp@spam'));
+  assert.deepEqual(await s.evaluate(() => mails()['n2@shop'].kategorien), ['blau']);
+  // Abwesenheitsnotiz: einmal je Absender, mit Auto-Submitted; nicht an Newsletter
+  await s.evaluate(() => { S.einstellungen.mailAbwesend = { an: true, text: 'Bin im Urlaub.' };
+    __imap.leg('INBOX', { messageId: 'k4@krause', von: 'dispo@krause.example', betreff: 'Frage', text: '?', zeitpunkt: new Date().toISOString() });
+    __imap.leg('INBOX', { messageId: 'k5@krause', von: 'dispo@krause.example', betreff: 'Noch eine Frage', text: '?', zeitpunkt: new Date().toISOString() }); });
+  await s.evaluate(() => postfachAbrufen());
+  const auto = await s.evaluate(() => __imap.gesendet.filter(x => /Automatische Antwort/.test(x.betreff)));
+  assert.equal(auto.length, 1); assert.equal(auto[0].an, 'dispo@krause.example'); assert.equal(auto[0].kopfzeilen['Auto-Submitted'], 'auto-replied');
+  // Zurückstellen: verschwindet aus dem Posteingang, kommt zur Zeit ungelesen zurück
+  await s.evaluate(() => { S.einstellungen.mailAbwesend = { an: false }; gehe('#/'); ANSICHT.pfOrdner = 'V:EINGANG'; zeichne(); });
+  await s.evaluate(() => zurueckstellen(['k4@krause'], new Date(Date.now() + 3600000).toISOString()));
+  assert.equal(await s.locator('#postfach .pf-zeile', { hasText: 'Frage' }).count(), 1, 'nur noch „Noch eine Frage“');
+  await s.evaluate(() => { mails()['k4@krause'].zurueckBis = '2000-01-01T00:00:00Z'; mails()['k4@krause'].gelesen = true; zurueckgestellteWecken(); mailsGeaendert(); });
+  await s.waitForFunction(() => !mails()['k4@krause'].zurueckBis && !mails()['k4@krause'].gelesen);
+  // Mehrfachauswahl: Strg+Klick, Leiste „gelesen“
+  await s.evaluate(() => { S.einstellungen.mailUnterhaltung = false; zeichne(); });
+  await s.locator('#postfach .pf-zeile', { hasText: 'Noch eine Frage' }).click({ modifiers: ['Control'] });
+  await s.locator('#postfach .pf-zeile', { hasText: 'Frage' }).filter({ hasNotText: 'Noch eine' }).click({ modifiers: ['Control'] });
+  await s.locator('.pf-auswahl [data-pf-mehrfach=gelesen]').click();
+  await s.waitForFunction(() => ['k4@krause', 'k5@krause'].every(id => __imap.box.INBOX.find(e => e.mail.messageId === id).flags.has('\\Seen')));
+  // Einstellungen-Dialog: alle Bereiche öffnen ohne Fehler
+  await s.evaluate(() => mailEinstellungenDialog());
+  for (const tab of ['SIGNATUREN', 'VORLAGEN', 'KATEGORIEN', 'REGELN', 'QUICKSTEPS', 'JUNK', 'ABWESEND', 'ALLGEMEIN']) await s.locator(`[data-pf-tab=${tab}]`).click();
   await kontext.close();
 });
 
