@@ -52,7 +52,7 @@ var CRM_TABELLEN = {
   fahrzeuge: { kennzeichen: 'text', bezeichnung: 'text', art: 'wort:TRANSPORTER', status: 'wort:AKTIV', fahrer: 'text', kmStand: 'cent', wartungKm: 'cent',
     halter: 'text', marke: 'text', modell: 'text', fin: 'text', erstzulassung: 'datum', zgg: 'cent', leergewicht: 'cent', hsn: 'text', tsn: 'text',
     leistungKw: 'cent', kraftstoff: 'text', schadstoffklasse: 'text', achsen: 'cent', farbe: 'text', teil2Nr: 'text',
-    huBis: 'datum', spBis: 'datum', uvvBis: 'datum', tachoBis: 'datum', ladeBis: 'datum', wartungBis: 'datum', versicherungBis: 'datum', leasingBis: 'datum', steuerBis: 'datum', kfzSteuerCent: 'cent', kfzSteuerNr: 'text', kfzSteuerAb: 'datum',
+    huBis: 'datum', spBis: 'datum', uvvBis: 'datum', tachoBis: 'datum', ladeBis: 'datum', wartungBis: 'datum', versicherungBis: 'datum', leasingBis: 'datum', steuerBis: 'datum', kfzSteuerCent: 'cent', kfzSteuerNr: 'text', kfzSteuerAb: 'datum', versicherungCent: 'cent',
     versicherung: 'text', versicherungsNr: 'text', leasinggeber: 'text', leasingRateCent: 'cent', notiz: 'text', leihfahrzeug: 'bool', aliase: 'text' },
   fahrzeugeintraege: { fahrzeugId: 'text', art: 'wort:WARTUNG', datum: 'datum', kmStand: 'cent', betragCent: 'cent', menge: 'cent', werkstatt: 'text', text: 'text' },
   // Personal und Tourenplanung (ohne Firma). Team und Auftraggeber einer Tour über Kennungen, Beifahrer durch Komma getrennt.
