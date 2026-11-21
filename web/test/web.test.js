@@ -1789,6 +1789,36 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await s.close();
 });
 
+test('Windows-App im Windows-Stil: Start ohne Fehler, Titelleiste folgt dem Design, Taskleisten-Zähler, Kontextmenü, Statusleiste', async () => {
+  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1400, height: 900 } });
+  await kontext.route('https://script.google.com/**', r => r.abort());
+  await kontext.addInitScript(() => {
+    if (!localStorage.getItem('schadensfaelle-v1')) { localStorage.setItem('schadensfaelle-v1', JSON.stringify({ nurLokal: true, einstellungen: { thema: 'dunkel' } })); localStorage.setItem('crm-bereich', 'firmen'); }
+    window.__fenster = { titel: [], zaehler: [] };
+    window.desktop = { plattform: 'win32', beiZiel() {}, benachrichtige: async () => true, oeffneExtern: async () => true, oeffneDatei: async () => true,
+      mail: { anbieter: async () => ({}), konto: async () => null, schnittstelle: 2, ruf: async () => [] },
+      fenster: { info: () => ({ windows: true, windows11: true, mica: true, akzent: '#C239B3', dunkel: true, titelHoehe: 48 }), beiAenderung() {}, beiZoom() {},
+        titelleiste: async (f, s, th) => { window.__fenster.titel.push([f, s, th]); return true; }, zaehler: async n => { window.__fenster.zaehler.push(n); return true; }, blinken: async () => true, zoom: async () => 1 } };
+  });
+  const s = await kontext.newPage();
+  const fehler = []; s.on('pageerror', f => fehler.push(f.message));
+  await s.goto(seite.url); await s.waitForFunction(() => window.__appBereit);
+  assert.deepEqual(fehler, [], 'Start ohne Fehler');
+  assert.ok(await s.evaluate(() => document.documentElement.classList.contains('win') && document.documentElement.classList.contains('mica')));
+  assert.equal(await s.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--win-akzent').trim()), '#C239B3');
+  assert.deepEqual(await s.evaluate(() => window.__fenster.titel.at(-1)), ['#202020', '#FFFFFF', 'dark'], 'Titelleiste dunkel');
+  await s.evaluate(() => { S.einstellungen.thema = 'hell'; themaSetzen(); });
+  assert.deepEqual(await s.evaluate(() => window.__fenster.titel.at(-1)), ['#F3F3F3', '#1A1A1A', 'light']);
+  await s.locator('#statusleiste').waitFor();
+  await s.evaluate(() => Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV', telefon: '0211 1' }));
+  await s.locator('[data-firma]').first().click({ button: 'right' });
+  await s.locator('.kontext-menue button', { hasText: 'Öffnen' }).waitFor();
+  await s.keyboard.press('Escape');
+  assert.equal(await s.locator('.kontext-menue').count(), 0);
+  assert.deepEqual(fehler, []);
+  await kontext.close();
+});
+
 test('Kontakthistorie der Firma begrenzt: 10 neueste, gekürzt, Filter, Suche, weitere anzeigen', async () => {
   const s = await geraet(null, { bereich: 'firmen' });
   const id = await s.evaluate(() => {
