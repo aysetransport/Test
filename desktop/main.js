@@ -23,11 +23,10 @@ let fenster = null;
 let update = null; // In-App-Update der Oberfläche (webupdate.js), nach app.whenReady angelegt
 
 // ------------------------------ E-Mail-Konten ------------------------------
-// Zwei Postfächer wie in der Android-App: SCHADEN (Schadensfälle, bisherige Datei mailkonto.json)
-// und ALLGEMEIN (alles andere, mailkonto-allgemein.json).
-const ARTEN = ['SCHADEN', 'ALLGEMEIN'];
-const art = a => (ARTEN.includes(a) ? a : 'SCHADEN');
-const kontoDatei = a => path.join(app.getPath('userData'), art(a) === 'SCHADEN' ? 'mailkonto.json' : 'mailkonto-allgemein.json');
+// Postfächer wie in der Android-App: SCHADEN (Schadensfälle, Datei mailkonto.json), ALLGEMEIN (mailkonto-allgemein.json)
+// und beliebig viele weitere mit eigener Kennung aus der Oberfläche (mailkonto-<kennung>.json).
+const art = a => (/^[A-Z][A-Z0-9_]{0,23}$/.test(String(a)) ? a : 'SCHADEN');
+const kontoDatei = a => path.join(app.getPath('userData'), art(a) === 'SCHADEN' ? 'mailkonto.json' : `mailkonto-${art(a).toLowerCase()}.json`);
 function ladeKonto(a) {
   try { return JSON.parse(fs.readFileSync(kontoDatei(a), 'utf8')); } catch { return null; }
 }

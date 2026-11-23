@@ -54,13 +54,14 @@ class AndroidTresor : Tresor {
 }
 
 /**
- * Die zwei Postfächer der App: SCHADEN (Schadensfälle) und ALLGEMEIN (alles andere) – wie in der Windows-App.
+ * Die Postfächer der App: SCHADEN (Schadensfälle), ALLGEMEIN (alles andere) und beliebig viele weitere mit eigener
+ * Kennung aus der Oberfläche – wie in der Windows-App.
  * Die Oberfläche bekommt die Einstellungen ohne Passwort zu sehen.
  */
 class MailKonten(context: Context, private val tresor: Tresor, private val postfach: Postfach = Postfach()) {
     private val speicher = context.getSharedPreferences("mailkonten", Context.MODE_PRIVATE)
 
-    private fun art(a: String?) = if (a == "ALLGEMEIN") "ALLGEMEIN" else "SCHADEN"
+    private fun art(a: String?) = a?.takeIf { KENNUNG.matches(it) } ?: "SCHADEN"
 
     private fun gespeichert(a: String?): Pair<JsonObject, String>? {
         val roh = speicher.getString(art(a), null) ?: return null
@@ -94,4 +95,6 @@ class MailKonten(context: Context, private val tresor: Tresor, private val postf
 
     /** Schnittstelle 2: ordner, stand, lade, suche, aktion, ordnerAktion, anhang, quelle, sende. */
     fun ruf(befehl: String, daten: JsonObject, a: String?): JsonElement = zugang(a).let { (k, pw) -> postfach.ruf(k, pw, befehl, daten) }
+
+    companion object { private val KENNUNG = Regex("^[A-Z][A-Z0-9_]{0,23}$") }
 }

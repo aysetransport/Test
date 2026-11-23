@@ -2504,3 +2504,42 @@ test('Storno-Rechnung: löschen nur, wenn sie nie versendet wurde; versendete bl
   assert.equal(await s.locator(`#belege [data-beleg="${ids.versendet}"]`).count(), 1);
   await s.close();
 });
+
+test('Mail: beliebig viele weitere Konten mit Namen, Status und eigener Signatur', async () => {
+  const s = await geraet(null, { bereich: 'einstellungen' });
+  await s.evaluate(() => {
+    const konten = { SCHADEN: { adresse: 'schaden@ayse.example' } };
+    window.__einrichten = [];
+    window.desktop = { plattform: 'test', beiZiel() {}, benachrichtige: async () => true, oeffneExtern: async () => true,
+      mail: { anbieter: async () => ({ IONOS: { label: 'IONOS', imapHost: 'imap.ionos.de', smtpHost: 'smtp.ionos.de' } }), konto: async a => konten[a] || null, trennen: async a => { delete konten[a]; return true; },
+        einrichten: async (k, pw, a) => { window.__einrichten.push(a); konten[a] = { adresse: k.adresse }; return { adresse: k.adresse }; }, sende: async () => 'id', schnittstelle: 2, ruf: async () => [] } };
+    S.einstellungen.mailSignaturen = [{ id: 's1', name: 'Standard', text: 'Gruß' }, { id: 's2', name: 'Buchhaltung', text: 'Ihre Buchhaltung' }];
+    mails()['m1'] = { konto: 'K1', eingehend: true, gelesen: false, von: 'x@y.example', betreff: 'Hallo', zeitpunkt: jetztIso(), anhaenge: [], antwortAuf: [], text: '' };
+    S.einstellungen.mailKontenWeitere = [{ art: 'K1', name: 'Alt' }];
+    return mailStart();
+  });
+  // neues Konto anlegen: Name → Einrichten-Dialog → verbunden
+  await s.evaluate(() => mailKontoNeuDialog());
+  await s.locator('#konto-neu-form [name=name]').fill('Buchhaltung');
+  await s.locator('#konto-neu-form button.voll').click();
+  await s.locator('#konto-form h2', { hasText: 'E-Mail „Buchhaltung“' }).waitFor();
+  await s.locator('#konto-form [name=adresse]').fill('buchhaltung@ayse.example');
+  await s.locator('#konto-form [name=passwort]').fill('geheim');
+  await s.locator('#konto-form button.voll').click();
+  await s.locator('#toast', { hasText: 'E-Mail-Konto verbunden' }).waitFor();
+  const r = await s.evaluate(() => { const art = weitereKonten().find(k => k.name === 'Buchhaltung').art;
+    return { art, eingerichtet: window.__einrichten, konto: MAIL.konten[art] && MAIL.konten[art].adresse, liste: mailKonten(), html: mailEinstellungen() }; });
+  assert.match(r.art, /^K[0-9A-Z]+$/);
+  assert.deepEqual([r.eingerichtet, r.konto], [[r.art], 'buchhaltung@ayse.example']);
+  assert.ok(r.liste.includes('SCHADEN') && r.liste.includes(r.art));
+  assert.ok(r.html.includes('E-Mail „Buchhaltung“') && r.html.includes('E-Mail „Alt“') && r.html.includes('Weiteres E-Mail-Konto'));
+  // Signatur je Konto
+  await s.evaluate(a => { document.body.insertAdjacentHTML('beforeend', `<div id="t-sig">${mailEinstellungen()}</div>`); const sel = document.querySelector(`#t-sig [data-mail-signatur-konto="${a}"]`); sel.value = 's2'; sel.dispatchEvent(new Event('change', { bubbles: true })); }, r.art);
+  assert.equal(await s.evaluate(a => S.einstellungen.mailSignaturJeKonto[a], r.art), 's2');
+  // Status: ungelesen je Konto; Entfernen nimmt ein weiteres Konto ganz aus der Liste
+  assert.match(await s.evaluate(() => mailEinstellungen()), /\d+ Mails auf diesem Gerät · \d+ ungelesen · \d+ nicht zugeordnet/, 'Status je Konto');
+  await s.evaluate(() => { document.querySelector('#t-sig').remove(); });
+  await s.evaluate(async a => { await window.desktop.mail.trennen(a); MAIL.konten[a] = null; S.einstellungen.mailKontenWeitere = weitereKonten().filter(k => k.art !== a); delete MAIL.konten[a]; delete MAIL_KONTEN[a]; }, r.art);
+  assert.equal(await s.evaluate(a => a in MAIL_KONTEN, r.art), false);
+  await s.close();
+});
