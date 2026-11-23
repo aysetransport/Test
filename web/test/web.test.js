@@ -40,7 +40,7 @@ async function melde(s, pin = PIN, neu = false) {
 }
 // Läuft das Warten ab, zeigt die Meldung, woran der Abgleich hängt (statt nur „Timeout“).
 const aktuell = s => s.waitForFunction(() => document.querySelector('#sync').dataset.zustand === 'aktuell' && document.querySelector('#sync').textContent === 'Cloud aktuell')
-  .catch(async e => { const z = await s.evaluate(() => ({ anzeige: document.querySelector('#sync').textContent, zustand: document.querySelector('#sync').dataset.zustand, fehler: SYNC.fehler, laeuft: SYNC.laeuft, nochmal: SYNC.nochmal, offen: TABELLEN.reduce((n, t) => n + offene(t).length, 0) })).catch(() => ({})); e.message += ' – Sync: ' + JSON.stringify(z); throw e; });
+  .catch(async e => { const z = await s.evaluate(() => ({ anzeige: document.querySelector('#sync').textContent, zustand: document.querySelector('#sync').dataset.zustand, fehler: SYNC.fehler, laeuft: SYNC.laeuft, nochmal: SYNC.nochmal, offen: TABELLEN.reduce((n, t) => n + offene(t).length, 0) })).catch(() => ({})); throw new Error(e.message.split('\n')[0] + ' – Sync: ' + JSON.stringify(z)); });
 const abgleich = async s => { await s.evaluate(() => abgleich()); await aktuell(s); };
 async function legeFallAn(s, felder) {
   await s.locator('[data-neu]').first().click();
@@ -363,7 +363,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 13;
+  cloud.umgebung.kontext.API_VERSION = 16;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
