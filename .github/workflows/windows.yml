@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # für den Release mit dem Installer
 
 jobs:
   windows:
@@ -49,12 +49,18 @@ jobs:
           if (-not (Test-Path $exe)) { Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs') -Recurse -Depth 2 | Select-Object FullName; throw "Nicht installiert: $exe" }
           node scripts/rauchtest.js $exe
 
-      - name: Installer bereitstellen
-        uses: actions/upload-artifact@v4
-        with:
-          name: Schadensfaelle-Windows-Setup
-          path: |
-            desktop/dist/Schadensfaelle-Setup-*.exe
-            desktop/dist/rauchtest.png
-          if-no-files-found: error
-          retention-days: 3 # Speicherplatz von GitHub ist begrenzt
+      # Als Release statt als Build-Datei: Releases zählen nicht zum (begrenzten) Speicher für Build-Dateien.
+      # Nur vom Standard-Branch, immer derselbe Release „windows-app“ mit dem neuesten Installer.
+      - name: Installer als Release bereitstellen
+        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $setup = Get-ChildItem dist\Schadensfaelle-Setup-*.exe | Select-Object -First 1
+          $notiz = "Neuester Installer der Windows-App: $($setup.Name) (Commit $env:GITHUB_SHA)"
+          gh release view windows-app *> $null
+          if ($LASTEXITCODE -ne 0) { gh release create windows-app --title "Windows-App" --notes $notiz --target $env:GITHUB_SHA }
+          else { gh release edit windows-app --notes $notiz }
+          gh release upload windows-app $setup.FullName --clobber
+          foreach ($alt in (gh release view windows-app --json assets -q '.assets[].name')) { if ($alt -ne $setup.Name) { gh release delete-asset windows-app $alt -y } }

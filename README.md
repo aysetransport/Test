@@ -36,7 +36,8 @@ PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen.
 
 ## Installieren
 
-- **Windows:** Workflow *Windows-App* → Artefakt `Schadensfaelle-Windows-Setup`. Nicht signiert: SmartScreen
+- **Windows:** Release **„Windows-App“** im Repository (Tag `windows-app`, vom Workflow *Windows-App* nach jedem
+  erfolgreichen Lauf auf dem Standard-Branch erneuert). Nicht signiert: SmartScreen
   → „Weitere Informationen → Trotzdem ausführen“. Installation ohne Administratorrechte.
 - **Android:** Workflow *Android* → Artefakt `Ayse-CRM-apk`. Damit Updates über die installierte App gehen,
   braucht es einen festen Signaturschlüssel: einmal anlegen
