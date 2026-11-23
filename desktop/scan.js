@@ -59,7 +59,10 @@ $n = 0
 while ($true) {
   try { $img = Hole $item }
   catch { if ((Code $_) -eq -2145320957) { if ($n -eq 0) { throw 'Kein Papier im Einzug' } else { break } } else { throw } }
-  $n++; $img.SaveFile((Join-Path $env:SCAN_ZIEL ('seite{0:D3}.{1}' -f $n, $img.FileExtension)))
+  $n++; $ziel = Join-Path $env:SCAN_ZIEL ('seite{0:D3}' -f $n)
+  # BMP (unkomprimiert, oft 25 MB+) als JPEG speichern – klein genug für Texterkennung und Ablage
+  if ($img.FileExtension -match '^jpe?g$') { $img.SaveFile("$ziel.jpg") }
+  else { $roh = "$ziel.roh.$($img.FileExtension)"; $img.SaveFile($roh); Add-Type -AssemblyName System.Drawing; $b = [System.Drawing.Image]::FromFile($roh); $b.Save("$ziel.jpg", [System.Drawing.Imaging.ImageFormat]::Jpeg); $b.Dispose(); Remove-Item $roh }
   if (-not $stapel) { break }
 }
 Write-Output $n`;
@@ -137,10 +140,16 @@ async function lesen(base64) {
   if (!arbeiter) {
     const { createWorker } = require('tesseract.js');
     const daten = path.dirname(require.resolve('@tesseract.js-data/deu/4.0.0/deu.traineddata.gz')).replace('app.asar', 'app.asar.unpacked');
-    arbeiter = createWorker('deu', 1, { langPath: daten, gzip: true, cacheMethod: 'none' });
+    // errorHandler: sonst wirft tesseract.js Fehler des Arbeiters im Hauptprozess, und die ganze App stürzt ab
+    arbeiter = createWorker('deu', 1, { langPath: daten, gzip: true, cacheMethod: 'none', errorHandler: () => {} });
   }
-  const r = await (await arbeiter).recognize(Buffer.from(String(base64), 'base64'));
-  return { text: r.data.text, sicherheit: Math.round(r.data.confidence) };
+  try {
+    const r = await (await arbeiter).recognize(Buffer.from(String(base64), 'base64'));
+    return { text: r.data.text, sicherheit: Math.round(r.data.confidence) };
+  } catch (e) {
+    beenden().catch(() => {}); // nach einem Fehler frisch starten
+    throw new Error('Texterkennung fehlgeschlagen: ' + (e && e.message || e));
+  }
 }
 async function beenden() { if (arbeiter) { const w = await arbeiter; arbeiter = null; await w.terminate(); } }
 
