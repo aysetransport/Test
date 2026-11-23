@@ -270,6 +270,7 @@ test('Windows-App: Rechnung als PDF speichern und per E-Mail mit PDF-Anhang send
     await s.locator('[data-beleg-akt=pdf]').click();
     await s.getByText('Gespeichert:').waitFor({ timeout: 30000 });
     assert.ok(fs.readdirSync(daten).some(n => n.startsWith('Rechnung_R') && n.endsWith('.pdf')));
+    assert.equal(await s.evaluate(i => S.belege[i].status, id), 'ENTWURF', 'PDF allein gilt nicht als Versand');
 
     // Per Mail: an die Abrechnung, mit PDF, danach gilt die Rechnung als versendet
     await s.locator('[data-beleg-akt=mail]').click();
@@ -282,6 +283,7 @@ test('Windows-App: Rechnung als PDF speichern und per E-Mail mit PDF-Anhang send
     assert.equal(angekommen.length, 1);
     assert.match(angekommen[0], /application\/pdf/);
     assert.equal(await s.evaluate(i => S.belege[i].status, id), 'OFFEN');
+    assert.equal(await s.evaluate(i => versandBelegt(S.belege[i]), id), true, 'Versand steht in der Kontakthistorie');
   } finally {
     await app.close();
   }

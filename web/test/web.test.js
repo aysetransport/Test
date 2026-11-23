@@ -2083,7 +2083,7 @@ test('Statistik: „Kosten pro Einsatz“ bei Mitarbeiter und Fahrzeug haben Vor
     const anzahl = qz.reduce((n, r) => n + QUELLEN.touren.masse.anzahl[1](r), 0), erloes = qz.reduce((n, r) => n + QUELLEN.touren.masse.erloes[1](r), 0);
     return { personal: k.personal, fahrzeug: k.fahrzeug, tag: kostenAnnahmen().personalTag, gefahren: k.gefahren, team: teamVon(t).length,
       entwurfHinweis: (() => { const e = BelegAktionen.neu('RECHNUNG', fid); BelegAktionen.speichern({ ...S.belege[e], datum: heute(), positionen: JSON.stringify([{ bez: 'X', menge: 1, einzelCent: 10000 }]) });
-        const vor = guvHtml(zr).includes('Entwurf/Entwürfe'), zaehltVorher = zaehltUmsatz(S.belege[e]); alsVersendet(S.belege[e]);
+        const vor = guvHtml(zr).includes('Entwurf/Entwürfe'), zaehltVorher = zaehltUmsatz(S.belege[e]); BelegAktionen.speichern({ ...S.belege[e], status: 'OFFEN' }); // wie nach dem Versand per E-Mail
         return { vor, zaehltVorher, nachher: S.belege[e].status, zaehlt: zaehltUmsatz(S.belege[e]), weg: !guvHtml(zr).includes('Entwurf/Entwürfe') }; })(),
       firmaNurRechnung: (() => { const f2 = uuid(); S.auftraggeber[f2] = { id: f2, name: 'Nur Rechnung KG', geaendertAm: jetztIso() };
         const rb = BelegAktionen.neu('RECHNUNG', f2); BelegAktionen.speichern({ ...S.belege[rb], status: 'OFFEN', datum: heute(), positionen: JSON.stringify([{ bez: 'Pauschale', menge: 1, einzelCent: 120000 }]) });
@@ -2444,5 +2444,36 @@ test('Tourenplanung: alle per SMS (Android) – wo die SMS nicht rausgeht, Hinwe
   assert.deepEqual([r.rot, r.gruen], [['Bernd Kurz'], 2]);
   assert.ok(r.hinweis.includes('1 Person(en) bitte per WhatsApp') && r.hinweis.includes('1 ohne Telefonnummer'), r.hinweis);
   assert.ok(await s.locator('#tp-alle .zeile', { hasText: 'Bernd Kurz' }).locator('[data-alle-wa]').isVisible(), 'WhatsApp-Knopf direkt daneben');
+  await s.close();
+});
+
+test('Rechnung gilt erst mit dem Versand per E-Mail als versendet; früher nur gedruckte lassen sich zurück auf Entwurf setzen', async () => {
+  const s = await geraet(null, { bereich: 'finanzen' });
+  const ids = await s.evaluate(() => {
+    const f = Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV' }), pos = JSON.stringify([{ bez: 'Tour', menge: 1, einzelCent: 10000 }]);
+    const neu = (status) => { const id = BelegAktionen.neu('RECHNUNG', f, { positionen: pos }); BelegAktionen.speichern({ ...S.belege[id], status }); return id; };
+    const entwurf = neu('ENTWURF'), gedruckt = neu('OFFEN'), post = neu('OFFEN'), gemailt = neu('OFFEN'), bezahlt = neu('OFFEN');
+    merke('aktivitaeten', { id: uuid(), firmaId: f, datum: heute(), art: 'EMAIL', text: `E-Mail gesendet\nAn: buchhaltung@krause.example\nBetreff: Rechnung ${S.belege[gemailt].nummer}`, geaendertAm: jetztIso() });
+    BelegAktionen.zahlung(S.belege[bezahlt], 5000, heute());
+    nachAenderung();
+    return { f, entwurf, gedruckt, post, gemailt, bezahlt };
+  });
+  // Drucken gibt nicht mehr heraus
+  await s.evaluate(id => { location.hash = '#/beleg/' + id; }, ids.entwurf);
+  await s.locator('[data-beleg-akt="drucken"]').click();
+  assert.equal(await s.evaluate(id => S.belege[id].status, ids.entwurf), 'ENTWURF');
+  // nur gedruckte: Hinweis und Prüfen – gemailte und angezahlte bleiben unberührt
+  assert.deepEqual(await s.evaluate(() => ohneVersandnachweis().map(b => b.nummer).length), 2);
+  await s.evaluate(() => { location.hash = '#/'; ANSICHT.bereich = 'finanzen'; zeichne(); });
+  await s.locator('[data-versand-pruefen]').click();
+  await s.locator(`#versand-form input[value="${ids.post}"]`).uncheck();
+  await s.locator('#versand-form button.voll').click();
+  const st = await s.evaluate(i => [i.gedruckt, i.post, i.gemailt, i.bezahlt].map(id => S.belege[id].status), ids);
+  assert.deepEqual(st, ['ENTWURF', 'OFFEN', 'OFFEN', 'TEILBEZAHLT']);
+  assert.equal(await s.evaluate(() => ohneVersandnachweis().length), 0, 'per Post vermerkt – Hinweis weg');
+  // „Als versendet markieren (Post)“ vermerkt den Versand
+  await s.evaluate(id => { location.hash = '#/beleg/' + id; }, ids.gedruckt);
+  await s.locator('[data-beleg-akt="festschreiben"]').click();
+  assert.deepEqual(await s.evaluate(id => [S.belege[id].status, versandBelegt(S.belege[id])], ids.gedruckt), ['OFFEN', true]);
   await s.close();
 });
