@@ -70,6 +70,7 @@ jobs:
           gh release upload android-app -R $R "$RUNNER_TEMP/android-update.json" --clobber
 
       - name: APK bereitstellen
+        continue-on-error: true # volles Speicherkontingent für Build-Dateien darf den Lauf nicht rot machen (APK kommt per Release)
         uses: actions/upload-artifact@v4
         with:
           name: Ayse-CRM-apk
@@ -78,6 +79,7 @@ jobs:
           retention-days: 3 # Speicherplatz von GitHub ist begrenzt
 
       - name: Berichte bei Fehlern bereitstellen
+        continue-on-error: true # volles Speicherkontingent für Build-Dateien darf den Lauf nicht rot machen (APK kommt per Release)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
