@@ -113,4 +113,9 @@ class AppTest {
         assertEquals("kein Netz", Geraet.smsFehlerText(android.telephony.SmsManager.RESULT_ERROR_NO_SERVICE))
         assertEquals("Fehlercode 999 von Android", Geraet.smsFehlerText(999))
     }
+
+    @Test fun smsTextImNormalenZeichensatz() {
+        assertEquals("Tour am Mo - 12 Tel. 0171 \"Hamburg\" Größe äöüß ...", Geraet.gsm7("Tour am Mo – 12 ☎ 0171 „Hamburg“ Größe äöüß …"))
+        assertEquals("Vater Café ", Geraet.gsm7("Váter Café 🚚"))
+    }
 }

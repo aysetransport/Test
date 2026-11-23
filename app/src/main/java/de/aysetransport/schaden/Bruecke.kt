@@ -72,7 +72,7 @@ class Bruecke(
             "web:installieren" -> io { requireNotNull(webUpdate).installieren() }
             "web:ok" -> { webUpdate?.ok(); JsonPrimitive(true) }
             "web:zuruecksetzen" -> { webUpdate?.zuruecksetzen(); JsonPrimitive(true) }
-            "sms:massen" -> smsListe(a.getOrNull(0)).let { geraet().smsMassen(it) }
+            "sms:massen" -> smsListe(a.getOrNull(0)).let { l -> geraet().smsMassen(l) { i, f -> antworte("window.__smsStand && window.__smsStand($i, ${alsJs(JsonPrimitive(f))})") } }
             "app:pruefen" -> io { requireNotNull(appUpdate).pruefen() }
             "app:installieren" -> { requireNotNull(appUpdate).installieren(); JsonPrimitive(true) }
             else -> throw IllegalArgumentException("Unbekannte Funktion: $name")

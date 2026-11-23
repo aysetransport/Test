@@ -19,7 +19,7 @@ window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwh
 })();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
-window.WEB_STAND = 1795455480; window.WEB_VERSION = '4.17.0';
+window.WEB_STAND = 1795459363; window.WEB_VERSION = '4.17.0';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4E79">
@@ -4867,15 +4867,18 @@ function alleSenden(tag) {
     <div class="dialog-knoepfe">${smsMassen && mitNr.length ? `<button class="knopf tonal" id="tp-sms">📱 Alle per SMS (${mitNr.length})</button>` : ''}<button class="knopf" id="tp-csv">CSV für Sammel-SMS</button><button class="knopf voll" data-zu>Fertig</button></div>`);
   if ($('#tp-sms')) $('#tp-sms').onclick = async () => {
     const b = $('#tp-sms'), ziel = eintraege.map((x, i) => ({ x, i })).filter(({ x }) => x.m.telefon);
-    b.disabled = true; b.textContent = 'Sende …';
+    b.disabled = true; b.textContent = `Sende … 0 / ${ziel.length}`;
+    let fertig = 0;
+    const markiere = (k, fehler) => {
+      const feld = $(`[data-alle-sms="${ziel[k].i}"]`); if (!feld || feld.dataset.fertig) return;
+      feld.dataset.fertig = '1'; b.textContent = `Sende … ${++fertig} / ${ziel.length}`;
+      feld.innerHTML = !fehler ? '<br><span class="marke gruen">✓ SMS gesendet</span>' : `<br><span class="marke rot">SMS nicht angekommen – bitte per WhatsApp kontaktieren</span> <span class="leise">${esc(fehler)}</span>`;
+    };
+    window.__smsStand = markiere; // die Android-App meldet jede SMS, sobald sie raus ist
     try {
       const r = await smsMassen(ziel.map(({ x }) => ({ nummer: intNummer(x.m.telefon), text: nachricht(x) })));
       let fehlt = 0;
-      ziel.forEach(({ i }, k) => {
-        const ok = r[k] && r[k].ok, feld = $(`[data-alle-sms="${i}"]`);
-        if (!ok) fehlt++;
-        feld.innerHTML = ok ? '<br><span class="marke gruen">✓ SMS gesendet</span>' : `<br><span class="marke rot">SMS nicht angekommen – bitte per WhatsApp kontaktieren</span> <span class="leise">${esc((r[k] && r[k].fehler) || '')}</span>`;
-      });
+      ziel.forEach((_, k) => { const ok = r[k] && r[k].ok; if (!ok) fehlt++; markiere(k, ok ? '' : (r[k] && r[k].fehler) || 'unbekannt'); });
       const e = $('#tp-sms-ergebnis'); e.hidden = false; e.className = fehlt ? 'hinweis-box' : 'leise';
       e.textContent = `${ziel.length - fehlt} von ${ziel.length} SMS gesendet.` + (fehlt ? ` ${fehlt} Person(en) bitte per WhatsApp kontaktieren (rot markiert, 💬).` : '') + (eintraege.length > ziel.length ? ` ${eintraege.length - ziel.length} ohne Telefonnummer.` : '');
       b.textContent = '📱 SMS gesendet';

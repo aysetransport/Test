@@ -2431,7 +2431,10 @@ test('Tourenplanung: alle per SMS (Android) – wo die SMS nicht rausgeht, Hinwe
     merke('touren', { id: uuid(), firmaId: '', datum: tag, reihenfolge: 1, kennzeichen: 'KR-D 1', name: 'Hamburg', fahrerId: a, beifahrerIds: b, geaendertAm: jetztIso() });
     merke('touren', { id: uuid(), firmaId: '', datum: tag, reihenfolge: 2, kennzeichen: 'KR-D 2', name: 'Bremen', fahrerId: c, beifahrerIds: d, geaendertAm: jetztIso() });
     window.__sms = [];
-    window.desktop = { ...(window.desktop || {}), sms: { massen: async l => { window.__sms = l; return l.map(x => (x.nummer.includes('2222222') ? { ok: false, fehler: 'nicht gesendet (kein Netz?)' } : { ok: true, fehler: '' })); } } };
+    window.desktop = { ...(window.desktop || {}), sms: { massen: async l => { window.__sms = l;
+      const r = l.map(x => (x.nummer.includes('2222222') ? { ok: false, fehler: 'kein Netz' } : { ok: true, fehler: '' }));
+      window.__smsStand(0, r[0].fehler); window.__zwischen = document.querySelector('#tp-sms').textContent; // erste SMS meldet sich sofort
+      return r; } } };
     alleSenden(tag);
   }, tag);
   await s.locator('#tp-sms', { hasText: 'Alle per SMS (3)' }).click();
@@ -2440,6 +2443,7 @@ test('Tourenplanung: alle per SMS (Android) – wo die SMS nicht rausgeht, Hinwe
     rot: [...document.querySelectorAll('#tp-alle .marke.rot')].map(e => e.closest('.zeile').querySelector('b').textContent),
     gruen: document.querySelectorAll('#tp-alle .marke.gruen').length, hinweis: document.querySelector('#tp-sms-ergebnis').textContent }));
   assert.equal(r.an.length, 3, 'nur Personen mit Nummer');
+  assert.equal(await s.evaluate(() => window.__zwischen), 'Sende … 1 / 3', 'Fortschritt je SMS');
   assert.ok(r.text.startsWith('Hallo ') && r.text.includes('KR-D'), r.text);
   assert.deepEqual([r.rot, r.gruen], [['Bernd Kurz'], 2]);
   assert.ok(r.hinweis.includes('1 Person(en) bitte per WhatsApp') && r.hinweis.includes('1 ohne Telefonnummer'), r.hinweis);

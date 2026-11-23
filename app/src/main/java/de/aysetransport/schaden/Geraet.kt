@@ -208,7 +208,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
         var empfaenger: BroadcastReceiver? = null
         try {
             val sm = smsManager()
-            val teile = sm.divideMessage(text)
+            val teile = sm.divideMessage(gsm7(text))
             var offen = teile.size
             var fehler = 0
             empfaenger = object : BroadcastReceiver() {
@@ -232,7 +232,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
      * Viele SMS auf einmal (Tourenplanung: jede Person ihre Tour). Einmal bestätigen, dann alle senden.
      * Ergebnis je Empfänger in derselben Reihenfolge: ok oder Fehler – die Oberfläche bietet dann WhatsApp an.
      */
-    suspend fun smsMassen(liste: List<Pair<String, String>>): JsonArray {
+    suspend fun smsMassen(liste: List<Pair<String, String>>, stand: (Int, String) -> Unit = { _, _ -> }): JsonArray {
         if (!activity.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) throw IOException("Dieses Gerät kann keine SMS senden.")
         val ja = suspendCancellableCoroutine<Boolean> { k ->
             AlertDialog.Builder(activity).setTitle("${liste.size} SMS senden?")
@@ -244,7 +244,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
         }
         if (!ja) throw IOException("Abgebrochen")
         if (!smsErlaubt() && !suspendCancellableCoroutine<Boolean> { k -> activity.frageSms { if (k.isActive) k.resume(it) } }) throw IOException("Ohne SMS-Berechtigung geht der Versand nicht.")
-        val offen = liste.map { (nr, text) -> CompletableDeferred<String>().also { d -> sendeEine(nr, text) { d.complete(it) } } }
+        val offen = liste.mapIndexed { i, (nr, text) -> CompletableDeferred<String>().also { d -> sendeEine(nr, text) { f -> d.complete(f); stand(i, f) } } }
         return buildJsonArray {
             for (d in offen) {
                 val f = withTimeoutOrNull(90_000) { d.await() } ?: "keine Rückmeldung vom Netz"
@@ -282,6 +282,22 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
     }
 
     companion object {
+        /** Zeichen des normalen SMS-Zeichensatzes (GSM 03.38, ohne Erweiterung) – Ä Ö Ü ä ö ü ß gehören dazu. */
+        private const val GSM = "@£\$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà"
+        private val ERSATZ = mapOf('–' to "-", '—' to "-", '‚' to "'", '‘' to "'", '’' to "'", '„' to "\"", '“' to "\"", '”' to "\"", '…' to "...", '☎' to "Tel.", '•' to "-", '·' to "-", '€' to "EUR", '\u00a0' to " ")
+
+        /**
+         * Text auf den normalen SMS-Zeichensatz bringen. Schon ein Zeichen außerhalb (z. B. „–“ oder ☎) schaltet die ganze SMS
+         * auf 67 statt 160 Zeichen je Teil – ein Tourtext wird dann 5–8 Teil-SMS lang, langsam und teuer.
+         */
+        fun gsm7(text: String): String = buildString {
+            for (c in text) when {
+                GSM.indexOf(c) >= 0 -> append(c)
+                c in ERSATZ -> append(ERSATZ[c])
+                else -> java.text.Normalizer.normalize(c.toString(), java.text.Normalizer.Form.NFD).filter { GSM.indexOf(it) >= 0 }.let { append(it) } // á → a, Emojis fallen weg
+            }
+        }
+
         /** SMS senden braucht auf vielen Geräten zusätzlich „Telefon“: Android liest dabei Angaben der SIM (getGroupIdLevel1). */
         val SMS_RECHTE = arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE)
         /** Fehlercode von Android → verständlicher Grund (SmsManager.RESULT_ERROR_…). */
