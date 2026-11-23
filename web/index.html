@@ -19,7 +19,7 @@ window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwh
 })();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
-window.WEB_STAND = 1795455185; window.WEB_VERSION = '4.17.0';
+window.WEB_STAND = 1795455263; window.WEB_VERSION = '4.17.0';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4E79">
@@ -2889,7 +2889,10 @@ const BelegAktionen = {
     this.speichern({ ...angebot, status: 'ANGENOMMEN' });
     return id;
   },
-  loeschen(b) { entferne('belege', b, { firmaId: b.firmaId, geaendertAm: jetztIso() }); nachAenderung(); },
+  loeschen(b) {
+    for (const t of alle('touren').filter(t => t.belegId === b.id)) merke('touren', { ...t, belegId: '', geaendertAm: jetztIso() }); // Touren wieder abrechenbar
+    entferne('belege', b, { firmaId: b.firmaId, geaendertAm: jetztIso() }); nachAenderung();
+  },
   /** Alle Angebote und Rechnungen samt der erfassten Zahlungen entfernen (z. B. nach Tests). @return Anzahl */
   alleLoeschen() {
     const belege = alle('belege'), nummern = new Set(belege.map(b => b.nummer));
@@ -3153,6 +3156,10 @@ $('#detail').addEventListener('change', e => {
  * „als versendet markiert“ (von Hand, z. B. per Post).
  */
 const versandBelegt = b => alle('aktivitaeten').some(a => a.firmaId === b.firmaId && String(a.text || '').includes(b.nummer) && /^E-Mail gesendet|als versendet markiert/.test(String(a.text || '')));
+/** Stornierte Rechnung, die nie rausging (kein Versandnachweis) und auf die nichts verweist: gilt als verworfener Entwurf, darf gelöscht werden.
+ *  Versendete bleiben (Aufbewahrung 10 Jahre, Nummer bleibt vergeben). */
+const stornoLoeschbar = b => b.status === 'STORNIERT' && b.art !== 'ANGEBOT' && !b.extern && !b.ersetztDurch && !(b.bezahltCent > 0) && !versandBelegt(b)
+  && !alle('belege').some(x => x.id !== b.id && (x.korrekturVon === b.id || x.bezug === b.id));
 const versandVermerken = (b, wie) => Aktionen.crmSpeichern('aktivitaeten', { firmaId: b.firmaId, datum: heute(), art: 'SONSTIGES', kontakt: '', text: `${BELEG_ART[b.art][0]} ${b.nummer} als versendet markiert (${wie})` });
 /** Als versendet geführt, aber nie per E-Mail verschickt (z. B. früher nur gedruckt) – und noch unberührt (keine Zahlung, Mahnung, Gutschrift, Korrektur). */
 const ohneVersandnachweis = () => alle('belege').filter(b => ['RECHNUNG', 'GUTSCHRIFT'].includes(b.art) && b.status === 'OFFEN' && !b.extern && !b.korrekturVon && !b.ersetztDurch
@@ -3208,7 +3215,7 @@ function finanzKennzahlen() {
     topFirmen: Object.entries(proFirma).sort((x, y) => y[1] - x[1]).slice(0, 5),
   };
 }
-const BELEG_FILTER = { OFFEN: 'Offen', UEBERFAELLIG: 'Überfällig', BEZAHLT: 'Bezahlt', ANGEBOTE: 'Angebote', GUTSCHRIFTEN: 'Gutschriften', ENTWURF: 'Entwürfe', ALLE: 'Alle', EINGANG: 'Eingangsrechnungen' };
+const BELEG_FILTER = { OFFEN: 'Offen', UEBERFAELLIG: 'Überfällig', BEZAHLT: 'Bezahlt', ANGEBOTE: 'Angebote', GUTSCHRIFTEN: 'Gutschriften', ENTWURF: 'Entwürfe', ALLE: 'Alle', STORNIERT: 'Storniert', EINGANG: 'Eingangsrechnungen' };
 function belegKarte(b, r) {
   const m = belegMarke(b), s = belegSummen(b);
   return `<button class="karte klickbar ${r && r.art === 'beleg' && r.id === b.id ? 'gewaehlt' : ''}" data-beleg="${b.id}">
@@ -3220,7 +3227,7 @@ function zeichneFinanzen(r) {
   const k = finanzKennzahlen(), f = ANSICHT.belegFilter || 'OFFEN', such = String(ANSICHT.belegSuche || '').trim().toLowerCase();
   const liste = alle('belege').filter(b => {
     if (such) return [b.nummer, (S.auftraggeber[b.firmaId] || {}).name, b.notiz, positionen(b).map(p => p.bez).join(' ')].join(' ').toLowerCase().includes(such);
-    return f === 'ALLE' ? true : f === 'ANGEBOTE' ? b.art === 'ANGEBOT' : f === 'GUTSCHRIFTEN' ? b.art === 'GUTSCHRIFT' : f === 'ENTWURF' ? b.status === 'ENTWURF'
+    return f === 'ALLE' ? b.status !== 'STORNIERT' : f === 'STORNIERT' ? b.status === 'STORNIERT' : f === 'ANGEBOTE' ? b.art === 'ANGEBOT' : f === 'GUTSCHRIFTEN' ? b.art === 'GUTSCHRIFT' : f === 'ENTWURF' ? b.status === 'ENTWURF'
       : f === 'BEZAHLT' ? b.status === 'BEZAHLT' : f === 'UEBERFAELLIG' ? istUeberfaellig(b) : istRechnungOffen(b);
   }).sort((a, b) => String(b.datum).localeCompare(String(a.datum)) || String(b.nummer).localeCompare(String(a.nummer)));
   const eingaenge = alle('eingangsrechnungen').filter(e => !such || [e.lieferant, e.nummer, e.notiz, EINGANG_KATEGORIE[e.kategorie]].join(' ').toLowerCase().includes(such))
@@ -3262,7 +3269,7 @@ function zeichneBeleg(id) {
         ${rechnung && b.status !== 'ENTWURF' ? '<button class="knopf" data-beleg-akt="korrigieren">✎ Korrigieren</button>' : ''}
         ${!rechnung && b.status !== 'ENTWURF' ? '<button class="knopf" data-beleg-akt="berichtigen">✎ Status berichtigen</button>' : ''}
         ${rechnung && b.status !== 'STORNIERT' ? '<button class="knopf text gefahr" data-beleg-akt="storno">Stornieren</button>' : ''}
-        ${b.status === 'ENTWURF' ? '<button class="knopf text gefahr" data-beleg-akt="loeschen">Löschen</button>' : ''}</div></div>
+        ${b.status === 'ENTWURF' || stornoLoeschbar(b) ? '<button class="knopf text gefahr" data-beleg-akt="loeschen">Löschen</button>' : ''}</div></div>
     <form id="beleg-form" class="karte block">
       <div class="zeile"><label class="feld fuell">Datum<input type="date" name="datum" value="${esc(b.datum || '')}" ${gesperrt ? 'disabled' : ''}></label>
         <label class="feld fuell">${rechnung ? 'Fällig am' : b.art === 'GUTSCHRIFT' ? 'Auszahlung bis' : 'Gültig bis'}<input type="date" name="faelligAm" value="${esc(b.faelligAm || '')}" ${gesperrt ? 'disabled' : ''}></label>
@@ -3444,7 +3451,7 @@ $('#detail').addEventListener('click', async e => {
       break;
     }
     case 'storno': bestaetige(`${aktuell.nummer} stornieren?`, 'Die Rechnung bleibt erhalten, zählt aber nicht mehr zum Umsatz und zu den offenen Posten.', 'Stornieren', () => BelegAktionen.speichern({ ...aktuell, status: 'STORNIERT' })); break;
-    case 'loeschen': bestaetige(`${aktuell.nummer} löschen?`, 'Der Entwurf wird gelöscht.', 'Löschen', () => { BelegAktionen.loeschen(aktuell); gehe('#/firma/' + aktuell.firmaId); }); break;
+    case 'loeschen': bestaetige(`${aktuell.nummer} löschen?`, aktuell.status === 'STORNIERT' ? 'Die stornierte Rechnung wurde nie versendet und wird endgültig gelöscht. Ihre Nummer wird wieder frei.' : 'Der Entwurf wird gelöscht.', 'Löschen', () => { BelegAktionen.loeschen(aktuell); gehe('#/firma/' + aktuell.firmaId); }); break;
   }
 });
 $('#detail').addEventListener('change', e => {

@@ -2477,3 +2477,30 @@ test('Rechnung gilt erst mit dem Versand per E-Mail als versendet; früher nur g
   assert.deepEqual(await s.evaluate(id => [S.belege[id].status, versandBelegt(S.belege[id])], ids.gedruckt), ['OFFEN', true]);
   await s.close();
 });
+
+test('Storno-Rechnung: löschen nur, wenn sie nie versendet wurde; versendete bleiben (Filter „Storniert“)', async () => {
+  const s = await geraet(null, { bereich: 'finanzen' });
+  const ids = await s.evaluate(() => {
+    const f = Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV' }), pos = JSON.stringify([{ bez: 'Tour', menge: 1, einzelCent: 10000 }]);
+    const neu = () => { const id = BelegAktionen.neu('RECHNUNG', f, { positionen: pos }); BelegAktionen.speichern({ ...S.belege[id], status: 'STORNIERT' }); return id; };
+    const nie = neu(), versendet = neu();
+    merke('aktivitaeten', { id: uuid(), firmaId: f, datum: heute(), art: 'EMAIL', text: `E-Mail gesendet\nBetreff: Rechnung ${S.belege[versendet].nummer}`, geaendertAm: jetztIso() });
+    const t = merke('touren', { id: uuid(), firmaId: '', datum: heute(), auftraggeberId: f, belegId: nie, geaendertAm: jetztIso() }).id;
+    nachAenderung();
+    return { nie, versendet, t, nr: S.belege[nie].nummer };
+  });
+  await s.evaluate(id => { location.hash = '#/beleg/' + id; }, ids.versendet);
+  await s.locator('[data-beleg-akt="korrigieren"]').waitFor();
+  assert.equal(await s.locator('[data-beleg-akt="loeschen"]').count(), 0, 'versendete Storno-Rechnung bleibt');
+  await s.evaluate(id => { location.hash = '#/beleg/' + id; }, ids.nie);
+  await s.locator('[data-beleg-akt="loeschen"]').click();
+  await s.locator('#ja').click();
+  const r = await s.evaluate(i => ({ weg: !S.belege[i.nie] || !!S.belege[i.nie].geloescht, tour: S.touren[i.t].belegId, frei: naechsteBelegNummer('RECHNUNG') === i.nr }), ids);
+  assert.deepEqual(r, { weg: true, tour: '', frei: true }, 'gelöscht, Tour wieder abrechenbar, Nummer frei');
+  // Liste: „Alle“ ohne Stornos, Filter „Storniert“ zeigt sie
+  await s.evaluate(() => { location.hash = '#/'; ANSICHT.belegFilter = 'ALLE'; zeichne(); });
+  assert.equal(await s.locator('#belege [data-beleg]').count(), 0);
+  await s.locator('[data-beleg-filter="STORNIERT"]').click();
+  assert.equal(await s.locator(`#belege [data-beleg="${ids.versendet}"]`).count(), 1);
+  await s.close();
+});
