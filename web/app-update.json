@@ -1,10 +1,10 @@
 {
- "stand": 1795461929,
+ "stand": 1795462203,
  "version": "4.19.0",
  "minNativ": 1,
  "dateien": {
   "index.html": {
-   "sha256": "d5398565ca5eb28cbfd0aea68f690e82064cf3d8a22260e0313feae7fe2c5d80",
+   "sha256": "29739dbc85e6838e9ec38d0aa7f72f98291ff5178e7d761b5fd7cb8c8016eb0c",
    "groesse": 1052696
   },
   "sprachen.json": {
