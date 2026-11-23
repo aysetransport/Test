@@ -2387,3 +2387,29 @@ test('Tourenplanung: Tour/Ziel als Auswahl aus den Stammdaten der Firma (Preisli
   assert.ok(pos.every(p => p[0].startsWith('10.11.2026 · ') && p[1] === 1));
   await s.close();
 });
+
+test('Firmen zusammenführen nimmt die Touren mit; Touren einer schon gelöschten Firma lassen sich gesammelt neu zuordnen', async () => {
+  const s = await geraet(null, { bereich: 'touren' });
+  const tag = '2026-11-12';
+  const r = await s.evaluate(tag => {
+    const ziel = Aktionen.firmaSpeichern({ name: 'Möbel Krause GmbH', status: 'AKTIV' }), weg = Aktionen.firmaSpeichern({ name: 'Moebel Krause', status: 'AKTIV' });
+    const tour = (x) => merke('touren', { id: uuid(), firmaId: '', datum: tag, reihenfolge: 0, kennzeichen: 'KR-B 1', name: 'Hamburg', ...x, geaendertAm: jetztIso() }).id;
+    const a = tour({ auftraggeberId: weg, auftraggeber: 'Moebel Krause' }), b = tour({ auftraggeber: 'Moebel Krause' }); // verknüpft bzw. nur über den Namen
+    Aktionen.firmenZusammenfuehren(S.auftraggeber[weg], S.auftraggeber[ziel]);
+    return { ziel, a: S.touren[a].auftraggeberId, b: S.touren[b].auftraggeberId, n: tourenVonFirma(S.auftraggeber[ziel]).length };
+  }, tag);
+  assert.deepEqual([r.a, r.b, r.n], [r.ziel, r.ziel, 2], 'beide Touren gehören jetzt zur verbleibenden Firma');
+  // Altfall: Touren zeigen auf eine Firma, die es nicht mehr gibt → Hinweis, einmal neu wählen repariert alle
+  await s.evaluate(tag => {
+    for (let i = 0; i < 3; i++) merke('touren', { id: uuid(), firmaId: '', datum: tag, reihenfolge: i + 5, kennzeichen: 'KR-C ' + i, auftraggeberId: 'weg-0000', auftraggeber: 'Krause alt', geaendertAm: jetztIso() });
+    ANSICHT.tourTag = tag; nachAenderung();
+  }, tag);
+  assert.equal(await s.locator('#liste .marke', { hasText: 'Firma gelöscht' }).count(), 3);
+  const feld = s.locator('[data-tour-zeile]').filter({ has: s.locator('.marke', { hasText: 'Firma gelöscht' }) }).first().locator('[data-feld="auftraggeber"]');
+  await feld.fill('Möbel Krause GmbH');
+  await feld.dispatchEvent('change');
+  await s.locator('#toast', { hasText: '2 weitere Touren' }).waitFor();
+  assert.equal(await s.evaluate(z => tourenVonFirma(S.auftraggeber[z]).length, r.ziel), 5);
+  assert.equal(await s.locator('#liste .marke', { hasText: 'Firma gelöscht' }).count(), 0);
+  await s.close();
+});

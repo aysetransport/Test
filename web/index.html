@@ -19,7 +19,7 @@ window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwh
 })();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
-window.WEB_STAND = 1795449615; window.WEB_VERSION = '4.17.0';
+window.WEB_STAND = 1795451563; window.WEB_VERSION = '4.17.0';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4E79">
@@ -1144,6 +1144,8 @@ const Aktionen = {
     const jetzt = jetztIso();
     for (const t of CRM_TABELLEN) for (const x of alle(t).filter(x => x.firmaId === weg.id)) merke(t, { ...x, firmaId: ziel.id, geaendertAm: jetzt });
     for (const f of faelle().filter(f => gehoertZu(f, weg))) fallMerken({ ...f, auftraggeberUuid: ziel.id, auftraggeber: ziel.name });
+    // Touren verweisen über auftraggeberId (bzw., noch unverknüpft, über den Namen) auf die Firma – nicht über firmaId
+    for (const t of tourenVonFirma(weg)) merke('touren', { ...t, auftraggeberId: ziel.id, auftraggeber: ziel.name, geaendertAm: jetzt });
     for (const m of Object.values(mails())) if (m.firmaId === weg.id) m.firmaId = ziel.id;
     const w = [...new Map([...schlagwortListe(ziel), ...schlagwortListe(weg)].map(x => [x.toLowerCase(), x])).values()].join(', ');
     merke('auftraggeber', { ...ziel, rechtsform: ziel.rechtsform || weg.rechtsform || '', telefon: ziel.telefon || weg.telefon || '', email: ziel.email || weg.email || '',
@@ -4169,6 +4171,8 @@ const BEIFAHRER_MAX = 5;
 const beifahrerVon = t => String(t.beifahrerIds || '').split(',').filter(Boolean);
 const teamVon = t => [t.fahrerId, ...beifahrerVon(t)].filter(Boolean);
 const tourenAm = tag => alle('touren').filter(t => t.datum === tag).sort((a, b) => (a.reihenfolge ?? 0) - (b.reihenfolge ?? 0) || String(a.id).localeCompare(String(b.id)));
+/** Tour verweist auf eine Firma, die es nicht mehr gibt (z. B. vor 4.17 zusammengeführt). */
+const firmaWeg = t => !!t.auftraggeberId && !(S.auftraggeber[t.auftraggeberId] && !S.auftraggeber[t.auftraggeberId].geloescht);
 const tourAuftraggeberName = t => (t.auftraggeberId && S.auftraggeber[t.auftraggeberId] && !S.auftraggeber[t.auftraggeberId].geloescht ? S.auftraggeber[t.auftraggeberId].name : t.auftraggeber || '');
 const tourText = t => [t.tourNr && 'Tour ' + t.tourNr, tourAuftraggeberName(t), t.name, t.uhrzeit && 'ab ' + t.uhrzeit, t.einsatzart].filter(Boolean).join(' · ');
 const tourGefahren = t => !!(t.kennzeichen && t.fahrerId) && t.status !== 'STORNIERT';
@@ -4269,6 +4273,7 @@ function tourHinweise(t, lage = tagesLage(t.datum)) {
     if (!z) h.push(['grau', 'nicht im Fuhrpark']);
   }
   if (t.kennzeichen && !t.fahrerId) h.push(['gelb', 'Fahrer fehlt']);
+  if (firmaWeg(t)) h.push(['rot', 'Firma gelöscht – Auftraggeber neu wählen']);
   const ziele = zieleZum(t.auftraggeberId, t.datum);
   if (ziele.length && t.name && !zielPreis(ziele, t)) h.push(['gelb', 'Ziel nicht in den Stammdaten']);
   else if (ziele.length && !t.name && t.kennzeichen) h.push(['gelb', 'Ziel fehlt']);
@@ -4461,7 +4466,15 @@ function tourEingabe(t, el) {
   if (feld === 'kennzeichen') { const z = fahrzeugZumKz(wert); neu.kennzeichen = z ? z.kennzeichen : wert.toUpperCase(); }
   else if (feld === 'auftraggeber') {
     const f = wert ? firmaZumNamen(wert) : null;
-    if (f || !wert) { neu.auftraggeberId = f ? f.id : ''; neu.auftraggeber = f ? f.name : ''; }
+    if (f || !wert) {
+      neu.auftraggeberId = f ? f.id : ''; neu.auftraggeber = f ? f.name : '';
+      // Zeigte die Tour auf eine gelöschte Firma, gehen alle Touren mit diesem Verweis mit (Reparatur nach dem Zusammenführen).
+      if (f && firmaWeg(t)) {
+        const andere = alle('touren').filter(x => x.id !== t.id && x.auftraggeberId === t.auftraggeberId);
+        for (const x of andere) merke('touren', { ...x, auftraggeberId: f.id, auftraggeber: f.name, geaendertAm: jetztIso() });
+        if (andere.length) toast(`${andere.length} weitere Touren von „${t.auftraggeber}“ ebenfalls zu ${f.name}`, 6000);
+      }
+    }
     else {
       neu.auftraggeberId = Aktionen.firmaSpeichern({ name: wert, status: 'AKTIV', notizen: 'Aus der Tourenplanung angelegt' }); neu.auftraggeber = wert;
       toast(`Firma „${wert}“ im CRM angelegt`, 4000);
