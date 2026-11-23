@@ -66,10 +66,10 @@ class MainActivity : ComponentActivity() {
 
     private val benachrichtigungsFrage = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private var nachSmsFrage: ((Boolean) -> Unit)? = null
-    private val smsFrage = registerForActivityResult(ActivityResultContracts.RequestPermission()) { erlaubt -> nachSmsFrage?.invoke(erlaubt); nachSmsFrage = null }
+    private val smsFrage = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { erg -> nachSmsFrage?.invoke(erg.values.all { it }); nachSmsFrage = null }
 
     /** Fragt einmalig nach der SMS-Berechtigung (Geraet.sms). */
-    fun frageSms(weiter: (Boolean) -> Unit) { nachSmsFrage = weiter; smsFrage.launch(Manifest.permission.SEND_SMS) }
+    fun frageSms(weiter: (Boolean) -> Unit) { nachSmsFrage = weiter; smsFrage.launch(Geraet.SMS_RECHTE) }
     private var schonGefragt = false
 
     fun frageBenachrichtigungen() {

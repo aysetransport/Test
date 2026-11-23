@@ -183,7 +183,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
 
     private fun meldung(text: String) = Toast.makeText(activity, text, Toast.LENGTH_LONG).show()
 
-    private fun smsErlaubt() = ContextCompat.checkSelfPermission(activity, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+    private fun smsErlaubt() = SMS_RECHTE.all { ContextCompat.checkSelfPermission(activity, it) == PackageManager.PERMISSION_GRANTED }
 
     private fun sendeSms(nummern: List<String>, text: String) {
         var offen = nummern.size
@@ -224,7 +224,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
             sm.sendMultipartTextMessage(nr, null, teile, ArrayList(teile.map { gesendet }), null)
         } catch (e: Exception) {
             empfaenger?.let { runCatching { activity.unregisterReceiver(it) } }
-            fertig(e.message ?: e.javaClass.simpleName)
+            fertig(if (e is SecurityException) "Berechtigung fehlt – unter Android-Einstellungen → Apps → Ayse CRM → Berechtigungen „SMS“ und „Telefon“ erlauben (${e.message})" else e.message ?: e.javaClass.simpleName)
         }
     }
 
@@ -282,6 +282,8 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
     }
 
     companion object {
+        /** SMS senden braucht auf vielen Geräten zusätzlich „Telefon“: Android liest dabei Angaben der SIM (getGroupIdLevel1). */
+        val SMS_RECHTE = arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE)
         /** Fehlercode von Android → verständlicher Grund (SmsManager.RESULT_ERROR_…). */
         fun smsFehlerText(code: Int) = when (code) {
             SmsManager.RESULT_ERROR_GENERIC_FAILURE -> "allgemeiner Fehler – bei Dual-SIM in den Android-Einstellungen eine Standard-SIM für SMS festlegen (nicht „Immer fragen“), sonst Guthaben/Tarif prüfen"

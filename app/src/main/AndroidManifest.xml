@@ -12,6 +12,8 @@
 
     <!-- SMS direkt aus der App senden (Lieferavis, Touren); Geräte ohne Mobilfunk nutzen weiter die SMS-App -->
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- Ohne sie bricht das Senden auf vielen Geräten ab: Android prüft dabei Angaben der SIM (getGroupIdLevel1) -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <queries>
