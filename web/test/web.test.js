@@ -1606,6 +1606,14 @@ test('Bestehende Rechnungen korrigieren: Zahlung zurücknehmen, Korrekturrechnun
     assert.equal(await s.evaluate(id => S.belege[id].status, id), soll);
   }
   assert.equal(await s.evaluate(id => S.belege[id].bezahltCent, ids.g), 0);
+  // Nummer eines gelöschten Entwurfs wird wieder vergeben (auch wenn danach schon weitere Rechnungen existieren)
+  const wieder = await s.evaluate(() => {
+    const f = alle('belege')[0].firmaId, e1 = BelegAktionen.neu('RECHNUNG', f), e2 = BelegAktionen.neu('RECHNUNG', f);
+    const n1 = S.belege[e1].nummer; BelegAktionen.loeschen(S.belege[e1]);
+    const e3 = BelegAktionen.neu('RECHNUNG', f);
+    return [S.belege[e3].nummer === n1, S.belege[e2].nummer > n1, new Set(alle('belege').map(b => b.nummer)).size === alle('belege').length];
+  });
+  assert.deepEqual(wieder, [true, true, true]);
   // offizielle Prüfung der korrigierten Rechnung (wie im E-Rechnungs-Test)
   const regeln = process.env.ERECHNUNG_REGELN;
   if (regeln) {
