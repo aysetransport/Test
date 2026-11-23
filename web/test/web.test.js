@@ -2634,6 +2634,11 @@ test('Scannen (Windows): Tankbelege und Rechnungen auslesen, prüfen, speichern 
   await s.waitForFunction(() => document.querySelectorAll('#tank-tabelle tbody tr[data-scan]').length === 2);
   assert.equal(await s.evaluate(() => window.__modus[0]), 'STAPEL');
   assert.equal(await s.locator('#tank-tabelle tr[data-scan="1"] [data-t=betrag]').inputValue(), '70,40');
+  // Vergleich: Beleg erscheint neben der Tabelle, Klick auf eine Zeile zeigt ihren Beleg
+  assert.ok(await s.locator('#dialog .beleg-bild').isVisible());
+  assert.equal(await s.locator('#dialog .beleg-bild img').getAttribute('src'), 'data:image/jpeg;base64,' + await s.evaluate(() => btoa('s1_0')));
+  await s.locator('#tank-tabelle tr[data-scan="1"] [data-t=liter]').click();
+  assert.equal(await s.locator('#dialog .beleg-bild img').getAttribute('src'), 'data:image/jpeg;base64,' + await s.evaluate(() => btoa('s1_1')));
   await s.locator('#tank-form button.voll').click();
   await s.locator('#toast', { hasText: '2 Tankbelege gespeichert' }).waitFor();
   const tank = await s.evaluate(() => { const fz = alle('fahrzeuge')[0];
@@ -2652,6 +2657,7 @@ test('Scannen (Windows): Tankbelege und Rechnungen auslesen, prüfen, speichern 
     ['Werkstatt Meier GmbH', 'WM-2026-118', '2026-11-10', '2026-11-24', '595,00', '19', 'WERKSTATT', 'DE02120300000000202051']);
   assert.deepEqual([zeilen[1].lieferant, zeilen[1].nummer, zeilen[1].brutto, zeilen[1].kategorie], ['Toll Collect GmbH', 'TC-998877', '1234,56', 'MAUT']);
   assert.equal(await s.locator('[data-ers-seiten="0"]').textContent(), ' 2', 'Folgeseite hängt an der ersten Rechnung');
+  assert.equal(await s.locator('#dialog .beleg-seiten .chip').count(), 2, 'zweiseitige Rechnung: Seiten wählbar');
   // einzeln: lange Bons per Hand → nächste Rechnung kommt dazu, wird als doppelt erkannt
   await s.locator('#ers-form [name=ers-modus][value=EINZELN]').check();
   await s.locator('#ers-scan').click();

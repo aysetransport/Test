@@ -27,6 +27,12 @@ function SetzeMax($props, $id) { foreach ($p in $props) { if ($p.PropertyID -eq 
 # Neuere Treiber (WIA 2) führen den Einzug als eigenes Element (Kategorie FE131934…) – sonst das erste Element
 function Einzug($dev) { foreach ($it in $dev.Items) { foreach ($p in $it.Properties) { if ($p.PropertyID -eq 4125 -and ([string]$p.Value) -match 'FE131934') { return $it } } }; return $dev.Items.Item(1) }
 # Bild holen: JPEG direkt, sonst BMP, sonst über den Windows-Scan-Dialog (manche HP-Treiber können nur das). Der erste Weg, der klappt, bleibt.
+# Immer als JPEG ablegen: BMP ist unkomprimiert (oft 25 MB+) – zu groß für Texterkennung und Ablage
+function Speichere($img, $ziel) {
+  if ($img.FileExtension -match '^jpe?g$') { $img.SaveFile("$ziel.jpg"); return }
+  $roh = "$ziel.roh.$($img.FileExtension)"; $img.SaveFile($roh); Add-Type -AssemblyName System.Drawing
+  $b = [System.Drawing.Image]::FromFile($roh); $b.Save("$ziel.jpg", [System.Drawing.Imaging.ImageFormat]::Jpeg); $b.Dispose(); Remove-Item $roh
+}
 $script:wege = @('JPEG', 'BMP', 'DIALOG')
 function Hole($item) {
   $fehler = @()
@@ -59,10 +65,7 @@ $n = 0
 while ($true) {
   try { $img = Hole $item }
   catch { if ((Code $_) -eq -2145320957) { if ($n -eq 0) { throw 'Kein Papier im Einzug' } else { break } } else { throw } }
-  $n++; $ziel = Join-Path $env:SCAN_ZIEL ('seite{0:D3}' -f $n)
-  # BMP (unkomprimiert, oft 25 MB+) als JPEG speichern – klein genug für Texterkennung und Ablage
-  if ($img.FileExtension -match '^jpe?g$') { $img.SaveFile("$ziel.jpg") }
-  else { $roh = "$ziel.roh.$($img.FileExtension)"; $img.SaveFile($roh); Add-Type -AssemblyName System.Drawing; $b = [System.Drawing.Image]::FromFile($roh); $b.Save("$ziel.jpg", [System.Drawing.Imaging.ImageFormat]::Jpeg); $b.Dispose(); Remove-Item $roh }
+  $n++; Speichere $img (Join-Path $env:SCAN_ZIEL ('seite{0:D3}' -f $n))
   if (-not $stapel) { break }
 }
 Write-Output $n`;
@@ -77,7 +80,7 @@ try {
   $k = 0; foreach ($it in $dev.Items) { $k++; $aus += ('Element {0}:' -f $k); foreach ($p in $it.Properties) { if (@(4098, 4125, 3088, 6146, 6147, 6151, 6152) -contains $p.PropertyID) { $max = ''; try { $max = ' (max ' + $p.SubTypeMax + ')' } catch {}; $aus += ('  {0} ({1}) = {2}{3}' -f $p.Name, $p.PropertyID, $p.Value, $max) } } }
   if ($env:SCAN_TEST -eq '1') {
     $item = Einzug $dev; Setze $item.Properties 3088 1; Setze $item.Properties 6146 2
-    try { $img = Hole $item; $aus += ('Testscan: ok über {0}, {1} x {2} Pixel, Format {3}' -f $script:wege[0], $img.Width, $img.Height, $img.FileExtension) } catch { $aus += 'Testscan: ' + (Text $_) }
+    try { $img = Hole $item; $aus += ('Testscan: ok über {0}, {1} x {2} Pixel, {3} dpi, Format {4}' -f $script:wege[0], $img.Width, $img.Height, $img.HorizontalResolution, $img.FileExtension); Speichere $img (Join-Path $env:SCAN_ZIEL 'test') } catch { $aus += 'Testscan: ' + (Text $_) }
   }
 } catch { $aus += 'Verbinden: ' + (Text $_) }
 Write-Output ($aus -join [Environment]::NewLine)`;
@@ -131,7 +134,15 @@ async function stapel(id, modus) {
 /** Was Windows und der Treiber melden (Text zum Weitergeben); testscan = auch eine Seite übertragen. */
 async function pruefen(id, testscan) {
   if (process.env.SCHADEN_SCAN_ORDNER) return 'Test-Scanner (Ordner statt Scanner)';
-  return powershell(PRUEFEN_PS, { SCAN_ID: String(id || ''), SCAN_TEST: testscan ? '1' : '0' });
+  const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'ayse-pruefen-'));
+  let aus = await powershell(PRUEFEN_PS, { SCAN_ID: String(id || ''), SCAN_TEST: testscan ? '1' : '0', SCAN_ZIEL: ordner });
+  const bild = path.join(ordner, 'test.jpg');
+  if (fs.existsSync(bild)) { // Texterkennung auf dem Testscan – zeigt, ob das Bild lesbar ist
+    const groesse = fs.statSync(bild).size;
+    try { const r = await lesen(fs.readFileSync(bild).toString('base64')); aus += `\nTexterkennung: ${r.text.trim().length} Zeichen, Sicherheit ${r.sicherheit} %, Bild ${Math.round(groesse / 1024)} KB\nAnfang: ${r.text.trim().slice(0, 200).replace(/\s+/g, ' ')}`; }
+    catch (e) { aus += `\nTexterkennung: ${e.message} (Bild ${Math.round(groesse / 1024)} KB)`; }
+  }
+  return aus;
 }
 
 // Texterkennung: ein Arbeiter für die ganze Sitzung (das Laden der deutschen Sprachdaten dauert ein paar Sekunden).
