@@ -34,8 +34,8 @@ PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen.
   Diesen muss der Benutzer bestätigen, das schreibt Android ohne Play Store so vor (beim ersten Mal zusätzlich „Apps aus
   dieser Quelle zulassen“).
   Einmalig nötig: unter *Settings → Secrets and variables → Actions* das Secret `SCHADEN_TOKEN` anlegen
-  (Fine-grained Token, nur Repository `aysetransport/schaden`, *Contents: Read and write*). Für Android zusätzlich der
-  feste Signaturschlüssel (siehe *Installieren*), sonst wird keine APK veröffentlicht.
+  (Fine-grained Token, nur Repository `aysetransport/schaden`, *Contents: Read and write*). Die Android-APK ist mit dem
+  Schlüssel aus `app/signatur/` signiert.
   Die Windows-Version kommt aus `desktop/package.json` und muss für ein Update steigen. Die Android-`versionCode`
   zählt im Workflow automatisch hoch.
 - **Veröffentlichen:** `node tools/app-update.js` ausführen (Version kommt aus `desktop/package.json`), dann
@@ -50,11 +50,10 @@ PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen.
   (öffentlich, sobald `SCHADEN_TOKEN` hinterlegt ist), sonst Release **„Windows-App“** im Repository (Tag `windows-app`, vom Workflow *Windows-App* nach jedem
   erfolgreichen Lauf auf dem Standard-Branch erneuert). Nicht signiert: SmartScreen
   → „Weitere Informationen → Trotzdem ausführen“. Installation ohne Administratorrechte.
-- **Android:** Workflow *Android* → Artefakt `Ayse-CRM-apk`. Damit Updates über die installierte App gehen,
-  braucht es einen festen Signaturschlüssel: einmal anlegen
-  (`keytool -genkeypair -keystore ayse.jks -alias ayse-crm -keyalg RSA -keysize 3072 -validity 11000`), sicher
-  aufbewahren und unter *Settings → Secrets and variables → Actions* als `SIGNATUR_BASE64` (Keystore als Base64),
-  `SIGNATUR_PASSWORT` und `SIGNATUR_ALIAS` hinterlegen.
+- **Android:** Release **„Android-App“** im Repository (Tag `android-app`, `Ayse-CRM.apk`, nach jedem Lauf auf dem
+  Standard-Branch erneuert). Signiert mit dem festen Schlüssel aus `app/signatur/` (siehe dortige LIESMICH), damit sich
+  jede neue APK über die installierte installieren lässt. Sind die Secrets `SIGNATUR_BASE64`, `SIGNATUR_PASSWORT` und
+  `SIGNATUR_ALIAS` gesetzt, gehen sie vor.
 
 ## Entwickeln und testen
 

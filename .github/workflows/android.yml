@@ -5,7 +5,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write # für den Release „android-app“ mit der APK
 
 jobs:
   build:
@@ -37,7 +37,8 @@ jobs:
             echo "$SIGNATUR_BASE64" | base64 -d > "$RUNNER_TEMP/signatur.jks"
             echo "SIGNATUR_DATEI=$RUNNER_TEMP/signatur.jks" >> "$GITHUB_ENV"
           else
-            echo "Kein Signaturschlüssel hinterlegt – die APK wird mit einem Testschlüssel signiert."
+            echo "Kein Secret hinterlegt – es gilt der Schlüssel im Repository (app/signatur)."
+            echo "SIGNATUR_DATEI=$GITHUB_WORKSPACE/app/signatur/ayse-crm.p12" >> "$GITHUB_ENV"
           fi
 
       # Fortlaufende versionCode, damit das App-Update jede neue APK als neuer erkennt (build.gradle.kts)
@@ -49,6 +50,20 @@ jobs:
           SIGNATUR_PASSWORT: ${{ secrets.SIGNATUR_PASSWORT }}
           SIGNATUR_ALIAS: ${{ secrets.SIGNATUR_ALIAS }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleRelease
+
+      # Neueste signierte APK als Release „android-app“ in diesem Repository (wie bei Windows): Releases zählen nicht
+      # zum begrenzten Speicher für Build-Dateien. Nur mit festem Schlüssel – sonst ließe sie sich nicht über die
+      # installierte App installieren.
+      - name: APK als Release bereitstellen
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && env.SIGNATUR_DATEI != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/Ayse-CRM.apk"
+          notiz="Neueste Android-App: Ayse-CRM.apk (versionCode $VERSION_CODE, Commit $GITHUB_SHA)"
+          gh release view android-app > /dev/null 2>&1 || gh release create android-app --title "Android-App" --notes "$notiz" --target "$GITHUB_SHA"
+          gh release edit android-app --notes "$notiz"
+          gh release upload android-app "$RUNNER_TEMP/Ayse-CRM.apk" --clobber
 
       # App-Update für die installierten Apps: Release „android-app“ im öffentlichen Repository aysetransport/schaden.
       # Nur mit festem Signaturschlüssel (sonst ließe sich die APK nicht über die installierte installieren) und
