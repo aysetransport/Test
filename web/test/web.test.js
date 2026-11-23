@@ -2659,3 +2659,48 @@ test('Scannen (Windows): Tankbelege und Rechnungen auslesen, prüfen, speichern 
   assert.deepEqual(er, [['Toll Collect GmbH', 103745, 19711, null, 1], ['Werkstatt Meier GmbH', 50000, 9500, '2026-11-24', 2]]);
   await s.close();
 });
+
+test('Belege: Fahrer reicht per Foto ein, Büro übernimmt (Texterkennung, Fahrzeug aus der Tour) oder verwirft', async () => {
+  const s = await geraet(null, { bereich: 'fahrer' });
+  const bon = 'ARAL Tankstelle\nDiesel\n40,00 1 x 1,700 EUR/l\nSumme EUR 68,00\n';
+  const quittung = 'Parkhaus City GmbH\nQuittung\nDatum 20.11.2026\nGesamt 12,50 EUR\nMwSt 19%';
+  const ids = await s.evaluate(() => {
+    const m = uuid(); S.mitarbeiter[m] = { id: m, name: 'Ali Demir', rolle: 'FAHRER', aktiv: true, geaendertAm: jetztIso() };
+    merke('fahrzeuge', { id: uuid(), kennzeichen: 'KR-AT 100', status: 'AKTIV', geaendertAm: jetztIso() });
+    const t = merke('touren', { id: uuid(), firmaId: '', datum: heute(), reihenfolge: 1, kennzeichen: 'KR-AT 100', fahrerId: m, geaendertAm: jetztIso() }).id;
+    S.einstellungen.ichId = m; nachAenderung(); return { m, t };
+  });
+  await s.locator('[data-fahrer-beleg]').click();
+  await s.locator('#be-form [name=foto]').setInputFiles([{ name: 'bon.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('BON') }]);
+  await s.locator('#be-form button.voll').click();
+  await s.locator('#toast', { hasText: 'Beleg eingereicht' }).waitFor();
+  await s.locator('[data-fahrer-beleg]').click();
+  await s.locator('#be-form [name=art]').selectOption('SONST');
+  await s.locator('#be-form [name=foto]').setInputFiles([{ name: 'park.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('PARK') }]);
+  await s.locator('#be-form [name=notiz]').fill('Parkhaus Messe');
+  await s.locator('#be-form button.voll').click();
+  await s.waitForFunction(() => eingereichteBelege().length === 2);
+  assert.ok((await s.evaluate(() => eingereichteBelege().map(a => a.anzeigename).join('|'))).includes('Beleg eingereicht · SONST · Ali Demir · Parkhaus Messe – park.jpg'));
+  // Büro (Windows-App mit Texterkennung)
+  await s.evaluate(([bon, q]) => { window.desktop = { plattform: 'win32', beiZiel() {}, oeffneDatei: async () => true, benachrichtige: async () => true,
+    scan: { geraete: async () => [], stapel: async () => [], lesen: async b64 => ({ text: atob(b64) === 'BON' ? bon : q, sicherheit: 90 }) } }; bereichWechseln('finanzen'); }, [bon, quittung]);
+  await s.locator('[data-belege-pruefen]').click();
+  await s.locator('#bp-tank').click();
+  await s.waitForFunction(() => document.querySelector('#tank-tabelle tr[data-scan] [data-t=betrag]') && document.querySelector('#tank-tabelle tr[data-scan] [data-t=betrag]').value === '68,00');
+  const z = await s.evaluate(() => Object.fromEntries([...document.querySelectorAll('#tank-tabelle tr[data-scan] input')].map(i => [i.dataset.t, i.value])));
+  assert.deepEqual([z.kz, z.datum, z.liter, z.ort], ['KR-AT 100', await s.evaluate(() => heute()), '40', 'Aral'], 'Fahrzeug und Datum aus der Tour');
+  await s.locator('#tank-form button.voll').click();
+  await s.waitForFunction(() => eingereichteBelege().length === 1);
+  const akte = await s.evaluate(() => alle('fahrzeugeintraege').map(x => [x.betragCent, x.text]));
+  assert.equal(akte[0][0], 6800); assert.match(akte[0][1], /Foto vom Fahrer an der Tour · Beleg /);
+  // Quittung als Eingangsrechnung
+  await s.locator('[data-belege-pruefen]').click();
+  await s.locator('#bp-sonst').click();
+  await s.waitForFunction(() => document.querySelector('#ers-tabelle tbody tr [data-t=brutto]') && document.querySelector('#ers-tabelle tbody tr [data-t=brutto]').value === '12,50');
+  await s.locator('#ers-form button.voll').click();
+  await s.waitForFunction(() => eingereichteBelege().length === 0);
+  const er = await s.evaluate(() => alle('eingangsrechnungen').map(e => [e.lieferant, eingangBrutto(e), e.datum, /Vom Fahrer eingereicht/.test(e.notiz)]));
+  assert.deepEqual(er, [['Parkhaus City GmbH', 1250, '2026-11-20', true]]);
+  assert.equal(await s.locator('[data-belege-pruefen]').count(), 0, 'Hinweis weg, wenn alles übernommen ist');
+  await s.close();
+});
