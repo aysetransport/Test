@@ -43,6 +43,11 @@ test('Windows-App: Cloud, Fall, E-Mail senden, Antwort abrufen und beantworten, 
   assert.equal(await s.title(), 'Ayse CRM');
   assert.equal(await s.evaluate(() => location.protocol), 'app:');
   assert.equal(await s.evaluate(() => typeof window.require), 'undefined', 'kein Node-Zugriff aus der Oberfläche');
+  // Programme aus Mail-Anhängen werden nie direkt gestartet
+  const exe = await s.evaluate(() => window.desktop.oeffneDatei('Rechnung.pdf.exe', new Uint8Array([77, 90])).then(() => 'geöffnet', e => e.message));
+  assert.match(exe, /Sicherheitsgründen nicht geöffnet/);
+  const lnk = await s.evaluate(() => window.desktop.oeffneDatei('Lieferschein.LNK. ', new Uint8Array([1])).then(() => 'geöffnet', e => e.message));
+  assert.match(lnk, /Sicherheitsgründen/, 'auch mit Großbuchstaben und Punkt/Leerzeichen am Ende');
 
   // Cloud: Test-Cloud eintragen (statt der fest hinterlegten echten Adresse) und PIN festlegen.
   await s.evaluate(url => { localStorage.setItem('schadensfaelle-v1', JSON.stringify({ apiUrl: url })); localStorage.setItem('crm-bereich', 'faelle'); }, cloud.url);

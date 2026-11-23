@@ -180,7 +180,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
         try {
             val sm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) activity.getSystemService(SmsManager::class.java) else @Suppress("DEPRECATION") SmsManager.getDefault()
             val teile = sm.divideMessage(text)
-            val aktion = "${activity.packageName}.SMS_GESENDET"
+            val aktion = "${activity.packageName}.SMS_GESENDET.${System.nanoTime()}" // je Sendung eigene Rückmeldung
             var offen = teile.size * nummern.size
             var fehler = 0
             // Rückmeldung je Teil-SMS: erst wenn alle durch sind, eine Meldung (Erfolg oder Fehler, z. B. kein Netz).

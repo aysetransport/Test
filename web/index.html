@@ -19,7 +19,7 @@ window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwh
 })();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
-window.WEB_STAND = 1795443801; window.WEB_VERSION = '4.17.0';
+window.WEB_STAND = 1795444687; window.WEB_VERSION = '4.17.0';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4E79">
@@ -1216,7 +1216,7 @@ async function api(fn, ...args) {
   return j.ok;
 }
 const TABELLEN = ['faelle', 'verlauf', 'anlagen', 'auftraggeber', ...CRM_TABELLEN];
-const CLOUD_API = 13;
+const CLOUD_API = 16; // 16: Eingangsrechnungen und Gutschriftverfahren – ein älteres Skript würde sie verwerfen
 const VERALTET = 'Das Cloud-Skript ist veraltet – bitte die neue Code.gs bereitstellen.';
 const offeneAnzahl = () => TABELLEN.reduce((n, t) => n + offene(t).length, 0);
 const SYNC = { laeuft: false, nochmal: false, fehler: '', zuletzt: 0, timer: 0 };
@@ -1240,6 +1240,8 @@ async function abgleich() {
       if (!(st.api >= CLOUD_API)) { SYNC.versionOk = null; throw new Error(VERALTET); }
       SYNC.versionOk = { url: apiUrl(), zeit: Date.now() };
     }
+    // Geräte, die noch die PIN selbst mitschicken, tauschen sie einmal gegen ein Sitzungs-Token.
+    if (PIN && !String(PIN).startsWith('T:')) { const a = await api('anmelden', PIN); if (a.token) { PIN = a.token; try { localStorage.setItem(PIN_SPEICHER, PIN); } catch {} } }
     const gesendet = Object.fromEntries(TABELLEN.map(t => [t, offene(t)]));
     const marken = new Map(Object.values(gesendet).flat().map(d => [d.id, d._n]));
     const r = await api('sync', PIN, { seit: S.seit, kennung: S.kennung, ...Object.fromEntries(TABELLEN.map(t => [t, gesendet[t].map(ohneLokales)])) });
@@ -1342,7 +1344,7 @@ async function anmeldung(falsch = false) {
   ANSICHT.pinAus = !!stat.pinAus;
   if (!neu && (stat.pinAus || (ANSICHT.loginArt || (stat.benutzer ? 'BENUTZER' : 'PIN')) === 'BENUTZER')) { loginDialog(falsch); return; }
   dialog(`<form method="dialog" id="pin-form"><h2>${neu ? 'PIN festlegen' : 'Admin-PIN eingeben'}</h2>
-    <p class="leise">${neu ? 'Diese PIN schützt die Daten in der Cloud. Sie wird auf jedem Gerät einmal abgefragt (mindestens 4 Zeichen).' : 'Die PIN der Schadensfälle-Cloud.'}</p>
+    <p class="leise">${neu ? 'Diese PIN schützt die Daten in der Cloud. Sie wird auf jedem Gerät einmal abgefragt (mindestens 8 Zeichen).' : 'Die PIN der Schadensfälle-Cloud.'}</p>
     <p class="fehlertext" id="pin-fehler" ${falsch ? '' : 'hidden'}>Die PIN war falsch.</p>
     <label class="feld">PIN<input id="pin1" type="password" autocomplete="${neu ? 'new-password' : 'current-password'}" required minlength="${neu ? 4 : 1}"></label>
     ${neu ? '<label class="feld">PIN wiederholen<input id="pin2" type="password" autocomplete="new-password" required></label>' : ''}
@@ -1359,7 +1361,7 @@ async function anmeldung(falsch = false) {
     try {
       if (neu) await api('pinFestlegen', pin);
       const a = await api('anmelden', pin);
-      PIN = pin; try { localStorage.setItem(PIN_SPEICHER, PIN); } catch {}
+      PIN = a.token || pin; try { localStorage.setItem(PIN_SPEICHER, PIN); } catch {} // mit Token trifft eine PIN-Sperre dieses Gerät nicht mehr
       S.zugang = { rolle: a.rolle || 'ADMIN', name: 'Admin', mitarbeiterId: '', hauptadmin: true, pin: true }; speichere();
       $('#dialog').close(); SYNC.fehler = ''; SYNC.versionOk = null; abgleich();
     } catch (e) {
@@ -1393,9 +1395,14 @@ function anmeldelinkLesen() {
   history.replaceState(null, '', location.pathname + location.search);
   try {
     const d = JSON.parse(vonB64url(m[1]));
-    if (d.c && (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(d.c) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(d.c))) { S.apiUrl = d.c; S.nurLokal = false; speichere(); }
+    const cloudOk = d.c && (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(d.c) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(d.c));
     if (d.u) ANSICHT.loginArt = 'BENUTZER';
-    return d.u && d.p ? d : null;
+    // Eine andere Cloud als die bisherige nur nach Rückfrage – sonst könnte ein gefälschter Link die Daten umleiten.
+    // Ein frisches Gerät (keine Daten, nicht angemeldet) verbindet sich ohne Rückfrage – dort gibt es nichts umzuleiten.
+    const frisch = !PIN && !TABELLEN.some(t => Object.keys(S[t] || {}).length);
+    const neueCloud = cloudOk && d.c !== apiUrl() && !frisch ? d.c : '';
+    if (cloudOk && !neueCloud) { S.apiUrl = d.c; S.nurLokal = false; speichere(); }
+    return d.u && d.p ? { ...d, neueCloud } : neueCloud ? { neueCloud } : null;
   } catch { return null; }
 }
 function loginDialog(falsch = false) {
@@ -2979,15 +2986,18 @@ document.addEventListener('click', e => {
 });
 const centText = t => (t !== '' && t != null && Number.isFinite(Number(t)) ? geldOhneSymbol(Math.round(Number(t) * 100)) : '');
 const formFuellen = (form, werte) => { for (const [k, v] of Object.entries(werte)) if (v != null && v !== '' && form.elements[k]) form.elements[k].value = v; };
-/** Rechnung aus einer Datei lesen: E-Rechnung (XML) oder ZUGFeRD-PDF → Angaben; sonst (PDF/Foto ohne Daten) null. */
-async function rechnungAusDatei(datei) {
+/**
+ * E-Rechnung aus einer Datei lesen (XML oder ZUGFeRD-PDF). laut = Fehler melden (Anzeige),
+ * sonst null für alles ohne E-Rechnung (Erfassen: PDF oder Foto füllt dann nichts aus).
+ */
+async function rechnungAusDatei(datei, laut = false) {
   if (!datei) return null;
   const bytes = new Uint8Array(await datei.arrayBuffer()), pdf = /\.pdf$/i.test(datei.name) || (bytes[0] === 0x25 && bytes[1] === 0x50);
-  if (!pdf && !/\.xml$/i.test(datei.name) && !/xml/.test(datei.type)) return null;
+  if (!laut && !pdf && !/\.xml$/i.test(datei.name) && !/xml/.test(datei.type)) return null;
   try {
     const r = eRechnungLesen(pdf ? await eRechnungAusPdf(bytes) : new TextDecoder('utf-8').decode(bytes));
     return { ...r, mwst: Number(r.netto) ? String(Math.round(Number(r.steuer) / Number(r.netto) * 100)) : '' };
-  } catch { return null; }
+  } catch (e) { if (laut) throw e; return null; }
 }
 
 // ============================== Eingangsrechnungen (Rechnungen an die Firma) ==============================
@@ -3025,7 +3035,8 @@ function eingangDialog(x) {
     <div class="dialog-knoepfe"><span class="fuell"></span><button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll">Speichern</button>
       ${neu ? '' : '<button type="button" class="knopf text gefahr" id="eingang-loeschen">Löschen</button>'}</div></form>`);
   const form = $('#eingang-form');
-  let exakt = null; // genaue Beträge aus der E-Rechnung (statt aus brutto zurückgerechnet)
+  // genaue Beträge (gespeichert bzw. aus der E-Rechnung) – gelten, solange der Bruttobetrag nicht geändert wird
+  let exakt = x ? { nettoCent: x.nettoCent, mwstCent: x.mwstCent, brutto: geldOhneSymbol(eingangBrutto(x)) } : null, eImport = false;
   form.elements.lieferant.onchange = () => { // gleicher Lieferant wie früher: Kategorie und Steuersatz von dort
     const v = alle('eingangsrechnungen').filter(y => y.lieferant === form.elements.lieferant.value).sort((a, b) => String(b.datum).localeCompare(String(a.datum)))[0];
     if (v && neu) formFuellen(form, { kategorie: v.kategorie, mwst: v.nettoCent ? String(Math.round((v.mwstCent || 0) / v.nettoCent * 100)) : '', iban: v.iban });
@@ -3034,7 +3045,7 @@ function eingangDialog(x) {
     const r = await rechnungAusDatei(form.elements.datei.files[0]); if (!r) return;
     formFuellen(form, { lieferant: r.verkaeufer && r.verkaeufer.name, nummer: r.nummer, datum: r.datum, faelligAm: r.faellig, brutto: centText(r.brutto), mwst: r.mwst, iban: r.iban, art: r.art === 'Gutschrift' ? 'GUTSCHRIFT' : 'RECHNUNG' });
     form.elements.lieferant.onchange();
-    exakt = { nettoCent: Math.round(Number(r.netto) * 100), mwstCent: Math.round(Number(r.steuer) * 100), brutto: form.elements.brutto.value };
+    exakt = { nettoCent: Math.round(Number(r.netto) * 100), mwstCent: Math.round(Number(r.steuer) * 100), brutto: form.elements.brutto.value }; eImport = true;
     toast('Angaben aus der E-Rechnung übernommen – bitte prüfen');
   };
   if (!neu) $('#eingang-loeschen').onclick = () => bestaetige('Eingangsrechnung löschen?', `${e.lieferant} ${e.nummer || ''} wird gelöscht.`, 'Löschen', () => {
@@ -3044,10 +3055,11 @@ function eingangDialog(x) {
     ev.preventDefault();
     const w = Object.fromEntries([...new FormData(form)].filter(([k]) => k !== 'datei').map(([k, v]) => [k, String(v).trim()])), brutto = geldLesen(w.brutto);
     if (brutto == null) { $('#eingang-fehler').hidden = false; return; }
-    const proz = Number(w.mwst.replace(',', '.')) || 0, netto = exakt && exakt.brutto === w.brutto ? exakt.nettoCent : Math.round(brutto / (1 + proz / 100));
+    const proz = Number(w.mwst.replace(',', '.')) || 0, gleich = exakt && geldLesen(exakt.brutto) === brutto && (eImport || proz === p);
+    const netto = gleich ? exakt.nettoCent : Math.round(brutto / (1 + proz / 100));
     const id = e.id || uuid(), datei = form.elements.datei.files[0];
     merke('eingangsrechnungen', { ...e, id, firmaId: '', art: w.art, lieferant: w.lieferant, nummer: w.nummer, datum: w.datum, faelligAm: w.faelligAm || null, nettoCent: netto, mwstCent: brutto - netto,
-      kategorie: w.kategorie, status: w.status, bezahltAm: w.status === 'BEZAHLT' ? w.bezahltAm || heute() : null, iban: w.iban, notiz: w.notiz, eRechnung: !!exakt || !!e.eRechnung, geaendertAm: jetztIso() });
+      kategorie: w.kategorie, status: w.status, bezahltAm: w.status === 'BEZAHLT' ? w.bezahltAm || heute() : null, iban: w.iban, notiz: w.notiz, eRechnung: eImport || !!e.eRechnung, geaendertAm: jetztIso() });
     $('#dialog').close();
     if (datei) await legeAnlage(id, datei);
     nachAenderung(); toast('Eingangsrechnung gespeichert');
@@ -9969,9 +9981,7 @@ function eRechnungAnzeigen(r) {
 }
 async function eRechnungOeffnen(datei) {
   try {
-    const bytes = new Uint8Array(await datei.arrayBuffer());
-    const xml = /\.pdf$/i.test(datei.name) || (bytes[0] === 0x25 && bytes[1] === 0x50) ? await eRechnungAusPdf(bytes) : new TextDecoder('utf-8').decode(bytes);
-    eRechnungAnzeigen(eRechnungLesen(xml));
+    eRechnungAnzeigen(await rechnungAusDatei(datei, true));
   } catch (e) { toast(t('E-Rechnung nicht lesbar') + ': ' + t(String(e.message || e)), 7000); }
 }
 function eRechnungLueckenDialog(b, l) {
@@ -10115,7 +10125,14 @@ if (langeMailsKuerzen()) speichere();
 const anmeldeLink = anmeldelinkLesen();
 spracheAnwenden();
 zeichne();
-if (anmeldeLink && mitCloud()) einloggenMit(anmeldeLink.u, anmeldeLink.p).catch(e => { toast('Anmeldelink: ' + (String(e.message || e).replace(/^.*GESPERRT: /, '')), 7000); anmeldung(); });
+const mitLink = () => { if (anmeldeLink.u && anmeldeLink.p && mitCloud()) einloggenMit(anmeldeLink.u, anmeldeLink.p).catch(e => { toast('Anmeldelink: ' + (String(e.message || e).replace(/^.*GESPERRT: /, '')), 7000); anmeldung(); }); else if (mitCloud()) abgleich(); };
+if (anmeldeLink && anmeldeLink.neueCloud) {
+  dialog(`<h2>Mit einer anderen Cloud verbinden?</h2><p>Der Anmeldelink verbindet dieses Gerät mit:</p><p class="hinweis-box" translate="no" style="word-break:break-all">${esc(anmeldeLink.neueCloud)}</p>
+    <p>${apiUrl() ? 'Bisher ist es mit einer anderen Cloud verbunden. ' : ''}Nur bestätigen, wenn der Link wirklich von deiner Firma kommt – sonst landen deine Einträge bei Fremden.</p>
+    <div class="dialog-knoepfe"><button class="knopf text" data-zu>Nicht verbinden</button><button class="knopf voll" id="link-cloud-ja">Verbinden</button></div>`);
+  $('#link-cloud-ja').onclick = () => { $('#dialog').close(); S.apiUrl = anmeldeLink.neueCloud; S.nurLokal = false; speichere(); mitLink(); };
+}
+else if (anmeldeLink && mitCloud()) mitLink();
 else if (mitCloud()) abgleich();
 mailStart();
 window.__appBereit = true;

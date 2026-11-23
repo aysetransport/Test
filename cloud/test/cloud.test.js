@@ -24,8 +24,8 @@ test('PIN wird beim ersten Verbinden festgelegt und danach verlangt', () => {
   const u = erstelleUmgebung();
   assert.equal(u.aufruf('status').eingerichtet, false);
   assert.throws(() => u.aufruf('anmelden', PIN), /PIN noch nicht festgelegt/);
-  assert.throws(() => u.aufruf('pinFestlegen', '123'), /mindestens 4 Zeichen/);
-  assert.equal(erstelleUmgebung().aufruf('pinFestlegen', '1978').eingerichtet, true);
+  assert.throws(() => u.aufruf('pinFestlegen', '1234567'), /mindestens 8 Zeichen/);
+  assert.equal(erstelleUmgebung().aufruf('pinFestlegen', '19781978').eingerichtet, true);
 
   u.aufruf('pinFestlegen', PIN);
   assert.equal(u.aufruf('status').eingerichtet, true);
@@ -45,6 +45,37 @@ test('nach acht falschen Eingaben ist eine Stunde gesperrt – auch für die ric
   assert.throws(() => u.aufruf('anmelden', PIN), /GESPERRT/);
   u.zeitVor(2 * 60000);
   assert.equal(u.aufruf('anmelden', PIN).rev, 0);
+});
+
+test('Sperre wird mit jedem weiteren Fehlversuch doppelt so lang; ein PIN-Token arbeitet trotz Sperre weiter', () => {
+  const u = eingerichtet();
+  const token = u.aufruf('anmelden', PIN).token;
+  assert.match(token, /^T:/, 'PIN-Anmeldung liefert ein Sitzungs-Token');
+  for (let i = 0; i < 8; i++) assert.throws(() => u.aufruf('anmelden', 'falsch'), /PIN falsch/);
+  assert.ok(u.aufruf('sync', token, { seit: 0 }), 'Geräte mit Token sind von der Sperre nicht betroffen');
+  u.zeitVor(61 * 60000);
+  assert.throws(() => u.aufruf('anmelden', 'falsch'), /PIN falsch/);
+  u.zeitVor(119 * 60000);
+  assert.throws(() => u.aufruf('anmelden', PIN), /GESPERRT/, 'zweite Sperre: 2 Stunden');
+  u.zeitVor(2 * 60000);
+  assert.equal(u.aufruf('anmelden', PIN).rev, 0);
+  // PIN-Anmeldung abgeschaltet → PIN-Token gilt nicht mehr
+  u.eigenschaften.set('PIN_AUS', '1');
+  assert.throws(() => u.aufruf('stand', token), /PIN_AUS/);
+});
+
+test('viele Benutzer: jeder in einer eigenen Eigenschaft (Google erlaubt höchstens 9 KB je Eigenschaft), alte Liste wird übernommen', () => {
+  const u = eingerichtet();
+  u.eigenschaften.set('BENUTZER', JSON.stringify({ alt1: { id: 'alt1', login: 'altfahrer', name: 'Alt', rolle: 'FAHRER', version: 1, salz: 's', hash: 'h' } }));
+  for (let i = 0; i < 40; i++) u.aufruf('benutzerSpeichern', PIN, { login: 'fahrer' + i, name: 'Fahrer Nummer ' + i, rolle: 'FAHRER', passwort: 'fahrer-' + i + 'xx' });
+  const liste = u.aufruf('benutzerListe', PIN);
+  assert.equal(liste.length, 41);
+  assert.ok(liste.some(b => b.login === 'altfahrer'), 'Benutzer aus der alten Liste bleibt');
+  assert.equal(u.eigenschaften.has('BENUTZER'), false, 'alte Sammel-Eigenschaft ist aufgelöst');
+  assert.ok([...u.eigenschaften.values()].every(v => v.length < 9000), 'keine Eigenschaft über 9 KB');
+  assert.ok(u.aufruf('einloggen', 'fahrer39', 'fahrer-39xx').token);
+  u.aufruf('benutzerLoeschen', PIN, liste.find(b => b.login === 'fahrer3').id);
+  assert.equal(u.aufruf('benutzerListe', PIN).length, 40);
 });
 
 test('unbekannte Funktionen und interne Helfer sind nicht aufrufbar', () => {

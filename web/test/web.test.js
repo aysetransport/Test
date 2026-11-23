@@ -38,7 +38,9 @@ async function melde(s, pin = PIN, neu = false) {
   if (neu) await s.locator('#pin2').fill(pin);
   await s.locator('#pin-form button.voll').click();
 }
-const aktuell = s => s.waitForFunction(() => document.querySelector('#sync').dataset.zustand === 'aktuell' && document.querySelector('#sync').textContent === 'Cloud aktuell');
+// Läuft das Warten ab, zeigt die Meldung, woran der Abgleich hängt (statt nur „Timeout“).
+const aktuell = s => s.waitForFunction(() => document.querySelector('#sync').dataset.zustand === 'aktuell' && document.querySelector('#sync').textContent === 'Cloud aktuell')
+  .catch(async e => { const z = await s.evaluate(() => ({ anzeige: document.querySelector('#sync').textContent, zustand: document.querySelector('#sync').dataset.zustand, fehler: SYNC.fehler, laeuft: SYNC.laeuft, nochmal: SYNC.nochmal, offen: TABELLEN.reduce((n, t) => n + offene(t).length, 0) })).catch(() => ({})); e.message += ' – Sync: ' + JSON.stringify(z); throw e; });
 const abgleich = async s => { await s.evaluate(() => abgleich()); await aktuell(s); };
 async function legeFallAn(s, felder) {
   await s.locator('[data-neu]').first().click();
@@ -2189,6 +2191,14 @@ test('Persönlicher Anmeldelink: Fahrer tippt den Link an und ist angemeldet', a
   await f.waitForFunction(() => window.__appBereit);
   await f.locator('#toast', { hasText: 'Angemeldet als Ali Demir' }).waitFor();
   assert.equal(await f.evaluate(() => [rolle(), ANSICHT.bereich, location.hash.includes('anmelden')].join()), 'FAHRER,fahrer,false');
+  // Gerät mit Daten: ein Link zu einer anderen Cloud verbindet erst nach Rückfrage
+  const fremd = 'https://script.google.com/macros/s/FREMD123/exec';
+  await f.goto(seite.url + '#anmelden=' + await f.evaluate(c => b64url(JSON.stringify({ u: 'x', p: 'y', c })), fremd)); await f.reload();
+  await f.waitForFunction(() => window.__appBereit);
+  await f.locator('#dialog', { hasText: 'Mit einer anderen Cloud verbinden?' }).waitFor();
+  assert.notEqual(await f.evaluate(() => apiUrl()), fremd, 'ohne Bestätigung bleibt die bisherige Cloud');
+  await f.locator('#dialog [data-zu]').click();
+  assert.notEqual(await f.evaluate(() => apiUrl()), fremd);
   await k.close(); await a.context().close(); await cloud.schliessen();
 });
 
@@ -2284,6 +2294,12 @@ test('Finanzen: Gutschriftverfahren, Eingangsrechnungen, Tankbelege in Massen (m
   const knoepfe = await s.evaluate(() => [...document.querySelectorAll('#eingang-form .dialog-knoepfe button')].map(b => b.id || b.textContent.trim()));
   assert.deepEqual(knoepfe, ['Abbrechen', 'Speichern', 'eingang-loeschen']);
   await s.locator('#dialog [data-zu]').click();
+  // gemischte Steuersätze (1.000,00 netto + 145,00 Steuer): nur „bezahlt“ setzen ändert keinen Cent
+  const gemischt = await s.evaluate(() => { const id = uuid(); merke('eingangsrechnungen', { id, firmaId: '', art: 'RECHNUNG', lieferant: 'Großhandel', nummer: 'G-9', datum: '2026-11-02', nettoCent: 100000, mwstCent: 14500, kategorie: 'SONSTIGES', status: 'OFFEN', eRechnung: true, geaendertAm: jetztIso() }); nachAenderung(); return id; });
+  await s.locator(`[data-eingang="${gemischt}"]`).click();
+  await s.locator('#eingang-form [name=status]').selectOption('BEZAHLT');
+  await s.locator('#eingang-form button.voll').click();
+  assert.deepEqual(await s.evaluate(i => { const x = S.eingangsrechnungen[i]; return [x.nettoCent, x.mwstCent, x.status, x.eRechnung]; }, gemischt), [100000, 14500, 'BEZAHLT', true]);
   // Tankbelege: runtertippen, Enter springt weiter, neue Zeile kommt von selbst; ohne Kennzeichen → Ausgabe „Kraftstoff“
   await s.locator('[data-tankbelege]').first().click();
   const zeile = n => s.locator(`#tank-tabelle tbody tr:nth-child(${n})`);

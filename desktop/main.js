@@ -54,8 +54,10 @@ behandle('web:zuruecksetzen', () => update.zuruecksetzen());
 let appUpdate = { bereit: false, version: '' };
 autoUpdater.on('update-available', i => { appUpdate = { ...appUpdate, version: i.version }; });
 autoUpdater.on('update-downloaded', i => { appUpdate = { bereit: true, version: i.version }; });
+autoUpdater.on('error', () => {}); // Fehler kommen über app:pruefen gekürzt in der Oberfläche an
 behandle('app:pruefen', async () => {
-  if (app.isPackaged && !process.env.SCHADEN_TEST && !appUpdate.bereit) await autoUpdater.checkForUpdates();
+  try { if (app.isPackaged && !process.env.SCHADEN_TEST && !appUpdate.bereit) await autoUpdater.checkForUpdates(); }
+  catch (e) { throw new Error(/\b404\b/.test(String(e.message)) ? 'Noch kein App-Update veröffentlicht' : String(e.message || e).split('\n')[0].slice(0, 160)); }
   return appUpdate;
 });
 behandle('app:installieren', () => {
@@ -86,11 +88,16 @@ behandle('benachrichtige', (titel, text, ziel) => {
   n.show();
   return true;
 });
+// Programme und Skripte aus Mails nie direkt starten (Phishing) – nur speichern lassen.
+const AUSFUEHRBAR = /\.(exe|com|scr|pif|bat|cmd|msi|msp|msix|appx|appinstaller|js|jse|vbs|vbe|wsf|wsh|hta|lnk|url|scf|ps1|psm1|reg|cpl|jar|inf|iso|img|vhdx?)$/i;
 behandle('datei:oeffnen', async (name, bytes) => {
-  const sicher = String(name || 'Anlage').replace(/[\\/:*?"<>|]/g, '_').slice(0, 120);
+  const sicher = String(name || 'Anlage').replace(/[\\/:*?"<>|]/g, '_').replace(/[.\s]+$/, '').slice(0, 120);
+  if (AUSFUEHRBAR.test(sicher)) throw new Error(`„${sicher}“ ist ein Programm oder Skript und wird aus Sicherheitsgründen nicht geöffnet. Bitte nur öffnen, wenn der Absender sicher ist: erst speichern, dann prüfen.`);
   const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'schadensfaelle-'));
   const datei = path.join(ordner, sicher);
   fs.writeFileSync(datei, Buffer.from(bytes));
+  // Markierung „aus dem Internet“: Windows SmartScreen und Office (Geschützte Ansicht) warnen dann wie bei Downloads.
+  if (process.platform === 'win32') try { fs.writeFileSync(datei + ':Zone.Identifier', '[ZoneTransfer]\r\nZoneId=3\r\n'); } catch {}
   const fehler = await shell.openPath(datei);
   if (fehler) throw new Error(fehler);
   return true;

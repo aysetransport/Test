@@ -45,8 +45,8 @@ class AppUpdate(private val activity: MainActivity) {
         val m = try { Json.parseToJsonElement(v.inputStream.use { it.readBytes() }.toString(Charsets.UTF_8)).jsonObject } finally { v.disconnect() }
         val eigene = PackageInfoCompat.getLongVersionCode(activity.packageManager.getPackageInfo(activity.packageName, 0))
         val name = m["versionName"]?.jsonPrimitive?.content ?: ""
-        bereit = ""
-        if (m["versionCode"]!!.jsonPrimitive.long > eigene) {
+        // „bereit“ erst nach erfolgreicher Prüfung ändern: ein Funkloch macht ein schon geladenes Update nicht unbrauchbar
+        if (m["versionCode"]!!.jsonPrimitive.long <= eigene) bereit = "" else {
             val soll = m["sha256"]!!.jsonPrimitive.content
             if (!apk.isFile || sha(apk) != soll) {
                 apk.parentFile!!.mkdirs()
