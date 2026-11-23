@@ -48,28 +48,24 @@ test('Senden: Anhang, Antwortbezug und Kopie unter Gesendet', async () => {
   assert.equal(gesendet, 1);
 });
 
-test('Abrufen: Inhalt, Anhänge und Bezug; danach nur noch Neues, im Postfach bleibt alles ungelesen', async () => {
+test('Abrufen: Inhalt, Anhänge und Bezug, im Postfach bleibt alles ungelesen', async () => {
   await empfange({ from: '"Carl Demir" <Carl@Demir.example>', subject: 'Re: Ihre Meldung [Fall 2026-002]', text: 'Hier die Fotos.', inReplyTo: '<abc@firma.example>',
     references: ['<abc@firma.example>'], attachments: [{ filename: 'Armlehne.jpg', content: Buffer.alloc(4000, 7), contentType: 'image/jpeg' }] });
   await empfange({ from: 'news@shop.example', subject: 'Angebot', html: '<p>Hallo&nbsp;Welt</p><p>Zweite <b>Zeile</b></p>' });
 
-  const erst = await mail.hole(gm.konfig, gm.passwort, {});
-  const demir = erst.mails.find(m => m.von === 'carl@demir.example');
+  const st = await mail.ruf(gm.konfig, gm.passwort, 'stand', {});
+  const erst = await mail.ruf(gm.konfig, gm.passwort, 'lade', { uids: st.eintraege.map(e => e[0]) });
+  const demir = erst.find(m => m.von === 'carl@demir.example');
   assert.equal(demir.vonName, 'Carl Demir');
   assert.equal(demir.betreff, 'Re: Ihre Meldung [Fall 2026-002]');
   assert.equal(demir.text, 'Hier die Fotos.');
   assert.deepEqual(demir.antwortAuf, ['abc@firma.example']);
   assert.deepEqual(demir.anhaenge.map(a => [a.name, a.mimeType, Buffer.from(a.base64, 'base64').length]), [['Armlehne.jpg', 'image/jpeg', 4000]]);
-  assert.equal(erst.mails.find(m => m.von === 'news@shop.example').text, 'Hallo Welt\n\nZweite Zeile', 'HTML-Mail als lesbarer Text');
-  assert.ok(erst.letzteUid >= 2 && erst.uidValidity > 0);
-
-  assert.equal((await mail.hole(gm.konfig, gm.passwort, erst)).mails.length, 0, 'nichts doppelt');
-  await empfange({ from: 'dora@engel.example', subject: 'Neu', text: 'Neue Nachricht' });
-  const danach = await mail.hole(gm.konfig, gm.passwort, erst);
-  assert.deepEqual(danach.mails.map(m => m.betreff), ['Neu']);
+  assert.equal(erst.find(m => m.von === 'news@shop.example').text, 'Hallo Welt\n\nZweite Zeile', 'HTML-Mail als lesbarer Text');
+  assert.ok(st.uidNext > 2 && st.uidValidity > 0 && st.eintraege.every(e => e[1] === 0), 'Stand: alles ungelesen');
 
   const ungelesen = await imapFuer(gm.adresse, gm.passwort, async c => (await c.status('INBOX', { unseen: true })).unseen);
-  assert.ok(ungelesen >= 3, 'Abrufen markiert nichts als gelesen');
+  assert.ok(ungelesen >= 2, 'Laden markiert nichts als gelesen');
 });
 
 test('Schnittstelle 2: Ordner, Stand, Laden mit HTML/CC/Wichtigkeit, Kennzeichnen, Verschieben, Suche, Anhang, Quelle, Löschen', async () => {

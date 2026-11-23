@@ -23,7 +23,7 @@ abstract class WebAppKopieren : DefaultTask() {
         val aus = ziel.get().asFile
         aus.deleteRecursively()
         aus.mkdirs()
-        for (name in listOf("index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "pdfjs/pdf.min.js", "pdfjs/pdf.worker.min.js", "sprachen.js", "app-update.json")) {
+        for (name in listOf("index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "pdfjs/pdf.min.js", "pdfjs/pdf.worker.min.js", "sprachen.json", "app-update.json")) {
             quelle.get().file(name).asFile.copyTo(aus.resolve(name))
         }
     }

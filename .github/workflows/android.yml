@@ -27,7 +27,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Fester Signaturschlüssel aus den Secrets des Repositorys (optional, siehe docs/ANLEITUNG-2.0.md).
+      # Fester Signaturschlüssel aus den Secrets des Repositorys (optional, siehe README → Installieren).
       # Damit tragen alle künftigen APKs dieselbe Signatur und lassen sich über die vorige installieren.
       - name: Signaturschlüssel bereitlegen
         env:

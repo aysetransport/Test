@@ -91,7 +91,6 @@ class MailKonten(context: Context, private val tresor: Tresor, private val postf
 
     fun sende(entwurf: JsonObject, a: String?): String = zugang(a).let { (k, pw) -> postfach.sende(k, pw, entwurf) }
 
-    fun hole(stand: JsonObject, a: String?): JsonObject = zugang(a).let { (k, pw) -> postfach.hole(k, pw, stand) }
 
     /** Schnittstelle 2: ordner, stand, lade, suche, aktion, ordnerAktion, anhang, quelle, sende. */
     fun ruf(befehl: String, daten: JsonObject, a: String?): JsonElement = zugang(a).let { (k, pw) -> postfach.ruf(k, pw, befehl, daten) }

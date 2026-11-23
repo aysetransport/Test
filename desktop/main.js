@@ -60,7 +60,6 @@ behandle('mail:einrichten', async (konfig, pw, a) => {
 });
 behandle('mail:trennen', a => { fs.rmSync(kontoDatei(a), { force: true }); return true; });
 behandle('mail:sende', (entwurf, a) => { const k = ladeKonto(a); return mail.sende(k, passwort(k), entwurf); });
-behandle('mail:hole', (stand, a) => { const k = ladeKonto(a); return mail.hole(k, passwort(k), stand || {}); });
 // Postfach wie Outlook: ein Einstieg für Ordner, Abgleich, Aktionen, Suche, Anhänge (siehe mail.js „ruf“)
 behandle('mail:ruf', (befehl, daten, a) => { const k = ladeKonto(a); return mail.ruf(k, passwort(k), String(befehl), daten || {}); });
 

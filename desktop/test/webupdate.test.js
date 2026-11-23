@@ -16,8 +16,8 @@ function aufbau({ serverDateien, manifest }) {
   const { webUpdate } = require('../webupdate');
   const appOrdner = tmp(), datenOrdner = tmp();
   fs.writeFileSync(path.join(appOrdner, 'index.html'), 'ALT');
-  fs.writeFileSync(path.join(appOrdner, 'sprachen.js'), 'SPRACHEN');
-  fs.writeFileSync(path.join(appOrdner, 'app-update.json'), JSON.stringify({ stand: 100, minNativ: 1, dateien: { 'index.html': { sha256: sha('ALT') }, 'sprachen.js': { sha256: sha('SPRACHEN') } } }));
+  fs.writeFileSync(path.join(appOrdner, 'sprachen.json'), 'SPRACHEN');
+  fs.writeFileSync(path.join(appOrdner, 'app-update.json'), JSON.stringify({ stand: 100, minNativ: 1, dateien: { 'index.html': { sha256: sha('ALT') }, 'sprachen.json': { sha256: sha('SPRACHEN') } } }));
   const geholt = [];
   const holen = async url => {
     const pfad = url.replace('https://update.test/', '').replace(/\?.*$/, ''); geholt.push(pfad);
@@ -29,12 +29,12 @@ function aufbau({ serverDateien, manifest }) {
 
 test('lädt nur geänderte Dateien, prüft Prüfsumme und liefert sie aus', async () => {
   const { u, geholt } = aufbau({ serverDateien: { 'index.html': 'NEU' },
-    manifest: { stand: 200, version: '4.13.1', minNativ: 1, dateien: { 'index.html': { sha256: sha('NEU') }, 'sprachen.js': { sha256: sha('SPRACHEN') } } } });
+    manifest: { stand: 200, version: '4.13.1', minNativ: 1, dateien: { 'index.html': { sha256: sha('NEU') }, 'sprachen.json': { sha256: sha('SPRACHEN') } } } });
   const r = await u.installieren();
   assert.deepEqual(r, { stand: 200, neu: true });
-  assert.deepEqual(geholt, ['app-update.json', 'index.html'], 'sprachen.js unverändert – nicht geladen');
+  assert.deepEqual(geholt, ['app-update.json', 'index.html'], 'sprachen.json unverändert – nicht geladen');
   assert.equal(fs.readFileSync(u.datei('index.html'), 'utf8'), 'NEU');
-  assert.equal(u.datei('sprachen.js'), null, 'unveränderte Datei kommt aus der App');
+  assert.equal(u.datei('sprachen.json'), null, 'unveränderte Datei kommt aus der App');
   assert.equal(u.info().aktiv, 200);
   assert.deepEqual(await u.installieren(), { stand: 200, neu: false }, 'kein zweites Mal');
 });

@@ -35,7 +35,6 @@
       einrichten: (konfig, passwort, art) => aufruf('mail:einrichten', konfig, passwort, art),
       trennen: art => aufruf('mail:trennen', art),
       sende: (entwurf, art) => aufruf('mail:sende', entwurf, art),
-      hole: (stand, art) => aufruf('mail:hole', stand, art),
       // Schnittstelle 2: ordner, stand, lade, suche, aktion, ordnerAktion, anhang, quelle, sende
       schnittstelle: 2,
       ruf: (befehl, daten, art) => aufruf('mail:ruf', befehl, daten, art),

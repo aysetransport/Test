@@ -430,30 +430,11 @@ test('CRM: Firma mit Ansprechpartnern, Preisen und Wiedervorlagen; Fall aus der 
   await cloud.schliessen();
 });
 
-test('CRM: Sicherung des Browser-CRM importieren und als CSV exportieren', async () => {
+test('CRM als CSV exportieren', async () => {
   const s = await geraet('', { bereich: 'firmen' });
   await legeFallAnUeberSchaeden(s);
-  const sicherung = { firmen: [
-    { id: 'f1', name: 'seats and sofas krefeld', rechtsform: 'GmbH', status: 'aktiv', telefon: '02151 123', email: '', website: 'seats.example', notizen: 'Rahmenvertrag',
-      adressen: [{ id: 'a', art: 'Lager', strasse: 'Industriestr. 5', plz: '47803', ort: 'Krefeld', notiz: '' }],
-      kontakte: [{ id: 'k', name: 'Jana Krüger', thema: 'Disposition', telefon: '', email: 'jana@seats.example', notiz: '' }],
-      preise: [{ id: 'p', bez: 'Etage', betrag: 12.5, einheit: 'pro Etage', ab: '2026-01-01', notiz: '' }],
-      aktivitaeten: [{ id: 'x', datum: '2026-11-02', art: 'Anruf', kontakt: 'Jana Krüger', text: 'Preise besprochen' }],
-      aufgaben: [{ id: 't', faellig: '2026-12-01', text: 'Angebot', kontakt: '', erledigt: false }],
-      dokumente: [{ id: 'd', titel: 'Vertrag', link: 'https://drive.example/v', notiz: '' }] },
-    { id: 'f2', name: 'Neue Möbel AG', status: 'interessent' }] };
+  await s.evaluate(() => { const f = firmaZumNamen('Seats and Sofas Krefeld'); Aktionen.crmSpeichern('preise', { firmaId: f.id, bezeichnung: 'Etage', betragCent: 1250, einheit: 'pro Etage', gueltigAb: '2026-01-01', notiz: '' }); });
   await s.locator('#einstellungen-knopf').click();
-  await s.locator('#crm-import').setInputFiles({ name: 'crm-sicherung.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(sicherung)) });
-  await s.getByText('Importiert: 1 neue Firma(n), 1 mit vorhandenen zusammengeführt, 6 Einträge').waitFor();
-  // Zweiter Import legt nichts doppelt an.
-  await s.locator('#crm-import').setInputFiles({ name: 'crm-sicherung.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(sicherung)) });
-  await s.getByText('Importiert: 0 neue Firma(n), 2 mit vorhandenen zusammengeführt, 0 Einträge').waitFor();
-  const r = await s.evaluate(() => ({ firmen: auftraggeberListe().map(e => [e.name, e.rechtsform, e.status]), preise: alle('preise').map(p => p.betragCent),
-    kontakte: alle('ansprechpartner').map(k => k.name).sort() }));
-  assert.deepEqual(r.firmen, [['Neue Möbel AG', '', 'INTERESSENT'], ['Seats and Sofas Krefeld', 'GmbH', 'AKTIV']]);
-  assert.deepEqual(r.preise, [1250]);
-  assert.deepEqual(r.kontakte, ['Jana Krüger', 'Tim Berg']);
-
   const downloads = [];
   s.on('download', d => downloads.push(d));
   await s.locator('#crm-csv').click();
@@ -774,53 +755,29 @@ test('Android-App: Brücke (android.js) – Postfach, Speichern, Drucken, PDF un
   await kontext.close();
 });
 
-test('Tourenplanung im CRM: Übernahme aus der alten Tourenplanung, Tagesplan, Hinweise, Auffüllen, Personal, Rechnung, Schaden aus Tour, Abgleich', async () => {
+test('Tourenplanung im CRM: Tagesplan, Hinweise, Auffüllen, Personal, Rechnung, Schaden aus Tour, Abgleich', async () => {
   const cloud = await starteCloud();
   const s = await geraet(cloud.url, { bereich: 'touren' });
   await melde(s, PIN, true);
   await aktuell(s);
   const tag = await s.evaluate(() => heute()), gestern = await s.evaluate(() => plusTage(heute(), -1));
-  // Die bisherige Tourenplanung (Google-Skript) als Attrappe
-  const alt = {
-    fahrzeuge: [{ Kennzeichen: 'RS-AT 100', zGG_kg: '3500' }, { Kennzeichen: 'RS-AT 200', zGG_kg: '7490', Leihfahrzeug: 'nein' }],
-    personal: [{ Name: 'Ali Demir', Rolle: 'Fahrer', Telefon: '0171 111', Monteur: 'nein', Aktiv: 'ja' }, { Name: 'Ben Ott', Rolle: 'Beifahrer', Monteur: 'ja' },
-      { Name: 'Cem Kaya', Rolle: 'Beides', Monteur: 'nein' }, { Name: 'Dana Roth', Rolle: 'Fahrer', Aktiv: 'nein' }],
-    einsatzarten: [{ Einsatzart: 'Montage', Beifahrer: '1', Monteur_noetig: 'ja' }, { Einsatzart: 'Lieferung', Beifahrer: '1', Monteur_noetig: 'nein' }],
-    auftraggeber: [{ Auftraggeber: 'Möbel Krause', Adresse: 'Hauptstr. 1, 42853 Remscheid' }],
-    abwesenheiten: [{ Name: 'Cem Kaya', Von: tag, Bis: tag, Grund: 'Krank' }],
-  };
-  const tage = { [gestern]: [{ Kennzeichen: 'RS-AT 100', TourNr: '7', Auftraggeber: 'Möbel Krause', Name: 'Küche Lennep', Uhrzeit: '07:00', Einsatzart: 'Montage', Fahrer: 'Ali Demir', Beifahrer1: 'Ben Ott' },
-    { Kennzeichen: 'RS-AT 200', TourNr: '8', Auftraggeber: 'Möbel Krause', Name: 'Sofa', Einsatzart: 'Lieferung', Fahrer: 'Cem Kaya', Beifahrer1: 'Neu Mann' }] };
-  await s.context().route('https://script.google.com/macros/s/AKfycby5KUa5VlCeza6mLZCDt1hajWjMGLXFjD_fW847ERpWn12DC2xZZfOlezVpBUv63WTG2g/exec', async route => {
-    const { pin, name, args } = JSON.parse(route.request().postData());
-    const ok = v => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: v }) });
-    if (pin !== '4711') return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ error: 'PIN falsch' }) });
-    if (name === 'getDay') return ok({ ...alt, tours: [], verlauf: [], spalten: {}, auswahl: {} });
-    if (name === 'getTag') return ok(tage[args[0]] || []);
-    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ error: 'unbekannt' }) });
-  });
-  await s.evaluate(() => tpImportDialog());
-  await s.locator('#tp-import [name=pin]').fill('0000');
-  await s.locator('#tp-import [name=von]').fill(gestern);
-  await s.locator('#tp-import [name=bis]').fill(tag);
-  await s.locator('#tpi-los').click();
-  await s.locator('#tpi-fehler', { hasText: 'PIN' }).waitFor();
-  await s.locator('#tp-import [name=pin]').fill('4711');
-  await s.locator('#tpi-los').click();
-  await s.locator('#toast', { hasText: 'Übernommen: 2 Fahrzeuge, 4 Mitarbeiter, 2 Einsatzarten, 1 Firmen, 1 Abwesenheiten, 2 Touren' }).waitFor();
-  const nachImport = await s.evaluate(() => ({ ma: mitarbeiterListe().map(m => [m.name, m.rolle, maAktiv(m)]), touren: tourenAm(plusTage(heute(), -1)).map(t => [t.kennzeichen, maName(t.fahrerId), beifahrerVon(t).map(maName).join()]),
-    adresse: adresseText(vonFirma('adressen', firmaZumNamen('Möbel Krause').id)[0]) }));
-  assert.deepEqual(nachImport.ma, [['Ali Demir', 'FAHRER', true], ['Ben Ott', 'BEIFAHRER', true], ['Cem Kaya', 'BEIDES', true], ['Dana Roth', 'FAHRER', false], ['Neu Mann', 'BEIDES', true]]);
-  assert.deepEqual(nachImport.touren, [['RS-AT 100', 'Ali Demir', 'Ben Ott'], ['RS-AT 200', 'Cem Kaya', 'Neu Mann']]);
-  assert.equal(nachImport.adresse, 'Hauptstr. 1, 42853 Remscheid');
-  // Zweite Übernahme legt nichts doppelt an
-  await s.evaluate(() => tpImportDialog());
-  await s.locator('#tp-import [name=pin]').fill('4711');
-  await s.locator('#tp-import [name=von]').fill(gestern);
-  await s.locator('#tp-import [name=bis]').fill(tag);
-  await s.locator('#tpi-los').click();
-  await s.locator('#toast', { hasText: 'Übernommen: 0 Fahrzeuge, 0 Mitarbeiter, 0 Einsatzarten, 0 Firmen, 0 Abwesenheiten, 2 Touren' }).waitFor();
-  assert.equal(await s.evaluate(() => alle('touren').length), 2);
+  // Ausgangslage: Fuhrpark, Personal, Einsatzarten, Firma, Abwesenheit und zwei Touren von gestern
+  await s.evaluate(([tag, gestern]) => {
+    const j = jetztIso(), ma = (name, x) => merke('mitarbeiter', { id: uuid(), firmaId: '', name, telefon: '', monteur: false, nichtBei: '', aktiv: true, notiz: '', ...x, geaendertAm: j }).id;
+    merke('fahrzeuge', { id: uuid(), firmaId: '', kennzeichen: 'RS-AT 100', art: 'TRANSPORTER', status: 'AKTIV', zgg: 3500, geaendertAm: j });
+    merke('fahrzeuge', { id: uuid(), firmaId: '', kennzeichen: 'RS-AT 200', art: 'LKW', status: 'AKTIV', zgg: 7490, geaendertAm: j });
+    const ali = ma('Ali Demir', { rolle: 'FAHRER', telefon: '0171 111' }), ben = ma('Ben Ott', { rolle: 'BEIFAHRER', monteur: true }), cem = ma('Cem Kaya', { rolle: 'BEIDES' });
+    ma('Dana Roth', { rolle: 'FAHRER', aktiv: false }); const neuMann = ma('Neu Mann', { rolle: 'BEIDES' });
+    merke('einsatzarten', { id: uuid(), firmaId: '', name: 'Montage', beifahrer: 1, monteurNoetig: true, notiz: '', geaendertAm: j });
+    merke('einsatzarten', { id: uuid(), firmaId: '', name: 'Lieferung', beifahrer: 1, monteurNoetig: false, notiz: '', geaendertAm: j });
+    const f = merke('auftraggeber', { id: uuid(), name: 'Möbel Krause', status: 'AKTIV', geaendertAm: j });
+    merke('adressen', { id: uuid(), firmaId: f.id, art: 'HAUPTSITZ', strasse: 'Hauptstr. 1', plz: '42853', ort: 'Remscheid', notiz: '', geaendertAm: j });
+    merke('abwesenheiten', { id: uuid(), firmaId: '', mitarbeiterId: cem, von: tag, bis: tag, grund: 'Krank', notiz: '', geaendertAm: j });
+    const tour = (i, x) => merke('touren', { id: uuid(), firmaId: '', datum: gestern, reihenfolge: i, auftraggeberId: f.id, auftraggeber: f.name, uhrzeit: '', belegId: '', notiz: '', ...x, geaendertAm: j });
+    tour(1, { kennzeichen: 'RS-AT 100', tourNr: '7', name: 'Küche Lennep', uhrzeit: '07:00', einsatzart: 'Montage', fahrerId: ali, beifahrerIds: ben });
+    tour(2, { kennzeichen: 'RS-AT 200', tourNr: '8', name: 'Sofa', einsatzart: 'Lieferung', fahrerId: cem, beifahrerIds: neuMann });
+    nachAenderung();
+  }, [tag, gestern]);
 
   // Heute: von gestern übernehmen (mit Team) – Cem ist krank und bleibt draußen
   await s.locator('#navi [data-bereich=touren]:visible').click();
@@ -1846,7 +1803,7 @@ test('Sprachen: Fahrer-Ansicht auf Türkisch und Arabisch (RTL), Kunden-Nachrich
   await s.locator('#abliefern-form h2', { hasText: 'تسليم' }).waitFor();
   assert.ok(await s.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   // Alle Sprachen vollständig
-  assert.deepEqual(await s.evaluate(() => Object.entries(UI_TEXTE).filter(([, l]) => l.length !== UI_DE.length || l.some(x => !x)).map(([k]) => k)), []);
+  assert.deepEqual(await s.evaluate(() => Object.entries(UI_UEBERSETZUNG).filter(([, l]) => l.length !== UI_SCHLUESSEL.length || l.some(x => !x)).map(([k]) => k)), []);
   await s.close();
 });
 

@@ -223,39 +223,6 @@ class Postfach {
         return namen.firstNotNullOfOrNull { n -> alle.firstOrNull { it.fullName.equals(n, ignoreCase = true) } }
     }
 
-    /**
-     * Holt neue Mails aus dem Posteingang, ohne dort etwas zu verändern.
-     * Beim ersten Abruf (oder wenn sich die UIDVALIDITY geändert hat) nur die letzten [ersteTage] Tage.
-     * Rückgabe wie in der Windows-App: { mails: […], letzteUid, uidValidity }.
-     */
-    fun hole(k: MailKonfig, passwort: String, stand: JsonObject, ersteTage: Long = 30): JsonObject = mitFehlertext {
-        val letzteUid = stand["letzteUid"]?.jsonPrimitive?.longOrNull ?: 0L
-        val uidValidity = stand["uidValidity"]?.jsonPrimitive?.longOrNull ?: 0L
-        oeffne(k, passwort).use { store ->
-            val ordner = store.getFolder("INBOX") as IMAPFolder
-            ordner.open(Folder.READ_ONLY)
-            try {
-                val gueltig = ordner.uidValidity
-                val neuBeginnen = gueltig != uidValidity || letzteUid <= 0
-                val nachrichten = if (neuBeginnen) {
-                    val ab = Date.from(Instant.now().minusSeconds(ersteTage * 86_400))
-                    ordner.messages.filter { (it.receivedDate ?: it.sentDate ?: Date(0)) >= ab }
-                } else {
-                    ordner.getMessagesByUID(letzteUid + 1, UIDFolderLetzte).filterNotNull().filter { ordner.getUID(it) > letzteUid }
-                }
-                val mails = nachrichten.mapNotNull { m -> runCatching { lies(ordner, m as MimeMessage) }.getOrNull() }
-                val hoechste = maxOf(if (neuBeginnen) 0 else letzteUid, ordner.uidNext - 1, 0)
-                buildJsonObject {
-                    put("mails", JsonArray(mails))
-                    put("letzteUid", hoechste)
-                    put("uidValidity", gueltig)
-                }
-            } finally {
-                ordner.close(false)
-            }
-        }
-    }
-
     private fun lies(ordner: IMAPFolder, m: MimeMessage): JsonObject {
         val von = m.from?.firstOrNull() as? InternetAddress
         val anhaenge = mutableListOf<JsonObject>()
@@ -517,7 +484,6 @@ class Postfach {
     }
 
     companion object {
-        private const val UIDFolderLetzte = jakarta.mail.UIDFolder.LASTUID
         const val SCHNITTSTELLE = 2
         private const val MAX_HTML = 1_500_000
         private val SPEZIAL = listOf("\\sent" to "SENT", "\\drafts" to "DRAFTS", "\\trash" to "TRASH", "\\junk" to "JUNK", "\\archive" to "ARCHIVE", "\\all" to "ALLE")

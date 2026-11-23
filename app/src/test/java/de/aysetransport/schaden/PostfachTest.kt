@@ -71,8 +71,11 @@ class PostfachTest {
         })
         assertTrue(id.endsWith("@ayse.example"))
 
-        val erst = postfach.hole(konfig("kunde@moebel.example"), "kunde", JsonObject(emptyMap()))
-        val mails = erst["mails"]!!.jsonArray
+        val kunde = konfig("kunde@moebel.example")
+        fun alle() = postfach.ruf(kunde, "kunde", "stand", JsonObject(emptyMap())).jsonObject["eintraege"]!!.jsonArray.map { it.jsonArray[0].jsonPrimitive.long }
+        fun lade(uids: List<Long>) = postfach.ruf(kunde, "kunde", "lade", buildJsonObject { put("uids", buildJsonArray { uids.forEach { add(JsonPrimitive(it)) } }) }).jsonArray
+        val erst = alle()
+        val mails = lade(erst)
         assertEquals(1, mails.size)
         val m = mails[0].jsonObject
         assertEquals(id, m["messageId"]!!.jsonPrimitive.content)
@@ -85,15 +88,13 @@ class PostfachTest {
         assertEquals("Rechnung R2026-0001.pdf", anhang["name"]!!.jsonPrimitive.content)
         assertEquals("%PDF-1.4", String(Base64.getDecoder().decode(anhang["base64"]!!.jsonPrimitive.content)))
 
-        // Zweiter Abruf mit dem gemerkten Stand: nichts Neues – dann eine weitere Mail
-        val stand = buildJsonObject { put("letzteUid", erst["letzteUid"]!!.jsonPrimitive.long); put("uidValidity", erst["uidValidity"]!!.jsonPrimitive.long) }
-        assertEquals(0, postfach.hole(konfig("kunde@moebel.example"), "kunde", stand)["mails"]!!.jsonArray.size)
+        // Eine weitere Mail, nur HTML: wird als lesbarer Text geliefert
         val s = Session.getInstance(Properties().apply { put("mail.smtp.host", "127.0.0.1"); put("mail.smtp.port", ServerSetupTest.SMTP.port.toString()) })
         jakarta.mail.Transport.send(MimeMessage(s).apply {
             setFrom(InternetAddress("dispo@moebel.example")); setRecipient(Message.RecipientType.TO, InternetAddress("kunde@moebel.example"))
             subject = "Nur HTML"; setContent("<p>Hallo&nbsp;Welt</p><p>Zeile 2</p>", "text/html; charset=utf-8")
         })
-        val neu = postfach.hole(konfig("kunde@moebel.example"), "kunde", stand)["mails"]!!.jsonArray
+        val neu = lade(alle() - erst.toSet())
         assertEquals(listOf("Nur HTML"), neu.map { it.jsonObject["betreff"]!!.jsonPrimitive.content })
         assertEquals("Hallo Welt\nZeile 2", neu[0].jsonObject["text"]!!.jsonPrimitive.content)
     }

@@ -1,6 +1,5 @@
 package de.aysetransport.schaden
 
-import android.webkit.WebView
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.icegreen.greenmail.util.GreenMail
@@ -48,7 +47,7 @@ class AppTest {
         assertTrue(mit.indexOf("<script src=\"android.js\"></script>") < mit.indexOf("<script", mit.indexOf("android.js") + 20))
         assertTrue(mit.indexOf("android.js") < mit.indexOf("window.API_URL"))
         val bruecke = ctx.assets.open("android.js").use { it.readBytes().toString(Charsets.UTF_8) }
-        for (f in listOf("mail:einrichten", "mail:hole", "mail:sende", "datei:speichern", "datei:oeffnen", "pdf:erzeugen", "drucken", "benachrichtige")) {
+        for (f in listOf("mail:einrichten", "mail:ruf", "mail:sende", "datei:speichern", "datei:oeffnen", "pdf:erzeugen", "drucken", "benachrichtige")) {
             assertTrue(f, bruecke.contains("'$f'"))
         }
         assertEquals("<head><script src=\"android.js\"></script><title>x</title></head>", WebInhalt.mitBruecke("<head><title>x</title></head>"))
@@ -78,12 +77,11 @@ class AppTest {
             }
             assertEquals(1, server.getReceivedMessagesForDomain("x.example").size)
             assertTrue(Bruecke.alsJs(JsonPrimitive("a b")).contains("\\u2028"))
-            val ergebnis = runBlocking { bruecke.ausfuehren("mail:hole", buildJsonArray { add(JsonObject(emptyMap())); add(JsonPrimitive("ALLGEMEIN")) }) }
-            assertEquals(0, ergebnis.jsonObject["mails"]!!.jsonArray.size)
+            val stand = runBlocking { bruecke.ausfuehren("mail:ruf", buildJsonArray { add(JsonPrimitive("stand")); add(JsonObject(emptyMap())); add(JsonPrimitive("ALLGEMEIN")) }) }
+            assertEquals(0, stand.jsonObject["eintraege"]!!.jsonArray.size)
         } finally {
             server.stop()
         }
     }
 
-    @Suppress("unused") private fun nichtBenutzt(w: WebView) = w
 }

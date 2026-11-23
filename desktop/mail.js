@@ -118,52 +118,6 @@ async function sende(k, passwort, entwurf) {
 
 const ohneKlammern = id => String(id || '').trim().replace(/^</, '').replace(/>$/, '');
 
-/**
- * Holt neue Mails aus dem Posteingang, ohne dort etwas zu verändern.
- * Beim ersten Abruf (oder wenn sich die UIDVALIDITY geändert hat) nur die letzten 30 Tage.
- */
-async function hole(k, passwort, { letzteUid = 0, uidValidity = 0 } = {}, ersteTage = 30) {
-  return mitImap(k, passwort, async client => {
-    const sperre = await client.getMailboxLock('INBOX', { readOnly: true });
-    try {
-      const box = client.mailbox;
-      const gueltig = Number(box.uidValidity);
-      const neuBeginnen = gueltig !== Number(uidValidity) || !(letzteUid > 0);
-      let uids = [];
-      if (box.exists > 0) {
-        uids = neuBeginnen
-          ? await client.search({ since: new Date(Date.now() - ersteTage * 86400000) }, { uid: true })
-          : (await client.search({ uid: `${letzteUid + 1}:*` }, { uid: true })).filter(u => u > letzteUid);
-      }
-      const mails = [];
-      for (const uid of uids || []) {
-        const nachricht = await client.fetchOne(String(uid), { source: true }, { uid: true });
-        if (!nachricht || !nachricht.source) continue;
-        const m = await simpleParser(nachricht.source);
-        const bezug = [m.inReplyTo, ...(Array.isArray(m.references) ? m.references : m.references ? [m.references] : [])]
-          .filter(Boolean).flatMap(z => String(z).match(/<[^>]+>/g) || [z]).map(ohneKlammern);
-        const von = (m.from && m.from.value && m.from.value[0]) || {};
-        mails.push({
-          uid,
-          messageId: ohneKlammern(m.messageId) || `uid-${gueltig}-${uid}@${k.imapHost}`,
-          antwortAuf: [...new Set(bezug)],
-          von: String(von.address || '').toLowerCase(),
-          vonName: von.name || '',
-          an: (m.to && m.to.text) || '',
-          betreff: m.subject || '',
-          text: (m.text || (m.html ? htmlAlsText(m.html) : '')).replace(/\u00A0/g, ' ').trim(),
-          zeitpunkt: (m.date || new Date()).toISOString(),
-          anhaenge: (m.attachments || []).filter(a => a.content && a.content.length)
-            .map(a => ({ name: a.filename || 'Anhang', mimeType: (a.contentType || 'application/octet-stream').toLowerCase(), base64: a.content.toString('base64') })),
-        });
-      }
-      return { mails, letzteUid: Math.max(neuBeginnen ? 0 : letzteUid, Number(box.uidNext) - 1, 0), uidValidity: gueltig };
-    } finally {
-      sperre.release();
-    }
-  });
-}
-
 // ============================== Postfach wie Outlook (Schnittstelle 2) ==============================
 // Allgemeine Bausteine, aus denen die Oberfläche alles Weitere zusammensetzt: Ordner, Stand (UIDs + Flags),
 // Mails laden, Suche auf dem Server, Aktionen (gelesen, gekennzeichnet, verschieben, löschen), Ordner verwalten,
@@ -367,4 +321,4 @@ function htmlAlsText(html) {
     .split('\n').map(z => z.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-module.exports = { ANBIETER, MailFehler, SCHNITTSTELLE: 2, pruefe, sende, hole, ruf, ordner, stand, lade, suche, aktion, ordnerAktion, anhang, quelle, htmlAlsText, ohneKlammern };
+module.exports = { ANBIETER, MailFehler, SCHNITTSTELLE: 2, pruefe, sende, ruf, ordner, stand, lade, suche, aktion, ordnerAktion, anhang, quelle, htmlAlsText, ohneKlammern };
