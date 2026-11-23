@@ -363,7 +363,7 @@ test('mit veraltetem Cloud-Skript gleicht die Web-App nicht ab', async () => {
   await legeFallAn(s, { kundeName: 'Anna Becker', auftraggeber: 'Möbelhaus', auftraggeberEmail: 'dispo@m.example' });
   await s.locator('#sync', { hasText: 'veraltet' }).waitFor();
   assert.equal(Object.keys(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle).length, 0, 'nichts gesendet');
-  cloud.umgebung.kontext.API_VERSION = 16;
+  cloud.umgebung.kontext.API_VERSION = 17;
   await abgleich(s);
   assert.equal(Object.values(JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString()).faelle)[0].auftraggeberEmail, 'dispo@m.example');
   await cloud.schliessen();
@@ -2362,7 +2362,7 @@ test('Tourenplanung: Tour/Ziel als Auswahl aus den Stammdaten der Firma (Preisli
   // Auswahl statt Freitext: nur die Ziele, nicht die Einsatzart aus der Preisliste
   const auswahl = await s.evaluate(() => [...document.querySelectorAll('select[data-feld="name"]')].map(x => [...x.options].map(o => o.textContent.trim()).filter(Boolean)));
   assert.equal(auswahl.length, 5, 'jede Tourzeile hat ein Auswahlfeld');
-  assert.deepEqual(auswahl[0], ['Tour 12 – Hamburg', 'Tour 7 – Bremen']);
+  assert.ok(auswahl.some(l => JSON.stringify(l) === JSON.stringify(['Tour 12 – Hamburg', 'Tour 7 – Bremen'])), JSON.stringify(auswahl)); // Zeilen ohne festen Ablauf
   assert.ok(auswahl.some(l => l.includes('HH alt')), 'alter Freitext bleibt sichtbar');
   const hinweise = await s.locator('#liste').textContent();
   assert.ok(hinweise.includes('Ziel nicht in den Stammdaten') && hinweise.includes('Ziel fehlt'));
@@ -2411,5 +2411,13 @@ test('Firmen zusammenführen nimmt die Touren mit; Touren einer schon gelöschte
   await s.locator('#toast', { hasText: '2 weitere Touren' }).waitFor();
   assert.equal(await s.evaluate(z => tourenVonFirma(S.auftraggeber[z]).length, r.ziel), 5);
   assert.equal(await s.locator('#liste .marke', { hasText: 'Firma gelöscht' }).count(), 0);
+  // Zusammenführen merkt sich den alten Namen als Alias; ein Alias ordnet Touren ohne gültige Firma zu
+  assert.equal(await s.evaluate(z => S.auftraggeber[z].aliase, r.ziel), 'Moebel Krause');
+  const n = await s.evaluate(([z, tag]) => {
+    for (let i = 0; i < 2; i++) merke('touren', { id: uuid(), firmaId: '', datum: tag, reihenfolge: i + 9, auftraggeberId: 'weg-1111', auftraggeber: 'Krause ganz alt', geaendertAm: jetztIso() });
+    Aktionen.firmaSpeichern({ ...S.auftraggeber[z], aliase: 'Moebel Krause, Krause ganz alt' });
+    return [tourenVonFirma(S.auftraggeber[z]).length, firmaZumNamen('krause ganz alt').id === z];
+  }, [r.ziel, tag]);
+  assert.deepEqual(n, [7, true], 'zwei weitere Touren über den Alias; Name findet die Firma');
   await s.close();
 });

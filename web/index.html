@@ -19,7 +19,7 @@ window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwh
 })();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
-window.WEB_STAND = 1795451563; window.WEB_VERSION = '4.17.0';
+window.WEB_STAND = 1795451734; window.WEB_VERSION = '4.17.0';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4E79">
@@ -1038,7 +1038,10 @@ const kontakteVon = firmaId => alle('ansprechpartner').filter(k => k.firmaId ===
 /** Bevorzugt der Ansprechpartner für Schäden, sonst der erste. */
 const schadenKontakt = firmaId => { const k = kontakteVon(firmaId); return k.find(x => /sch(a|ä)d/i.test(x.thema || '')) || k[0]; };
 /** Firma zum Namen (gleiche Regeln wie in der Android-App: ohne Groß-/Kleinschreibung, kleinste Kennung gewinnt). */
-const firmaZumNamen = name => alle('auftraggeber').filter(e => normal(e.name) === normal(name)).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+const firmaAliase = f => String((f && f.aliase) || '').split(',').map(x => x.trim()).filter(Boolean);
+/** Firma zum Namen – zuerst über den Namen, sonst über einen früheren/anderen Namen (Aliase in den Firmendaten). */
+const firmaZumNamen = name => { const n = normal(name), l = alle('auftraggeber').sort((a, b) => (a.id < b.id ? -1 : 1));
+  return n ? l.find(e => normal(e.name) === n) || l.find(e => firmaAliase(e).some(a => normal(a) === n)) : undefined; };
 /** Gehört der Fall zur Firma – über den Verweis oder, noch unverknüpft, über den Namen? */
 const gehoertZu = (f, firma) => (f.auftraggeberUuid ? f.auftraggeberUuid === firma.id : !!(f.auftraggeber || '').trim() && normal(f.auftraggeber) === normal(firma.name));
 
@@ -1131,6 +1134,7 @@ const Aktionen = {
     const f = merke('auftraggeber', { ...(alt || {}), ...e, id: e.id || uuid(), name: e.name.trim(), geaendertAm: jetztIso() });
     // Fälle tragen den Namen als Text – bei einer Umbenennung mitziehen.
     if (alt && alt.name !== f.name) for (const fall of faelle().filter(x => x.auftraggeberUuid === f.id)) fallMerken({ ...fall, auftraggeber: f.name });
+    aliaseZuordnen(f);
     nachAenderung(); return f.id;
   },
   /** Löscht die Firma mit allem, was an ihr hängt (die Cloud löscht mit). Fälle bleiben erhalten. */
@@ -1149,7 +1153,8 @@ const Aktionen = {
     for (const m of Object.values(mails())) if (m.firmaId === weg.id) m.firmaId = ziel.id;
     const w = [...new Map([...schlagwortListe(ziel), ...schlagwortListe(weg)].map(x => [x.toLowerCase(), x])).values()].join(', ');
     merke('auftraggeber', { ...ziel, rechtsform: ziel.rechtsform || weg.rechtsform || '', telefon: ziel.telefon || weg.telefon || '', email: ziel.email || weg.email || '',
-      website: ziel.website || weg.website || '', notizen: [ziel.notizen, weg.notizen].filter(Boolean).join('\n\n'), schlagworte: w, geaendertAm: jetzt });
+      website: ziel.website || weg.website || '', notizen: [ziel.notizen, weg.notizen].filter(Boolean).join('\n\n'), schlagworte: w,
+      aliase: [...new Map([...firmaAliase(ziel), weg.name, ...firmaAliase(weg)].filter(a => normal(a) !== normal(ziel.name)).map(a => [normal(a), a])).values()].join(', '), geaendertAm: jetzt });
     entferne('auftraggeber', weg, { geaendertAm: jetzt });
     nachAenderung();
   },
@@ -1218,7 +1223,7 @@ async function api(fn, ...args) {
   return j.ok;
 }
 const TABELLEN = ['faelle', 'verlauf', 'anlagen', 'auftraggeber', ...CRM_TABELLEN];
-const CLOUD_API = 16; // 16: Eingangsrechnungen und Gutschriftverfahren – ein älteres Skript würde sie verwerfen
+const CLOUD_API = 17; // 17: Firmen-Aliase; 16: Eingangsrechnungen und Gutschriftverfahren – ein älteres Skript würde sie verwerfen
 const VERALTET = 'Das Cloud-Skript ist veraltet – bitte die neue Code.gs bereitstellen.';
 const offeneAnzahl = () => TABELLEN.reduce((n, t) => n + offene(t).length, 0);
 const SYNC = { laeuft: false, nochmal: false, fehler: '', zuletzt: 0, timer: 0 };
@@ -2635,6 +2640,7 @@ function zeichneFirma(id) {
 const CRM_FELDER = {
   auftraggeber: ['Firma', [['name', 'Firma', 'pflicht'], ['rechtsform', 'Rechtsform (z. B. GmbH)'], ['status', 'Status', Object.fromEntries(Object.entries(FIRMEN_STATUS).map(([k, [l]]) => [k, l]))],
     ['telefon', 'Telefon', 'tel'], ['email', 'E-Mail', 'email'], ['website', 'Website'], ['schlagworte', 'Schlagworte, durch Komma getrennt (z. B. Möbel, Elektro, Küchen)'],
+    ['aliase', 'Frühere / andere Namen, durch Komma getrennt – Touren, Fälle und Importe mit diesen Namen gehören zu dieser Firma'],
     ['kundennummer', 'Kundennummer'], ['ustId', 'USt-IdNr. der Firma'], ['zahlungszielTage', 'Zahlungsziel in Tagen (leer = Standard)'],
     ['leitwegId', 'Leitweg-ID / Käuferreferenz für E-Rechnungen (bei Behörden Pflicht)'], ['eRechnungEmail', 'E-Mail für E-Rechnungen (leer = Ansprechpartner Abrechnung bzw. Firmen-E-Mail)', 'email'],
     ['rechnungBank', 'Abweichende Bankverbindung auf Rechnungen an diese Firma: Bank (leer = Standard aus den Firmendaten)'], ['rechnungIban', 'Abweichende IBAN'], ['rechnungBic', 'Abweichende BIC'], ['notizen', 'Notizen', 'lang']]],
@@ -4172,6 +4178,14 @@ const beifahrerVon = t => String(t.beifahrerIds || '').split(',').filter(Boolean
 const teamVon = t => [t.fahrerId, ...beifahrerVon(t)].filter(Boolean);
 const tourenAm = tag => alle('touren').filter(t => t.datum === tag).sort((a, b) => (a.reihenfolge ?? 0) - (b.reihenfolge ?? 0) || String(a.id).localeCompare(String(b.id)));
 /** Tour verweist auf eine Firma, die es nicht mehr gibt (z. B. vor 4.17 zusammengeführt). */
+/** Touren ohne gültige Firma, deren Auftraggeber-Name ein Alias dieser Firma ist, gehören ab jetzt zu ihr. @return Anzahl */
+function aliaseZuordnen(f) {
+  const namen = new Set(firmaAliase(f).map(normal)); if (!namen.size) return 0;
+  const l = alle('touren').filter(t => (!t.auftraggeberId || firmaWeg(t)) && namen.has(normal(t.auftraggeber)));
+  for (const t of l) merke('touren', { ...t, auftraggeberId: f.id, auftraggeber: f.name, geaendertAm: jetztIso() });
+  if (l.length) toast(`${l.length} Touren über frühere Namen zu ${f.name} zugeordnet`, 6000);
+  return l.length;
+}
 const firmaWeg = t => !!t.auftraggeberId && !(S.auftraggeber[t.auftraggeberId] && !S.auftraggeber[t.auftraggeberId].geloescht);
 const tourAuftraggeberName = t => (t.auftraggeberId && S.auftraggeber[t.auftraggeberId] && !S.auftraggeber[t.auftraggeberId].geloescht ? S.auftraggeber[t.auftraggeberId].name : t.auftraggeber || '');
 const tourText = t => [t.tourNr && 'Tour ' + t.tourNr, tourAuftraggeberName(t), t.name, t.uhrzeit && 'ab ' + t.uhrzeit, t.einsatzart].filter(Boolean).join(' · ');
