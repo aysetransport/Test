@@ -20,7 +20,11 @@ const STAPEL_PS = `$ErrorActionPreference = 'Stop'
 $dm = New-Object -ComObject WIA.DeviceManager
 $info = $dm.DeviceInfos | Where-Object { $_.Type -eq 1 -and ($env:SCAN_ID -eq '' -or $_.DeviceID -eq $env:SCAN_ID) } | Select-Object -First 1
 if (-not $info) { throw 'Kein Scanner gefunden' }
-$dev = $info.Connect()
+# „Gerät ausgelastet“ (0x80210006): kurz warten und erneut versuchen – z. B. wenn ein HP-Programm den Scanner gerade freigibt
+# Windows-Code eines Fehlers – PowerShell verpackt COM-Fehler, der Code steckt oft in einer inneren Ausnahme
+function Code($fehler) { $x = $fehler.Exception; while ($x) { if (@(-2145320957, -2145320954) -contains $x.HResult) { return $x.HResult }; $x = $x.InnerException }; return 0 }
+function Versuche([scriptblock]$was) { for ($i = 0; ; $i++) { try { return & $was } catch { if ((Code $_) -eq -2145320954 -and $i -lt 8) { Start-Sleep -Seconds 2 } else { throw } } } }
+$dev = Versuche { $info.Connect() }
 function Setze($props, $id, $wert) { foreach ($p in $props) { if ($p.PropertyID -eq $id) { try { $p.Value = $wert } catch {} } } }
 function SetzeMax($props, $id) { foreach ($p in $props) { if ($p.PropertyID -eq $id) { try { $p.Value = $p.SubTypeMax } catch {} } } }
 $stapel = $env:SCAN_MODUS -ne 'EINZELN'
@@ -32,20 +36,36 @@ Setze $item.Properties 6146 2; Setze $item.Properties 6147 300; Setze $item.Prop
 if (-not $stapel) { SetzeMax $item.Properties 6152 }
 $n = 0
 while ($true) {
-  try { $img = $item.Transfer('${JPEG}') }
-  catch { if ($_.Exception.HResult -eq -2145320957) { if ($n -eq 0) { throw 'Kein Papier im Einzug' } else { break } } else { throw } }
+  try { $img = Versuche { $item.Transfer('${JPEG}') } }
+  catch { if ((Code $_) -eq -2145320957) { if ($n -eq 0) { throw 'Kein Papier im Einzug' } else { break } } else { throw } }
   $n++; $img.SaveFile((Join-Path $env:SCAN_ZIEL ('seite{0:D3}.jpg' -f $n)))
   if (-not $stapel) { break }
 }
 Write-Output $n`;
 
+// Windows-Fehlercodes des Scanners → was zu tun ist
+const WIA_FEHLER = [[/80210006|ausgelastet|busy/i, 'Der Scanner ist gerade belegt – bitte HP-Programme schließen (HP Scan, HP Smart, „Scan to Computer“, auch unten rechts in der Taskleiste) und erneut scannen. Hilft das nicht: Scanner aus- und wieder einschalten.'],
+  [/80210005|8021000A|offline|nicht verbunden/i, 'Der Scanner antwortet nicht – ist er eingeschaltet und per USB bzw. im Netzwerk verbunden?'],
+  [/80210003|Kein Papier/i, 'Kein Papier im Einzug – Belege einlegen und erneut scannen.'],
+  [/80210002|Papierstau|paper jam/i, 'Papierstau im Scanner – Beleg entnehmen und erneut scannen.'],
+  [/80210064|abgebrochen|cancel/i, 'Scan abgebrochen.']];
+let laufend = null; // ein noch laufender Scan-Versuch belegt den Scanner – vor dem nächsten beenden
 function powershell(skript, env = {}) {
   if (process.platform !== 'win32') return Promise.reject(new Error('Scannen geht nur in der Windows-App'));
+  if (laufend) { try { laufend.kill(); } catch {} laufend = null; }
   const datei = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ayse-scan-')), 'skript.ps1');
   fs.writeFileSync(datei, '﻿' + skript); // mit BOM, damit PowerShell 5 Umlaute richtig liest
-  return new Promise((ja, nein) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-STA', '-File', datei],
-    { env: { ...process.env, ...env }, timeout: 15 * 60000, windowsHide: true, maxBuffer: 1 << 20 },
-    (fehler, aus, err) => (fehler ? nein(new Error(String(err || fehler.message).split('\n').find(z => z.trim()) || 'Scanner-Fehler')) : ja(String(aus).trim()))));
+  return new Promise((ja, nein) => {
+    const p = execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-STA', '-File', datei],
+      { env: { ...process.env, ...env }, timeout: 5 * 60000, windowsHide: true, maxBuffer: 1 << 20 },
+      (fehler, aus, err) => {
+        if (laufend === p) laufend = null;
+        if (!fehler) { ja(String(aus).trim()); return; }
+        const roh = String(err || fehler.message), bekannt = WIA_FEHLER.find(([r]) => r.test(roh));
+        nein(new Error(bekannt ? bekannt[1] : roh.split('\n').find(z => z.trim()) || 'Scanner-Fehler'));
+      });
+    laufend = p;
+  });
 }
 
 /** Gefundene Scanner: [{ id, name }]. */
