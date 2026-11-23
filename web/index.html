@@ -19,7 +19,7 @@ window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwh
 })();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
-window.WEB_STAND = 1795459363; window.WEB_VERSION = '4.17.0';
+window.WEB_STAND = 1795459692; window.WEB_VERSION = '4.17.0';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4E79">
@@ -8244,6 +8244,8 @@ async function zeichneMail(id) {
   if (m.lesebestaetigung && m.eingehend && !m.lesebestaetigungErledigt && S.einstellungen.mailLesebest !== 'NIE' && ordnerTyp !== 'JUNK')
     infos.push(`<div class="pf-info blau"><span class="fuell">📨 ${esc(t('Der Absender bittet um eine Lesebestätigung.'))}</span>${knopf('lesebest-ja', esc(t('Senden')))}${knopf('lesebest-nein', esc(t('Nicht senden')))}</div>`);
   if (m.abmelden && ordnerTyp !== 'JUNK') infos.push(`<div class="pf-info"><span class="fuell">📰 ${esc(t('Newsletter bzw. Verteiler.'))}</span>${knopf('abmelden', esc(t('Abbestellen')))}</div>`);
+  if (m.eingehend && ordnerTyp !== 'JUNK' && sichtbareAnh.some(a => /xml|pdf/i.test(a.mimeType + a.name))) infos.push('<div class="pf-info gelb" id="pf-erechnung" hidden></div>');
+  infos.push(absenderInfo(m), erkannteVerweise(m));
   if (sichtbareAnh.some(a => /calendar|\.ics$/i.test(a.mimeType + a.name))) infos.push(`<div class="pf-info blau" id="pf-einladung"><span class="fuell">📅 ${esc(t('Kalendereinladung wird gelesen …'))}</span></div>`);
   el.innerHTML = `<div class="pf-lese">
     <div class="pf-leiste" role="toolbar" aria-label="${esc(t('Befehle'))}">
@@ -8279,6 +8281,62 @@ async function zeichneMail(id) {
   await koerperZeigen(id);
   const ta = $('#pf-schnell-text'); if (ta) ta.oninput = () => { const b = $('[data-mail-akt="schnell-senden"]'); if (b) b.disabled = !ta.value.trim(); };
   if (sichtbareAnh.some(a => /calendar|\.ics$/i.test(a.mimeType + a.name))) einladungZeigen(id).catch(() => { const x = $('#pf-einladung'); if (x) x.remove(); });
+  if ($('#pf-erechnung')) erechnungZeigen(id).catch(() => { const x = $('#pf-erechnung'); if (x) x.remove(); });
+}
+/** Neben der Mail: welche Firma/welcher Kontakt, offene Rechnungen, Touren, offene Schadensfälle – ohne den Bereich zu wechseln. */
+function absenderInfo(m) {
+  const f = (m.firmaId && S.auftraggeber[m.firmaId]) || firmaZuAdresse(m.eingehend ? m.von : mailAdresse(String(m.an || '').split(/[,;]/)[0]));
+  if (!f || f.geloescht) return '';
+  const offen = vonFirma('belege', f.id).filter(istRechnungOffen), ueber = offen.filter(istUeberfaellig), touren = tourenVonFirma(f);
+  const letzte = touren.filter(t => t.datum <= heute()).sort((a, b) => b.datum.localeCompare(a.datum))[0], naechste = touren.filter(t => t.datum > heute()).sort((a, b) => a.datum.localeCompare(b.datum))[0];
+  const faelleOffen = faelle().filter(x => gehoertZu(x, f) && status(x).offen).length, kontakt = kontaktZuAdressen(f.id, m.eingehend ? m.von : m.an);
+  const teile = [offen.length ? `${offen.length} offene Rechnung(en) · ${geld(offen.reduce((n, b) => n + offenCent(b), 0))}${ueber.length ? `, davon ${ueber.length} überfällig` : ''}` : 'keine offenen Rechnungen',
+    letzte && `letzte Tour ${datumText(letzte.datum)}`, naechste && `nächste Tour ${datumText(naechste.datum)}`, faelleOffen && `${faelleOffen} offene(r) Schadensfall/-fälle`].filter(Boolean);
+  return `<div class="pf-info"><span class="fuell">🏢 <a href="#/firma/${f.id}" translate="no">${esc(f.name)}</a>${kontakt ? ` · <span translate="no">${esc(kontakt)}</span>` : ''}<br><span class="leise">${esc(teile.join(' · '))}</span></span></div>`;
+}
+/** Verweise im Text erkennen: Rechnungs-/Belegnummern, Fallnummern, Kennzeichen aus dem Fuhrpark, Tournummern – ein Klick zum Datensatz. */
+function erkannteVerweise(m) {
+  const text = `${m.betreff || ''}\n${m.text || ''}`, l = [];
+  for (const b of alle('belege')) if (String(b.nummer || '').length >= 6 && text.includes(b.nummer)) l.push(`<a href="#/beleg/${b.id}">${esc(BELEG_ART[b.art][0])} ${esc(b.nummer)}</a>`);
+  for (const f of faelle()) if (f.fallnummer && new RegExp(`(^|[^\\d-])${f.fallnummer.replace(/[-]/g, '\\-')}(?![\\d])`).test(text)) l.push(`<a href="#/fall/${f.id}">Fall ${esc(f.fallnummer)}</a>`);
+  for (const z of alle('fahrzeuge')) {
+    const teile = String(z.kennzeichen || '').toUpperCase().match(/[A-ZÄÖÜ]+|\d+/g) || [];
+    if (teile.length >= 2 && new RegExp(`\\b${teile.join('[\\s-]*')}\\b`, 'i').test(text)) l.push(`<a href="#/fahrzeug/${z.id}">🚚 ${esc(z.kennzeichen)}</a>`);
+  }
+  const nrn = new Set([...text.matchAll(/\bTour(?:-?Nr\.?)?[\s:]*([A-Z0-9][\w-]{0,15})/gi)].map(x => normal(x[1])));
+  const tage = new Map();
+  for (const t of alle('touren')) if (t.tourNr && nrn.has(normal(t.tourNr)) && (!tage.has(t.tourNr) || Math.abs(new Date(t.datum) - new Date(m.zeitpunkt || Date.now())) < Math.abs(new Date(tage.get(t.tourNr)) - new Date(m.zeitpunkt || Date.now())))) tage.set(t.tourNr, t.datum);
+  for (const [nr, tag] of tage) l.push(`<button class="knopf text" style="padding:0" data-tour-tag="${tag}">Tour ${esc(nr)} (${datumText(tag)})</button>`);
+  return l.length ? `<div class="pf-info"><span class="fuell">🔗 ${l.slice(0, 12).join(' · ')}</span></div>` : '';
+}
+/** E-Rechnung im Anhang einer eingehenden Mail (XML oder ZUGFeRD-PDF): erkennen, vorausgefüllt mit einem Klick übernehmen. */
+async function erechnungZeigen(id) {
+  const m = mails()[id];
+  for (const a of anhangListe(m).filter(a => /xml|pdf/i.test(a.mimeType + a.name))) {
+    const blob = await anhangBlob(id, a.i); if (!blob) continue;
+    const datei = new File([blob], a.name, { type: blob.type || a.mimeType || '' }), r = await rechnungAusDatei(datei);
+    const box = $('#pf-erechnung'); if (!r || !box) continue;
+    const rd = rechnungsDaten(), v = r.verkaeufer || {};
+    // Wir sind der Verkäufer: Gutschrift des Auftraggebers (Gutschriftverfahren) → Einnahme; sonst Rechnung/Gutschrift an uns → Eingangsrechnung
+    const wir = (v.ustId && rd.ustId && normal(v.ustId) === normal(rd.ustId)) || (v.name && normal(v.name) === normal(rd.name || S.einstellungen.firma || ''));
+    const doppelt = wir ? alle('belege').find(b => b.extern && normal(b.nummer) === normal(r.nummer))
+      : alle('eingangsrechnungen').find(e => normal(e.nummer) === normal(r.nummer) && normal(e.lieferant) === normal(v.name));
+    const von = wir ? (r.kaeufer || {}).name : v.name;
+    box.hidden = false;
+    box.innerHTML = `<span class="fuell">🧾 <b>E-Rechnung erkannt:</b> ${esc(r.art)} <span translate="no">${esc(r.nummer)}</span> ${wir ? 'von Auftraggeber' : 'von'} <span translate="no">${esc(von || '?')}</span> über ${esc(centText(r.brutto))} €${r.faellig ? ` · fällig ${esc(datumText(r.faellig))}` : ''}
+      ${doppelt ? '<br><span class="leise">Schon erfasst.</span>' : ''}</span>
+      ${doppelt ? `<button class="knopf" data-erech="offen">Öffnen</button>` : `<button class="knopf voll" data-erech="neu">${wir ? 'Als Gutschrift des Auftraggebers erfassen' : 'Als Eingangsrechnung anlegen'}</button>`}`;
+    box.onclick = ev => {
+      const b = ev.target.closest('[data-erech]'); if (!b) return;
+      if (b.dataset.erech === 'offen') { if (wir) gehe('#/beleg/' + doppelt.id); else eingangDialog(doppelt); return; }
+      if (wir) externeRechnungDialog(); else eingangDialog(null);
+      // Datei wie von Hand gewählt einsetzen – der Dialog liest sie, füllt alles aus und hängt sie beim Speichern an
+      const form = $('#dialog form'), dt = new DataTransfer(); dt.items.add(datei); form.elements.datei.files = dt.files; form.elements.datei.onchange();
+      if (form.elements.notiz) form.elements.notiz.value = `Aus E-Mail vom ${datumText(String(m.zeitpunkt || '').slice(0, 10))}: ${m.betreff || ''}`.slice(0, 200);
+    };
+    return;
+  }
+  const box = $('#pf-erechnung'); if (box) box.remove();
 }
 const mailOrdnerAnzeige = m => { if (m.ordner && !String(m.ordner).startsWith('#')) { const o = ordnerListe(kontoVon(m)).find(x => x.pfad === m.ordner); return o ? ordnerName(o) : m.ordner; } return SPEZIAL_NAME[mailOrdnerTyp(m)] || ''; };
 /** Inhalt: HTML im abgeschotteten Rahmen (Höhe passt sich an), sonst Text mit eingeklappten Zitaten. */

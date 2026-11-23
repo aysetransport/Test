@@ -2547,3 +2547,48 @@ test('Mail: beliebig viele weitere Konten mit Namen, Status und eigener Signatur
   assert.equal(await s.evaluate(a => a in MAIL_KONTEN, r.art), false);
   await s.close();
 });
+
+test('Postfach: Absender-Infos, erkannte Verweise und E-Rechnung im Anhang mit einem Klick als Eingangsrechnung', async () => {
+  const s = await geraet(null, { bereich: 'postfach' });
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
+    <rsm:ExchangedDocument><ram:ID>WR-4711</ram:ID><ram:TypeCode>380</ram:TypeCode><ram:IssueDateTime><udt:DateTimeString format="102">20261115</udt:DateTimeString></ram:IssueDateTime></rsm:ExchangedDocument>
+    <rsm:SupplyChainTradeTransaction><ram:ApplicableHeaderTradeAgreement><ram:SellerTradeParty><ram:Name>Werkstatt Meier GmbH</ram:Name></ram:SellerTradeParty><ram:BuyerTradeParty><ram:Name>Ayse Transport UG</ram:Name></ram:BuyerTradeParty></ram:ApplicableHeaderTradeAgreement>
+    <ram:ApplicableHeaderTradeSettlement><ram:SpecifiedTradeSettlementPaymentMeans><ram:PayeePartyCreditorFinancialAccount><ram:IBANID>DE02120300000000202051</ram:IBANID></ram:PayeePartyCreditorFinancialAccount></ram:SpecifiedTradeSettlementPaymentMeans>
+    <ram:SpecifiedTradePaymentTerms><ram:DueDateDateTime><udt:DateTimeString format="102">20261129</udt:DateTimeString></ram:DueDateDateTime></ram:SpecifiedTradePaymentTerms>
+    <ram:SpecifiedTradeSettlementHeaderMonetarySummation><ram:TaxBasisTotalAmount>200.00</ram:TaxBasisTotalAmount><ram:TaxTotalAmount currencyID="EUR">38.00</ram:TaxTotalAmount><ram:GrandTotalAmount>238.00</ram:GrandTotalAmount><ram:DuePayableAmount>238.00</ram:DuePayableAmount></ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+    </ram:ApplicableHeaderTradeSettlement></rsm:SupplyChainTradeTransaction></rsm:CrossIndustryInvoice>`;
+  const id = await s.evaluate(async xml => {
+    window.desktop = { plattform: 'test', beiZiel() {}, benachrichtige: async () => true, oeffneExtern: async () => true, oeffneDatei: async () => true,
+      mail: { anbieter: async () => ({}), konto: async a => (a === 'ALLGEMEIN' ? { adresse: 'info@ayse.example' } : null), trennen: async () => true, sende: async () => 'x' } };
+    await mailStart();
+    const f = Aktionen.firmaSpeichern({ name: 'Werkstatt Meier', email: 'rechnung@meier.example', status: 'AKTIV' });
+    const r = BelegAktionen.neu('RECHNUNG', f, { positionen: JSON.stringify([{ bez: 'x', menge: 1, einzelCent: 10000 }]) }); BelegAktionen.speichern({ ...S.belege[r], status: 'OFFEN', faelligAm: '2026-01-01' });
+    merke('fahrzeuge', { id: uuid(), kennzeichen: 'KR-AT 100', status: 'AKTIV', geaendertAm: jetztIso() });
+    const id = 'er1@meier';
+    mails()[id] = { konto: 'ALLGEMEIN', eingehend: true, gelesen: false, von: 'rechnung@meier.example', vonName: 'Werkstatt Meier', an: 'info@ayse.example', firmaId: f,
+      betreff: 'Rechnung WR-4711', text: `Anbei die Rechnung für KR AT 100, Bezug auf Ihre ${S.belege[r].nummer}.`, zeitpunkt: '2026-11-15T09:00:00Z', anhaenge: ['WR-4711.xml'],
+      anhangInfo: [{ name: 'WR-4711.xml', mimeType: 'application/xml', groesse: xml.length }], antwortAuf: [] };
+    await Dateien.lege(`mail:${id}:0`, new Blob([xml], { type: 'application/xml' }));
+    nachAenderung(); gehe('#/mail/' + encodeURIComponent(id));
+    return id;
+  }, xml);
+  await s.locator('#pf-erechnung', { hasText: 'E-Rechnung erkannt' }).waitFor();
+  const info = await s.locator('#detail').textContent();
+  assert.ok(info.includes('Werkstatt Meier') && info.includes('1 offene Rechnung(en)') && info.includes('überfällig'), 'Absender-Infos');
+  assert.ok(await s.locator('#detail a[href^="#/fahrzeug/"]', { hasText: 'KR-AT 100' }).count(), 'Kennzeichen erkannt');
+  assert.ok(await s.locator('#detail a[href^="#/beleg/"]').count(), 'Rechnungsnummer erkannt');
+  assert.ok((await s.locator('#pf-erechnung').textContent()).includes('WR-4711') && (await s.locator('#pf-erechnung').textContent()).includes('238,00'));
+  await s.locator('#pf-erechnung [data-erech="neu"]').click();
+  await s.waitForFunction(() => document.querySelector('#eingang-form [name=nummer]').value === 'WR-4711');
+  const vor = await s.evaluate(() => Object.fromEntries(['lieferant', 'brutto', 'faelligAm', 'iban', 'notiz'].map(n => [n, document.querySelector(`#eingang-form [name=${n}]`).value])));
+  assert.deepEqual([vor.lieferant, vor.brutto, vor.faelligAm, vor.iban], ['Werkstatt Meier GmbH', '238,00', '2026-11-29', 'DE02120300000000202051']);
+  assert.ok(vor.notiz.startsWith('Aus E-Mail vom 15.11.2026'));
+  await s.locator('#eingang-form button.voll').click();
+  await s.waitForFunction(() => Object.values(S.eingangsrechnungen).some(e => e.nummer === 'WR-4711'));
+  const e = await s.evaluate(() => { const x = Object.values(S.eingangsrechnungen).find(e => e.nummer === 'WR-4711'); return [x.nettoCent, x.mwstCent, x.eRechnung, alle('anlagen').filter(a => a.fallId === x.id).length]; });
+  assert.deepEqual(e, [20000, 3800, true, 1]);
+  // nochmals öffnen: schon erfasst
+  await s.evaluate(i => { gehe('#/'); gehe('#/mail/' + encodeURIComponent(i)); }, id);
+  await s.locator('#pf-erechnung', { hasText: 'Schon erfasst' }).waitFor();
+  await s.close();
+});
