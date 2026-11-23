@@ -31,6 +31,7 @@ class Bruecke(
     private val antworte: (String) -> Unit,
     private val zielBereit: () -> Unit = {},
     private val webUpdate: WebUpdate? = null,
+    private val appUpdate: AppUpdate? = null,
 ) {
     @JavascriptInterface
     fun aufruf(id: String, name: String, argumente: String) {
@@ -70,6 +71,8 @@ class Bruecke(
             "web:installieren" -> io { requireNotNull(webUpdate).installieren() }
             "web:ok" -> { webUpdate?.ok(); JsonPrimitive(true) }
             "web:zuruecksetzen" -> { webUpdate?.zuruecksetzen(); JsonPrimitive(true) }
+            "app:pruefen" -> io { requireNotNull(appUpdate).pruefen() }
+            "app:installieren" -> { requireNotNull(appUpdate).installieren(); JsonPrimitive(true) }
             else -> throw IllegalArgumentException("Unbekannte Funktion: $name")
         }
     }

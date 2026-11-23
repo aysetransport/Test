@@ -41,7 +41,8 @@ android {
         applicationId = "de.aysetransport.schaden"
         minSdk = 26
         targetSdk = 36
-        versionCode = 38
+        // Im Workflow fortlaufend (Lauf-Nummer), damit das App-Update jede neue APK als neuer erkennt.
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 38
         versionName = "5.16.1"
     }
 

@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('desktop', {
     blinken: () => aufruf('fenster:blinken'),
     zoom: f => aufruf('fenster:zoom', f),
   },
+  // Update der App selbst (neues Setup bzw. neue APK)
+  app: { pruefen: () => aufruf('app:pruefen'), installieren: () => aufruf('app:installieren') },
   // In-App-Update der Oberfläche
   web: { info: () => aufruf('web:info'), installieren: () => aufruf('web:installieren'), ok: () => aufruf('web:ok'), zuruecksetzen: () => aufruf('web:zuruecksetzen') },
 });

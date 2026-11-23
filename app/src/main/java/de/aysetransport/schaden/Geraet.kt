@@ -1,6 +1,14 @@
 package de.aysetransport.schaden
 
 import android.Manifest
+import android.app.Activity
+import android.app.AlertDialog
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.net.Uri
+import android.telephony.SmsManager
+import android.widget.Toast
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -56,6 +64,8 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
     /** Öffnet Telefon, E-Mail-Programm oder Browser. */
     fun oeffneExtern(adresse: String) {
         if (!Regex("^(mailto:|tel:|sms:|https:)", RegexOption.IGNORE_CASE).containsMatchIn(adresse)) throw IOException("Adresse nicht erlaubt")
+        val ziel = if (adresse.startsWith("sms:", true)) smsZiel(adresse) else null
+        if (ziel != null && activity.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) { sms(adresse, ziel.first, ziel.second); return }
         try {
             activity.startActivity(Intent(Intent.ACTION_VIEW, adresse.toUri()))
         } catch (e: ActivityNotFoundException) {
@@ -144,6 +154,52 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
     }
     private var letzterDruck: WebView? = null
 
+    // ------------------------------ SMS ------------------------------
+    /** SMS direkt aus der App: wie in der SMS-App erst bestätigen, dann senden; „In SMS-App“ bleibt als Ausweg. */
+    private fun sms(adresse: String, nummern: List<String>, text: String) {
+        AlertDialog.Builder(activity)
+            .setTitle(if (nummern.size == 1) "SMS an ${nummern[0]}" else "SMS an ${nummern.size} Empfänger")
+            .setMessage(text)
+            .setPositiveButton("Senden") { _, _ ->
+                if (ContextCompat.checkSelfPermission(activity, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) sendeSms(nummern, text)
+                else activity.frageSms { erlaubt -> if (erlaubt) sendeSms(nummern, text) else smsApp(adresse) }
+            }
+            .setNeutralButton("In SMS-App") { _, _ -> smsApp(adresse) }
+            .setNegativeButton("Abbrechen", null)
+            .show()
+    }
+
+    private fun smsApp(adresse: String) {
+        try { activity.startActivity(Intent(Intent.ACTION_VIEW, adresse.toUri())) } catch (e: ActivityNotFoundException) { meldung("Keine SMS-App gefunden.") }
+    }
+
+    private fun meldung(text: String) = Toast.makeText(activity, text, Toast.LENGTH_LONG).show()
+
+    @SuppressLint("MissingPermission")
+    private fun sendeSms(nummern: List<String>, text: String) {
+        try {
+            val sm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) activity.getSystemService(SmsManager::class.java) else @Suppress("DEPRECATION") SmsManager.getDefault()
+            val teile = sm.divideMessage(text)
+            val aktion = "${activity.packageName}.SMS_GESENDET"
+            var offen = teile.size * nummern.size
+            var fehler = 0
+            // Rückmeldung je Teil-SMS: erst wenn alle durch sind, eine Meldung (Erfolg oder Fehler, z. B. kein Netz).
+            val empfaenger = object : BroadcastReceiver() {
+                override fun onReceive(c: Context, i: Intent) {
+                    if (resultCode != Activity.RESULT_OK) fehler++
+                    if (--offen > 0) return
+                    runCatching { activity.unregisterReceiver(this) }
+                    meldung(if (fehler == 0) "SMS gesendet" else "SMS nicht gesendet – bitte Mobilfunkempfang prüfen")
+                }
+            }
+            ContextCompat.registerReceiver(activity, empfaenger, IntentFilter(aktion), ContextCompat.RECEIVER_NOT_EXPORTED)
+            val gesendet = PendingIntent.getBroadcast(activity, 0, Intent(aktion).setPackage(activity.packageName), PendingIntent.FLAG_IMMUTABLE)
+            for (nr in nummern) sm.sendMultipartTextMessage(nr, null, teile, ArrayList(teile.map { gesendet }), null)
+        } catch (e: Exception) {
+            meldung("SMS nicht gesendet: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
     // ------------------------------ Benachrichtigungen ------------------------------
     private val kanal = "mail"
 
@@ -170,5 +226,17 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
         fun zeige() = NotificationManagerCompat.from(activity).notify((titel + text).hashCode(), n)
         zeige()
         return true
+    }
+
+    companion object {
+        private val NUMMER = Regex("^[+0-9 ()/-]{3,}$")
+
+        /** Empfänger und Text aus einer sms:-Adresse der Oberfläche (sms:+49…,+49…?body=…); null, wenn etwas fehlt. */
+        fun smsZiel(adresse: String): Pair<List<String>, String>? {
+            val rest = adresse.substringAfter(':')
+            val nummern = Uri.decode(rest.substringBefore('?')).split(',', ';').map { it.trim() }.filter { it.isNotEmpty() }
+            val text = rest.substringAfter('?', "").split('&').firstOrNull { it.startsWith("body=") }?.let { Uri.decode(it.removePrefix("body=")) }.orEmpty()
+            return if (nummern.isEmpty() || nummern.any { !NUMMER.matches(it) } || text.isBlank()) null else nummern to text
+        }
     }
 }

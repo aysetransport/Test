@@ -7,6 +7,13 @@
     <!-- Hinweis auf neue E-Mails -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- App-Update: neue APK installieren (Android fragt jedes Mal nach) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- SMS direkt aus der App senden (Lieferavis, Touren); Geräte ohne Mobilfunk nutzen weiter die SMS-App -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
     <queries>
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />

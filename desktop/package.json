@@ -1,7 +1,7 @@
 {
   "name": "schadensfaelle",
   "productName": "Schadensfälle",
-  "version": "4.16.2",
+  "version": "4.17.0",
   "description": "Schadensfälle bei Transportaufträgen nachhaken und bearbeiten",
   "main": "main.js",
   "private": true,
@@ -15,6 +15,7 @@
     "dist:win:linux": "npm run vorbereiten && electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
+    "electron-updater": "6.8.12",
     "imapflow": "2.9.1",
     "mailparser": "3.12.4",
     "nodemailer": "10.2.1"
@@ -52,6 +53,11 @@
       "shortcutName": "Schadensfälle",
       "artifactName": "Schadensfaelle-Setup-${version}.exe"
     },
-    "publish": null
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://github.com/aysetransport/schaden/releases/download/windows-app/"
+      }
+    ]
   }
 }

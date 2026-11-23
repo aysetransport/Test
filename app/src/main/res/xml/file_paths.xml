@@ -4,4 +4,6 @@
     <cache-path name="oeffnen" path="oeffnen/" />
     <!-- Kameraaufnahmen für Anlagen -->
     <cache-path name="kamera" path="kamera/" />
+    <!-- Heruntergeladenes App-Update (APK) für den Paket-Installer -->
+    <cache-path name="update" path="update/" />
 </paths>

@@ -40,11 +40,34 @@ jobs:
             echo "Kein Signaturschlüssel hinterlegt – die APK wird mit einem Testschlüssel signiert."
           fi
 
-      - name: Lint, Tests und Debug-APK
+      # Fortlaufende versionCode, damit das App-Update jede neue APK als neuer erkennt (build.gradle.kts)
+      - name: Versionsnummer
+        run: echo "VERSION_CODE=$((GITHUB_RUN_NUMBER + 1000))" >> "$GITHUB_ENV"
+
+      - name: Lint, Tests, Debug- und Release-APK
         env:
           SIGNATUR_PASSWORT: ${{ secrets.SIGNATUR_PASSWORT }}
           SIGNATUR_ALIAS: ${{ secrets.SIGNATUR_ALIAS }}
-        run: ./gradlew lintDebug testDebugUnitTest assembleDebug
+        run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleRelease
+
+      # App-Update für die installierten Apps: Release „android-app“ im öffentlichen Repository aysetransport/schaden.
+      # Nur mit festem Signaturschlüssel (sonst ließe sich die APK nicht über die installierte installieren) und
+      # mit dem Secret SCHADEN_TOKEN (Fine-grained Token, nur aysetransport/schaden, Contents: Read and write).
+      - name: App-Update veröffentlichen
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && env.SIGNATUR_DATEI != ''
+        env:
+          GH_TOKEN: ${{ secrets.SCHADEN_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "Kein SCHADEN_TOKEN hinterlegt – App-Update wird nicht veröffentlicht."; exit 0; fi
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/Ayse-CRM.apk"
+          name=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          sha=$(sha256sum "$RUNNER_TEMP/Ayse-CRM.apk" | cut -d' ' -f1)
+          printf '{"versionCode":%s,"versionName":"%s","sha256":"%s"}\n' "$VERSION_CODE" "$name ($VERSION_CODE)" "$sha" > "$RUNNER_TEMP/android-update.json"
+          R=aysetransport/schaden
+          gh release view android-app -R $R > /dev/null 2>&1 || gh release create android-app -R $R --title "Android-App" --notes "Neueste Android-App (In-App-Update)"
+          # Erst die APK, dann die Beschreibung – so zeigt android-update.json nie auf eine fehlende APK.
+          gh release upload android-app -R $R "$RUNNER_TEMP/Ayse-CRM.apk" --clobber
+          gh release upload android-app -R $R "$RUNNER_TEMP/android-update.json" --clobber
 
       - name: APK bereitstellen
         uses: actions/upload-artifact@v4

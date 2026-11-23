@@ -65,6 +65,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private val benachrichtigungsFrage = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private var nachSmsFrage: ((Boolean) -> Unit)? = null
+    private val smsFrage = registerForActivityResult(ActivityResultContracts.RequestPermission()) { erlaubt -> nachSmsFrage?.invoke(erlaubt); nachSmsFrage = null }
+
+    /** Fragt einmalig nach der SMS-Berechtigung (Geraet.sms). */
+    fun frageSms(weiter: (Boolean) -> Unit) { nachSmsFrage = weiter; smsFrage.launch(Manifest.permission.SEND_SMS) }
     private var schonGefragt = false
 
     fun frageBenachrichtigungen() {
@@ -155,6 +160,7 @@ class MainActivity : ComponentActivity() {
                 antworte = { js -> webView.evaluateJavascript(js, null) },
                 zielBereit = { zielBereit = true; offenesZiel?.let { zeigeZiel(it) } },
                 webUpdate = webUpdate,
+                appUpdate = AppUpdate(this),
             ),
             "AndroidBruecke",
         )

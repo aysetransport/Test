@@ -2252,3 +2252,79 @@ test('Übersetzungen aus dem Netz: nur neuere, gültige Daten werden übernommen
   await s.evaluate(() => { S.einstellungen.sprache = 'de'; spracheAnwenden(); });
   await s.close();
 });
+
+test('Finanzen: Gutschriftverfahren, Eingangsrechnungen, Tankbelege in Massen (mit und ohne Fahrzeug), Ausgaben in der Statistik', async () => {
+  const s = await geraet(null, { bereich: 'finanzen' });
+  await s.evaluate(() => { const id = uuid(); S.auftraggeber[id] = { id, name: 'Spedition Nord', geaendertAm: jetztIso() };
+    const z = uuid(); S.fahrzeuge[z] = { id: z, kennzeichen: 'KR-AT 100', status: 'AKTIV', geaendertAm: jetztIso() }; nachAenderung(); });
+  // Auftraggeber rechnet per Gutschrift ab → Einnahme wie eine Rechnung
+  await s.locator('[data-externe-rechnung]').first().click();
+  await s.locator('#extern-form [name=art]').selectOption('GV');
+  await s.locator('#extern-form [name=nummer]').fill('GS-77');
+  await s.locator('#extern-form [name=datum]').fill('2026-11-10');
+  await s.locator('#extern-form [name=netto]').fill('1000,00');
+  await s.locator('#extern-form button.voll').click();
+  await s.locator('#toast', { hasText: 'Gutschrift (Gutschriftverfahren) erfasst' }).waitFor();
+  const gv = await s.evaluate(() => { const b = Object.values(S.belege).find(x => x.nummer === 'GS-77'); return { gv: b.gutschriftverfahren, umsatz: umsatzNetto(b), offen: istRechnungOffen(b) }; });
+  assert.deepEqual(gv, { gv: true, umsatz: 100000, offen: true });
+  // Eingangsrechnung von Hand; „Löschen“ kommt im Tab-Weg erst nach „Speichern“
+  await s.locator('[data-neue-eingangsrechnung]').first().click();
+  assert.equal(await s.evaluate(() => document.activeElement.name), 'lieferant', 'Start im ersten Feld');
+  await s.locator('#eingang-form [name=lieferant]').fill('Werkstatt Meier');
+  await s.locator('#eingang-form [name=nummer]').fill('W-1');
+  await s.locator('#eingang-form [name=datum]').fill('2026-11-05');
+  await s.locator('#eingang-form [name=brutto]').fill('119,00');
+  await s.locator('#eingang-form [name=kategorie]').selectOption('WERKSTATT');
+  await s.locator('#eingang-form [name=faelligAm]').fill('2026-11-06');
+  await s.locator('#eingang-form button.voll').click();
+  const e = await s.evaluate(() => { const x = Object.values(S.eingangsrechnungen).find(y => y.nummer === 'W-1'); return { netto: x.nettoCent, mwst: x.mwstCent, faellig: eingangFaellig(x), id: x.id }; });
+  assert.deepEqual([e.netto, e.mwst, e.faellig], [10000, 1900, true]);
+  await s.locator('[data-beleg-filter="EINGANG"]').click();
+  await s.locator(`[data-eingang="${e.id}"]`).click();
+  const knoepfe = await s.evaluate(() => [...document.querySelectorAll('#eingang-form .dialog-knoepfe button')].map(b => b.id || b.textContent.trim()));
+  assert.deepEqual(knoepfe, ['Abbrechen', 'Speichern', 'eingang-loeschen']);
+  await s.locator('#dialog [data-zu]').click();
+  // Tankbelege: runtertippen, Enter springt weiter, neue Zeile kommt von selbst; ohne Kennzeichen → Ausgabe „Kraftstoff“
+  await s.locator('[data-tankbelege]').first().click();
+  const zeile = n => s.locator(`#tank-tabelle tbody tr:nth-child(${n})`);
+  await zeile(1).locator('[data-t=datum]').fill('2026-11-12');
+  await zeile(1).locator('[data-t=datum]').press('Enter');
+  assert.equal(await s.evaluate(() => document.activeElement.dataset.t), 'kz', 'Enter springt ins nächste Feld');
+  await zeile(1).locator('[data-t=kz]').fill('KR-AT 100');
+  await zeile(1).locator('[data-t=liter]').fill('50');
+  await zeile(1).locator('[data-t=betrag]').fill('89,50');
+  await zeile(1).locator('[data-t=km]').fill('120000');
+  await zeile(2).locator('[data-t=betrag]').fill('59,50');
+  await zeile(2).locator('[data-t=ort]').fill('Aral');
+  assert.equal(await s.locator('#tank-tabelle tbody tr').count(), 3, 'immer eine leere Zeile unten');
+  await zeile(2).locator('[data-t=ort]').press('Control+Enter');
+  await s.locator('#toast', { hasText: '2 Tankbelege gespeichert' }).waitFor();
+  const t = await s.evaluate(() => { const fz = Object.values(S.fahrzeuge)[0], a = alle('fahrzeugeintraege').find(x => x.art === 'TANKEN'), k = alle('eingangsrechnungen').find(x => x.kategorie === 'KRAFTSTOFF');
+    return { akte: [a.betragCent, a.menge, a.datum], km: fz.kmStand, ohne: [k.nettoCent + k.mwstCent, k.lieferant, k.status, k.datum] }; });
+  assert.deepEqual(t, { akte: [8950, 5000, '2026-11-12'], km: 120000, ohne: [5950, 'Aral', 'BEZAHLT', '2026-11-12'] });
+  // unbekanntes Kennzeichen wird markiert, nichts gespeichert
+  await s.locator('[data-tankbelege]').first().click();
+  await zeile(1).locator('[data-t=kz]').fill('XX-UNBEKANNT');
+  await zeile(1).locator('[data-t=betrag]').fill('10');
+  await s.locator('#tank-form button.voll').click();
+  assert.ok(await s.locator('#tank-fehler').isVisible());
+  assert.equal(await zeile(1).locator('[data-t=kz]').getAttribute('aria-invalid'), 'true');
+  await s.locator('#dialog [data-zu]').click();
+  // Statistik: Ausgaben und Ergebnis
+  const guv = await s.evaluate(() => guvHtml({ von: '2026-11-01', bis: '2026-11-30' }));
+  assert.ok(guv.includes('id="ausgaben"') && guv.includes('Werkstatt / Reparatur') && guv.includes('Kraftstoff'), 'Ausgaben nach Kategorie');
+  await s.close();
+});
+
+test('App-Update (neues Setup/APK): geladen → fragen → installieren', async () => {
+  const s = await geraet(null, { bereich: 'uebersicht' });
+  await s.context().route('https://aysetransport.github.io/schaden/app-update.json*', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ stand: 1, minNativ: 1, dateien: {} }) }));
+  await s.evaluate(() => { window.__inst = 0; window.desktop = { web: { info: async () => ({ nativ: 2 }), installieren: async () => ({}), ok: async () => true, zuruecksetzen: async () => true },
+    app: { pruefen: async () => ({ bereit: true, version: '4.18.0' }), installieren: async () => { window.__inst++; return true; } } }; });
+  await s.evaluate(() => updatePruefen(false));
+  await s.locator('#dialog', { hasText: 'App-Update bereit' }).waitFor();
+  await s.locator('#dialog [data-app-installieren]').click();
+  assert.equal(await s.evaluate(() => window.__inst), 1);
+  assert.ok((await s.evaluate(() => updateKarte())).includes('App-Update 4.18.0 installieren'));
+  await s.close();
+});

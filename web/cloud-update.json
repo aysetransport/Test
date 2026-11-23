@@ -1,7 +1,7 @@
 {
- "stand": 1795434034,
- "api": 15,
- "version": "4.16.2",
- "sha256": "f93944914db28ffbc3604e3e14e4988eddb9e51d8ad13f5eef2bb348051d5dea",
+ "stand": 1795443801,
+ "api": 16,
+ "version": "4.17.0",
+ "sha256": "a7db06132cebf00ef4a5819f552fc1548bf3df35b020439ce715c39101fa6213",
  "manifestSha256": "c656d1c789e77ed347443dd304ed09cb362e8fae4d327a00e97b6cdd029627ad"
 }

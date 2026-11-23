@@ -64,3 +64,24 @@ jobs:
           else { gh release edit windows-app --notes $notiz }
           gh release upload windows-app $setup.FullName --clobber
           foreach ($alt in (gh release view windows-app --json assets -q '.assets[].name')) { if ($alt -ne $setup.Name) { gh release delete-asset windows-app $alt -y } }
+
+      # App-Update für die installierten Apps (electron-updater, siehe package.json → build.publish): Release
+      # „windows-app“ im öffentlichen Repository aysetransport/schaden. Braucht das Secret SCHADEN_TOKEN
+      # (Fine-grained Token, nur aysetransport/schaden, Contents: Read and write).
+      - name: App-Update veröffentlichen
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.SCHADEN_TOKEN }}
+        run: |
+          if (-not $env:GH_TOKEN) { Write-Host "Kein SCHADEN_TOKEN hinterlegt – App-Update wird nicht veröffentlicht."; exit 0 }
+          if (-not (Test-Path dist\latest.yml)) { throw "dist\latest.yml fehlt (build.publish in package.json?)" }
+          $setup = Get-ChildItem dist\Schadensfaelle-Setup-*.exe | Select-Object -First 1
+          $neu = @($setup.Name, "$($setup.Name).blockmap", "latest.yml")
+          $R = "aysetransport/schaden"
+          gh release view windows-app -R $R *> $null
+          if ($LASTEXITCODE -ne 0) { gh release create windows-app -R $R --title "Windows-App" --notes "Neueste Windows-App (Installer und In-App-Update)" }
+          # Erst Installer und Blockmap, zuletzt latest.yml – so zeigt latest.yml nie auf einen fehlenden Installer.
+          gh release upload windows-app -R $R $setup.FullName "$($setup.FullName).blockmap" --clobber
+          gh release upload windows-app -R $R dist\latest.yml --clobber
+          foreach ($alt in (gh release view windows-app -R $R --json assets -q '.assets[].name')) { if ($neu -notcontains $alt) { gh release delete-asset windows-app $alt -R $R -y } }

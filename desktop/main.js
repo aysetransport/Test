@@ -11,6 +11,7 @@ const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const mail = require('./mail');
 const { webUpdate } = require('./webupdate');
+const { autoUpdater } = require('electron-updater');
 
 const ORDNER = path.join(__dirname, 'app');
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
@@ -48,6 +49,20 @@ behandle('web:info', () => update.info());
 behandle('web:installieren', () => update.installieren());
 behandle('web:ok', () => update.ok());
 behandle('web:zuruecksetzen', () => update.zuruecksetzen());
+// Update der App selbst (neues Setup): electron-updater lädt es im Hintergrund vom Release „windows-app“ in
+// aysetransport/schaden (siehe package.json → build.publish) und installiert es beim Beenden oder auf Wunsch sofort.
+let appUpdate = { bereit: false, version: '' };
+autoUpdater.on('update-available', i => { appUpdate = { ...appUpdate, version: i.version }; });
+autoUpdater.on('update-downloaded', i => { appUpdate = { bereit: true, version: i.version }; });
+behandle('app:pruefen', async () => {
+  if (app.isPackaged && !process.env.SCHADEN_TEST && !appUpdate.bereit) await autoUpdater.checkForUpdates();
+  return appUpdate;
+});
+behandle('app:installieren', () => {
+  if (!appUpdate.bereit) throw new Error('Kein App-Update geladen');
+  setImmediate(() => { lageMerken(); autoUpdater.quitAndInstall(true, true); }); // still installieren, danach neu starten
+  return true;
+});
 behandle('mail:konto', a => ohnePasswort(ladeKonto(a)));
 behandle('mail:einrichten', async (konfig, pw, a) => {
   await mail.pruefe(konfig, pw);

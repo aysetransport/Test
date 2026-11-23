@@ -27,7 +27,17 @@ PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen.
 ## Updates
 
 - **Oberfläche:** Windows- und Android-App laden neue Fassungen der Oberfläche selbst nach (`web/app-update.json`).
-  Neue Installer sind nur nötig, wenn sich der native Teil ändert (`minNativ`).
+- **App selbst (nativer Teil):** ebenfalls in der App. Die Workflows legen nach jedem Lauf auf dem Standard-Branch
+  den neuen Installer bzw. die neue APK in [`aysetransport/schaden`](https://github.com/aysetransport/schaden/releases)
+  ab (Releases `windows-app` und `android-app`). Windows lädt das Update im Hintergrund (electron-updater) und
+  installiert es beim Beenden oder auf „Jetzt installieren“. Android lädt die APK und öffnet den Installationsdialog.
+  Diesen muss der Benutzer bestätigen, das schreibt Android ohne Play Store so vor (beim ersten Mal zusätzlich „Apps aus
+  dieser Quelle zulassen“).
+  Einmalig nötig: unter *Settings → Secrets and variables → Actions* das Secret `SCHADEN_TOKEN` anlegen
+  (Fine-grained Token, nur Repository `aysetransport/schaden`, *Contents: Read and write*). Für Android zusätzlich der
+  feste Signaturschlüssel (siehe *Installieren*), sonst wird keine APK veröffentlicht.
+  Die Windows-Version kommt aus `desktop/package.json` und muss für ein Update steigen. Die Android-`versionCode`
+  zählt im Workflow automatisch hoch.
 - **Veröffentlichen:** `node tools/app-update.js` ausführen (Version kommt aus `desktop/package.json`), dann
   den Inhalt von `web/` (ohne `test/`) ins Repository [`aysetransport/schaden`](https://github.com/aysetransport/schaden)
   übernehmen → https://aysetransport.github.io/schaden/. Bei Änderungen an zwischengespeicherten Dateien
@@ -36,7 +46,8 @@ PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen.
 
 ## Installieren
 
-- **Windows:** Release **„Windows-App“** im Repository (Tag `windows-app`, vom Workflow *Windows-App* nach jedem
+- **Windows:** Release [„Windows-App“ in `aysetransport/schaden`](https://github.com/aysetransport/schaden/releases/tag/windows-app)
+  (öffentlich, sobald `SCHADEN_TOKEN` hinterlegt ist), sonst Release **„Windows-App“** im Repository (Tag `windows-app`, vom Workflow *Windows-App* nach jedem
   erfolgreichen Lauf auf dem Standard-Branch erneuert). Nicht signiert: SmartScreen
   → „Weitere Informationen → Trotzdem ausführen“. Installation ohne Administratorrechte.
 - **Android:** Workflow *Android* → Artefakt `Ayse-CRM-apk`. Damit Updates über die installierte App gehen,
@@ -67,6 +78,14 @@ prüft der Web-Test die erzeugten E-Rechnungen zusätzlich gegen die offiziellen
 - Fahrer sehen nur ihre eigenen Touren, Zeiten und Aufgaben; das setzt die Cloud durch, nicht nur die Oberfläche.
 - Alles, was nach außen geht (Rechnungen, Briefe, Kunden-Nachrichten), bleibt deutsch, auch wenn die
   Oberfläche übersetzt ist.
+
+## SMS (Android)
+
+Die SMS-Knöpfe (Lieferavis, Touren, Team) senden auf Android-Geräten mit Mobilfunk direkt aus der App. Vorher
+erscheint die Nachricht zur Bestätigung, mit „In SMS-App“ als Ausweg. Beim ersten Mal fragt Android nach der
+Berechtigung. Die SMS gehen über die SIM des Geräts und kosten wie normale SMS. Ohne Berechtigung oder ohne Mobilfunk
+öffnet sich wie bisher die SMS-App. (Im Play Store wäre `SEND_SMS` für eine solche App nicht erlaubt. Die APK wird
+direkt verteilt.)
 
 ## Grenzen
 

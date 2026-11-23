@@ -84,4 +84,11 @@ class AppTest {
         }
     }
 
+
+    @Test fun smsAdresseWirdZerlegt() {
+        assertEquals(listOf("+491701234567") to "Liefertermin: 12.01. & 8–10 Uhr", Geraet.smsZiel("sms:+491701234567?body=" + java.net.URLEncoder.encode("Liefertermin: 12.01. & 8–10 Uhr", "UTF-8").replace("+", "%20")))
+        assertEquals(listOf("+491", "+492"), Geraet.smsZiel("sms:+491,+492?body=Hallo")?.first)
+        assertEquals(null, Geraet.smsZiel("sms:+491"))
+        assertEquals(null, Geraet.smsZiel("sms://open?addresses=+491&body=x"))
+    }
 }
