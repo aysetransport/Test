@@ -2377,5 +2377,13 @@ test('Tourenplanung: Tour/Ziel als Auswahl aus den Stammdaten der Firma (Preisli
   assert.equal(await s.evaluate(() => tourRechnung(Object.values(S.touren).find(t => t.name === 'Tour 7 – Bremen')).erloes), 38000, 'Statistik schätzt mit demselben Preis');
   await s.evaluate(() => { const f = Object.values(S.auftraggeber)[0]; rechnungAusTourenVorschau(f, '2026-11-10', '2026-11-10', 'ART'); });
   assert.equal(await s.locator('#tpr-summe').textContent(), await s.evaluate(() => geld(3 * 45000 + 2 * 38000)));
+  // jede Tour einzeln mit Datum: fünf Positionen, gleiche Summe
+  await s.evaluate(() => { const f = Object.values(S.auftraggeber)[0]; rechnungAusTourenVorschau(f, '2026-11-09', '2026-11-10', 'EINZELN'); });
+  assert.equal(await s.locator('#tpr-summe').textContent(), await s.evaluate(() => geld(3 * 45000 + 2 * 38000)));
+  await s.locator('#tpr-vorschau button.voll').click();
+  const pos = await s.evaluate(() => positionen(S.belege[location.hash.split('/').pop()]).map(p => [p.bez, p.menge, p.einzelCent]));
+  assert.equal(pos.length, 5);
+  assert.deepEqual(pos[0], ['10.11.2026 · Tour 12 – Hamburg (Tourpauschale)', 1, 45000]);
+  assert.ok(pos.every(p => p[0].startsWith('10.11.2026 · ') && p[1] === 1));
   await s.close();
 });

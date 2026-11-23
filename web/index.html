@@ -19,7 +19,7 @@ window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwh
 })();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
-window.WEB_STAND = 1795449526; window.WEB_VERSION = '4.17.0';
+window.WEB_STAND = 1795449615; window.WEB_VERSION = '4.17.0';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4E79">
@@ -5116,7 +5116,7 @@ function rechnungAusTouren(firmaId, von, bis) {
     <p class="leise">Zählt die gefahrenen, noch nicht abgerechneten Touren der Firma im Zeitraum und setzt die Preise aus ihrer Preisliste ein.</p>
     <label class="feld">Firma<select name="firma">${firmen.map(f => `<option value="${f.id}" ${f.id === firmaId ? 'selected' : ''}>${esc(firmaName(f))} (${tourenVonFirma(f).filter(t => tourGefahren(t) && !t.belegId).length} offen)</option>`).join('')}</select></label>
     <div class="zeile"><label class="feld fuell">Von<input name="von" type="date" value="${von || zr.von}" required></label><label class="feld fuell">Bis<input name="bis" type="date" value="${bis || zr.bis}" required></label></div>
-    <label class="feld">Positionen<select name="aufteilung"><option value="ART">je Einsatzart (Anzahl × Preis)</option><option value="TOUR">je Tour (mit Tagen)</option></select></label>
+    <label class="feld">Positionen<select name="aufteilung"><option value="ART">je Einsatzart (Anzahl × Preis)</option><option value="TOUR">je Tour (mit Tagen)</option><option value="EINZELN">jede Tour einzeln (mit Datum)</option></select></label>
     <p class="fehlertext" id="tpr-fehler" hidden></p>
     <div class="dialog-knoepfe"><button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll">Weiter</button></div></form>`);
   $('#tpr-form').onsubmit = ev => {
@@ -5133,10 +5133,14 @@ function rechnungAusTourenVorschau(firma, von, bis, aufteilung) {
   const gruppen = {};
   for (const t of touren) {
     const zp = zielPreis(preise, t);
-    const k = aufteilung === 'TOUR' ? [t.tourNr, t.name, t.einsatzart].join('|') : zp ? 'Z|' + zp.id : t.einsatzart || '';
-    (gruppen[k] = gruppen[k] || { art: t.einsatzart || '', ziel: zp, text: aufteilung === 'TOUR' ? [t.tourNr && 'Tour ' + t.tourNr, t.name].filter(Boolean).join(' – ') + (t.einsatzart ? ` (${t.einsatzart})` : '') : t.einsatzart || 'Touren', touren: [] }).touren.push(t);
+    const k = aufteilung === 'EINZELN' ? t.id : aufteilung === 'TOUR' ? [t.tourNr, t.name, t.einsatzart].join('|') : zp ? 'Z|' + zp.id : t.einsatzart || '';
+    const tourBez = [t.tourNr && 'Tour ' + t.tourNr, t.name].filter(Boolean).join(' – ') + (t.einsatzart ? ` (${t.einsatzart})` : '');
+    (gruppen[k] = gruppen[k] || { art: t.einsatzart || '', ziel: zp, datum: t.datum,
+      text: aufteilung === 'EINZELN' ? [datumText(t.datum), tourBez || t.einsatzart || 'Tour'].join(' · ') : aufteilung === 'TOUR' ? tourBez : t.einsatzart || 'Touren', touren: [] }).touren.push(t);
   }
-  const liste = Object.values(gruppen).sort((a, b) => a.text.localeCompare(b.text, 'de')).map(g => ({ ...g, menge: g.touren.length, tage: aufteilung === 'TOUR' ? tageText([...new Set(g.touren.map(t => t.datum))]) : '', preis: g.ziel || preisFuerArt(preise, g.art) }));
+  // einzeln: nach Datum (am selben Tag in Planungsreihenfolge), sonst alphabetisch
+  const reihe = g => [g.datum, String(g.touren[0].reihenfolge || 0).padStart(6, '0')].join('|');
+  const liste = Object.values(gruppen).sort((a, b) => (aufteilung === 'EINZELN' ? reihe(a).localeCompare(reihe(b)) : 0) || a.text.localeCompare(b.text, 'de')).map(g => ({ ...g, menge: g.touren.length, tage: aufteilung === 'TOUR' ? tageText([...new Set(g.touren.map(t => t.datum))]) : '', preis: g.ziel || preisFuerArt(preise, g.art) }));
   const zeitraumText = `${datumText(von)} – ${datumText(bis)}`;
   const preisWahl = (z, i) => `<select data-tpr-preis="${i}" aria-label="Preis für ${esc(z.text)}"><option value="">ohne Preis (später eintragen)</option>${preise.map(p => `<option value="${p.id}" ${z.preis && z.preis.id === p.id ? 'selected' : ''}>${esc(p.bezeichnung)} · ${p.betragCent != null ? geld(p.betragCent) : '–'}${p.einheit ? ' ' + esc(p.einheit) : ''}</option>`).join('')}</select>`;
   dialog(`<form method="dialog" id="tpr-vorschau"><h2>Rechnung an ${esc(firmaName(firma))}</h2><p class="leise">Leistungszeitraum ${esc(zeitraumText)} · ${touren.length} Touren${alleT.length > touren.length ? ` (${alleT.length - touren.length} schon abgerechnet)` : ''}</p>
@@ -5156,7 +5160,7 @@ function rechnungAusTourenVorschau(firma, von, bis, aufteilung) {
     ev.preventDefault();
     const pos = liste.map((z, i) => {
       const p = gewaehlt(i);
-      const bez = aufteilung === 'TOUR' || !p ? z.text : p.bezeichnung + (normal(p.bezeichnung) === normal(z.art) || !z.art || z.ziel ? '' : ` – ${z.art}`);
+      const bez = aufteilung !== 'ART' || !p ? z.text : p.bezeichnung + (normal(p.bezeichnung) === normal(z.art) || !z.art || z.ziel ? '' : ` – ${z.art}`);
       return { bez, einheit: [p && p.einheit, z.tage].filter(Boolean).join(' · '), menge: z.menge, einzelCent: p && p.betragCent != null ? p.betragCent : 0 };
     });
     const id = BelegAktionen.neu('RECHNUNG', firma.id, { positionen: JSON.stringify(pos), notiz: `Aus der Tourenplanung: ${zeitraumText} (${touren.length} Touren)`,
