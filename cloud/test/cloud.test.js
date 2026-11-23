@@ -591,3 +591,11 @@ test('Firmen-Aliase werden gespeichert; ältere Apps ohne das Feld löschen sie 
   const f = u.sync({ seit: 0 }).auftraggeber.find(x => x.id === id);
   assert.deepEqual([f.aliase, f.telefon], ['Moebel Krause, Krause alt', '0211 1']);
 });
+
+test('Sitzungen verlängern sich bei Nutzung – nur ungenutzte laufen nach 90 Tagen ab', () => {
+  const u = eingerichtet();
+  const token = u.aufruf('anmelden', PIN).token;
+  u.zeitVor(50 * 864e5); assert.ok(u.aufruf('stand', token), 'nach 50 Tagen genutzt → verlängert');
+  u.zeitVor(80 * 864e5); assert.ok(u.aufruf('stand', token), 'nach insgesamt 130 Tagen noch gültig');
+  u.zeitVor(91 * 864e5); assert.throws(() => u.aufruf('stand', token), /erneut anmelden/, '91 Tage ungenutzt → abgelaufen');
+});

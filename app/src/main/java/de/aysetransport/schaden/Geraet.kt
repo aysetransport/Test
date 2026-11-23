@@ -247,7 +247,8 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
         val offen = liste.mapIndexed { i, (nr, text) -> CompletableDeferred<String>().also { d -> sendeEine(nr, text) { f -> d.complete(f); stand(i, f) } } }
         return buildJsonArray {
             for (d in offen) {
-                val f = withTimeoutOrNull(90_000) { d.await() } ?: "keine Rückmeldung vom Netz"
+                // Keine Rückmeldung ist kein Fehler: Android hält SMS ab ~30 Stück zurück, bis der Benutzer die Rückfrage bestätigt.
+                val f = withTimeoutOrNull(90_000) { d.await() } ?: "noch unterwegs – keine Rückmeldung in 90 s (Android fragt evtl. nach Erlaubnis)"
                 add(buildJsonObject { put("ok", f.isEmpty()); put("fehler", f) })
             }
         }

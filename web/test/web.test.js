@@ -2432,20 +2432,22 @@ test('Tourenplanung: alle per SMS (Android) – wo die SMS nicht rausgeht, Hinwe
     merke('touren', { id: uuid(), firmaId: '', datum: tag, reihenfolge: 2, kennzeichen: 'KR-D 2', name: 'Bremen', fahrerId: c, beifahrerIds: d, geaendertAm: jetztIso() });
     window.__sms = [];
     window.desktop = { ...(window.desktop || {}), sms: { massen: async l => { window.__sms = l;
-      const r = l.map(x => (x.nummer.includes('2222222') ? { ok: false, fehler: 'kein Netz' } : { ok: true, fehler: '' }));
+      const r = l.map(x => (x.nummer.includes('2222222') ? { ok: false, fehler: 'kein Netz' } : x.nummer.includes('3333333') ? { ok: false, fehler: 'noch unterwegs – keine Rückmeldung in 90 s' } : { ok: true, fehler: '' }));
       window.__smsStand(0, r[0].fehler); window.__zwischen = document.querySelector('#tp-sms').textContent; // erste SMS meldet sich sofort
       return r; } } };
     alleSenden(tag);
   }, tag);
   await s.locator('#tp-sms', { hasText: 'Alle per SMS (3)' }).click();
-  await s.locator('#tp-sms-ergebnis', { hasText: '2 von 3 SMS gesendet' }).waitFor();
+  await s.locator('#tp-sms-ergebnis', { hasText: '1 von 3 SMS gesendet' }).waitFor();
+  assert.ok((await s.locator('#tp-sms-ergebnis').textContent()).includes('1 noch unterwegs'), 'ohne Rückmeldung: gelb, nicht doppelt senden');
+  assert.equal(await s.locator('#tp-alle .marke.gelb').count(), 1);
   const r = await s.evaluate(() => ({ an: window.__sms.map(x => x.nummer), text: window.__sms[0].text,
     rot: [...document.querySelectorAll('#tp-alle .marke.rot')].map(e => e.closest('.zeile').querySelector('b').textContent),
     gruen: document.querySelectorAll('#tp-alle .marke.gruen').length, hinweis: document.querySelector('#tp-sms-ergebnis').textContent }));
   assert.equal(r.an.length, 3, 'nur Personen mit Nummer');
   assert.equal(await s.evaluate(() => window.__zwischen), 'Sende … 1 / 3', 'Fortschritt je SMS');
   assert.ok(r.text.startsWith('Hallo ') && r.text.includes('KR-D'), r.text);
-  assert.deepEqual([r.rot, r.gruen], [['Bernd Kurz'], 2]);
+  assert.deepEqual([r.rot, r.gruen], [['Bernd Kurz'], 1]);
   assert.ok(r.hinweis.includes('1 Person(en) bitte per WhatsApp') && r.hinweis.includes('1 ohne Telefonnummer'), r.hinweis);
   assert.ok(await s.locator('#tp-alle .zeile', { hasText: 'Bernd Kurz' }).locator('[data-alle-wa]').isVisible(), 'WhatsApp-Knopf direkt daneben');
   await s.close();
@@ -2545,6 +2547,8 @@ test('Mail: beliebig viele weitere Konten mit Namen, Status und eigener Signatur
   await s.evaluate(() => { document.querySelector('#t-sig').remove(); });
   await s.evaluate(async a => { await window.desktop.mail.trennen(a); MAIL.konten[a] = null; S.einstellungen.mailKontenWeitere = weitereKonten().filter(k => k.art !== a); delete MAIL.konten[a]; delete MAIL_KONTEN[a]; }, r.art);
   assert.equal(await s.evaluate(a => a in MAIL_KONTEN, r.art), false);
+  // nur ein weiteres Konto eingerichtet: zählt als Mail-Konto (Postfach, Abruf, Versand)
+  assert.equal(await s.evaluate(() => { MAIL.konten = { SCHADEN: null, ALLGEMEIN: null, KX: { adresse: 'buha@ayse.example' } }; aktualisiereKonto(); return MAIL.konto && MAIL.konto.adresse; }), 'buha@ayse.example');
   await s.close();
 });
 
@@ -2587,6 +2591,8 @@ test('Postfach: Absender-Infos, erkannte Verweise und E-Rechnung im Anhang mit e
   await s.waitForFunction(() => Object.values(S.eingangsrechnungen).some(e => e.nummer === 'WR-4711'));
   const e = await s.evaluate(() => { const x = Object.values(S.eingangsrechnungen).find(e => e.nummer === 'WR-4711'); return [x.nettoCent, x.mwstCent, x.eRechnung, alle('anlagen').filter(a => a.fallId === x.id).length]; });
   assert.deepEqual(e, [20000, 3800, true, 1]);
+  // Lieferant umbenannt → trotzdem als schon erfasst erkannt (Nummer + Betrag)
+  await s.evaluate(() => { const x = Object.values(S.eingangsrechnungen).find(e => e.nummer === 'WR-4711'); merke('eingangsrechnungen', { ...x, lieferant: 'Meier' }); nachAenderung(); });
   // nochmals öffnen: schon erfasst
   await s.evaluate(i => { gehe('#/'); gehe('#/mail/' + encodeURIComponent(i)); }, id);
   await s.locator('#pf-erechnung', { hasText: 'Schon erfasst' }).waitFor();
