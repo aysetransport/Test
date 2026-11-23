@@ -1,8 +1,11 @@
 name: Windows-App
 
+# Nur beim Veröffentlichen (Standard-Branch) und nur wenn sich die Windows-App ändert – getestet wird vorher lokal.
+# Oberflächen-Änderungen (web/) kommen ohne neuen Installer über das In-App-Update.
 on:
   push:
-  pull_request:
+    branches: [claude/android-schadensfall-app-krncja]
+    paths: ['desktop/**', '.github/workflows/windows.yml']
   workflow_dispatch:
 
 permissions:
@@ -11,7 +14,8 @@ permissions:
 jobs:
   windows:
     name: Testen, Installer bauen und installiert prüfen
-    runs-on: windows-latest
+    # Eigener Windows-Rechner im Büro (GitHub-„Runner“): keine Actions-Minuten. Zurück auf GitHub: windows-latest.
+    runs-on: [self-hosted, Windows]
     timeout-minutes: 40
     defaults:
       run:
@@ -40,7 +44,17 @@ jobs:
       - name: Installer bauen
         run: npm run dist:win
 
+      # Auf GitHubs Rechnern: echt installieren. Auf dem Büro-PC nicht (dort ist die App schon installiert und läuft) –
+      # stattdessen das fertig gepackte Programm aus dist\win-unpacked prüfen.
+      - name: Gepacktes Programm starten (Büro-PC)
+        if: runner.environment == 'self-hosted'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist\win-unpacked\*.exe | Where-Object { $_.Name -notmatch 'Uninstall' } | Select-Object -First 1
+          node scripts/rauchtest.js $exe.FullName
+
       - name: Installieren und installiertes Programm starten
+        if: runner.environment != 'self-hosted'
         shell: pwsh
         run: |
           $setup = Get-ChildItem dist\Schadensfaelle-Setup-*.exe | Select-Object -First 1
