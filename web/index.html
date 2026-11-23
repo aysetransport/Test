@@ -19,7 +19,7 @@ window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwh
 })();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
-window.WEB_STAND = 1795451734; window.WEB_VERSION = '4.17.0';
+window.WEB_STAND = 1795451861; window.WEB_VERSION = '4.17.0';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4E79">
@@ -4826,11 +4826,30 @@ function tourSenden(t) {
 /** Alle Touren des Tages: je Person eine Nachricht (WhatsApp nacheinander) oder als CSV für Sammel-SMS. */
 function alleSenden(tag) {
   const eintraege = tourenAm(tag).filter(t => t.kennzeichen).flatMap(t => teamVon(t).map(id => ({ m: maVon(id), t }))).filter(x => x.m);
-  dialog(`<h2>Touren ${esc(datumText(tag))} an alle</h2><p class="leise">Je Person die eigene Tour. WhatsApp öffnet sich für jede Person einzeln.</p>
-    <div id="tp-alle">${eintraege.map((x, i) => `<div class="zeile eng" style="margin:6px 0"><span class="fuell"><b>${esc(x.m.name)}</b><br><span class="leise">${esc(x.t.kennzeichen)} · ${esc(tourText(x.t))}</span></span>
-      ${x.m.telefon ? `<button class="knopf tonal" data-alle-wa="${i}">💬</button>` : '<span class="leise">keine Nr.</span>'}</div>`).join('') || '<p class="leise">Noch kein Team eingeplant.</p>'}</div>
-    <div class="dialog-knoepfe"><button class="knopf" id="tp-csv">CSV für Sammel-SMS</button><button class="knopf voll" data-zu>Fertig</button></div>`);
-  $('#tp-alle').onclick = e => { const b = e.target.closest('[data-alle-wa]'); if (!b) return; const x = eintraege[Number(b.dataset.alleWa)]; whatsapp(x.m.telefon, `Hallo ${x.m.name.split(' ')[0]},\n${tourNachricht(x.t)}`); b.textContent = '✓'; };
+  const smsMassen = window.desktop && window.desktop.sms && window.desktop.sms.massen, mitNr = eintraege.filter(x => x.m.telefon);
+  const nachricht = x => `Hallo ${x.m.name.split(' ')[0]},\n${tourNachricht(x.t)}`;
+  dialog(`<h2>Touren ${esc(datumText(tag))} an alle</h2><p class="leise">Je Person die eigene Tour. ${smsMassen ? 'Per SMS an alle auf einmal; wo die SMS nicht rausgeht, bitte per WhatsApp kontaktieren.' : 'WhatsApp öffnet sich für jede Person einzeln.'}</p>
+    <div id="tp-alle">${eintraege.map((x, i) => `<div class="zeile eng" style="margin:6px 0"><span class="fuell"><b>${esc(x.m.name)}</b><br><span class="leise">${esc(x.t.kennzeichen)} · ${esc(tourText(x.t))}</span><span data-alle-sms="${i}"></span></span>
+      ${x.m.telefon ? `<button class="knopf tonal" data-alle-wa="${i}" aria-label="${esc(x.m.name)} per WhatsApp">💬</button>` : '<span class="leise">keine Nr.</span>'}</div>`).join('') || '<p class="leise">Noch kein Team eingeplant.</p>'}</div>
+    <p id="tp-sms-ergebnis" hidden></p>
+    <div class="dialog-knoepfe">${smsMassen && mitNr.length ? `<button class="knopf tonal" id="tp-sms">📱 Alle per SMS (${mitNr.length})</button>` : ''}<button class="knopf" id="tp-csv">CSV für Sammel-SMS</button><button class="knopf voll" data-zu>Fertig</button></div>`);
+  if ($('#tp-sms')) $('#tp-sms').onclick = async () => {
+    const b = $('#tp-sms'), ziel = eintraege.map((x, i) => ({ x, i })).filter(({ x }) => x.m.telefon);
+    b.disabled = true; b.textContent = 'Sende …';
+    try {
+      const r = await smsMassen(ziel.map(({ x }) => ({ nummer: intNummer(x.m.telefon), text: nachricht(x) })));
+      let fehlt = 0;
+      ziel.forEach(({ i }, k) => {
+        const ok = r[k] && r[k].ok, feld = $(`[data-alle-sms="${i}"]`);
+        if (!ok) fehlt++;
+        feld.innerHTML = ok ? '<br><span class="marke gruen">✓ SMS gesendet</span>' : `<br><span class="marke rot">SMS nicht angekommen – bitte per WhatsApp kontaktieren</span> <span class="leise">${esc((r[k] && r[k].fehler) || '')}</span>`;
+      });
+      const e = $('#tp-sms-ergebnis'); e.hidden = false; e.className = fehlt ? 'hinweis-box' : 'leise';
+      e.textContent = `${ziel.length - fehlt} von ${ziel.length} SMS gesendet.` + (fehlt ? ` ${fehlt} Person(en) bitte per WhatsApp kontaktieren (rot markiert, 💬).` : '') + (eintraege.length > ziel.length ? ` ${eintraege.length - ziel.length} ohne Telefonnummer.` : '');
+      b.textContent = '📱 SMS gesendet';
+    } catch (f) { b.disabled = false; b.textContent = `📱 Alle per SMS (${ziel.length})`; if (!/Abgebrochen/.test(f.message)) toast('SMS nicht möglich: ' + f.message, 6000); }
+  };
+  $('#tp-alle').onclick = e => { const b = e.target.closest('[data-alle-wa]'); if (!b) return; const x = eintraege[Number(b.dataset.alleWa)]; whatsapp(x.m.telefon, nachricht(x)); b.textContent = '✓'; };
   $('#tp-csv').onclick = () => {
     const zeilen = eintraege.filter(x => x.m.telefon).map(x => [intNummer(x.m.telefon), x.m.name.replace(/,/g, ' '), ('Hallo {name}, ' + tourNachricht(x.t).split('\n').join(' | '))]);
     ladeHerunter(`Touren_${tag}.csv`, ['nummer,name,nachricht', ...zeilen.map(z => z.map((v, i) => (i === 2 ? v : v)).join(','))].join('\r\n'));

@@ -17,6 +17,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.util.Base64
 
@@ -71,10 +72,19 @@ class Bruecke(
             "web:installieren" -> io { requireNotNull(webUpdate).installieren() }
             "web:ok" -> { webUpdate?.ok(); JsonPrimitive(true) }
             "web:zuruecksetzen" -> { webUpdate?.zuruecksetzen(); JsonPrimitive(true) }
+            "sms:massen" -> smsListe(a.getOrNull(0)).let { geraet().smsMassen(it) }
             "app:pruefen" -> io { requireNotNull(appUpdate).pruefen() }
             "app:installieren" -> { requireNotNull(appUpdate).installieren(); JsonPrimitive(true) }
             else -> throw IllegalArgumentException("Unbekannte Funktion: $name")
         }
+    }
+
+    /** Prüft die Liste aus der Oberfläche: nur echte Telefonnummern, Text vorhanden, höchstens 200 Empfänger. */
+    private fun smsListe(roh: JsonElement?): List<Pair<String, String>> {
+        val l = (roh as? JsonArray).orEmpty().map { e -> val o = e.jsonObject; o["nummer"]!!.jsonPrimitive.content.trim() to o["text"]!!.jsonPrimitive.content }
+        require(l.isNotEmpty() && l.size <= 200) { "Keine oder zu viele Empfänger" }
+        require(l.all { (nr, text) -> Geraet.smsZiel("sms:$nr?body=x") != null && text.isNotBlank() }) { "Ungültige Telefonnummer oder leere Nachricht" }
+        return l
     }
 
     private suspend fun <T> io(arbeit: () -> T): T = withContext(Dispatchers.IO) { arbeit() }

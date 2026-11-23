@@ -46,6 +46,7 @@
     speichere: (name, base64) => aufruf('datei:speichern', name, base64),
     drucke: html => aufruf('drucken', html),
     beiZiel: rueckruf => { ziele.push(rueckruf); aufruf('ziel:bereit').catch(() => {}); },
+    sms: { massen: liste => aufruf('sms:massen', liste) }, // [{ nummer, text }] → [{ ok, fehler }]
     app: { pruefen: () => aufruf('app:pruefen'), installieren: () => aufruf('app:installieren') },
     web: { info: () => aufruf('web:info'), installieren: () => aufruf('web:installieren'), ok: () => aufruf('web:ok'), zuruecksetzen: () => aufruf('web:zuruecksetzen') },
   };

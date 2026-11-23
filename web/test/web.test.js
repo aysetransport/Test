@@ -2421,3 +2421,28 @@ test('Firmen zusammenführen nimmt die Touren mit; Touren einer schon gelöschte
   assert.deepEqual(n, [7, true], 'zwei weitere Touren über den Alias; Name findet die Firma');
   await s.close();
 });
+
+test('Tourenplanung: alle per SMS (Android) – wo die SMS nicht rausgeht, Hinweis auf WhatsApp', async () => {
+  const s = await geraet(null, { bereich: 'touren' });
+  const tag = '2026-11-13';
+  await s.evaluate(tag => {
+    const ma = (name, telefon) => { const id = uuid(); S.mitarbeiter[id] = { id, name, rolle: 'FAHRER', aktiv: true, telefon, geaendertAm: jetztIso() }; return id; };
+    const a = ma('Ali Demir', '0171 1111111'), b = ma('Bernd Kurz', '0172 2222222'), c = ma('Can Öz', '0173 3333333'), d = ma('Dirk Ohne', '');
+    merke('touren', { id: uuid(), firmaId: '', datum: tag, reihenfolge: 1, kennzeichen: 'KR-D 1', name: 'Hamburg', fahrerId: a, beifahrerIds: b, geaendertAm: jetztIso() });
+    merke('touren', { id: uuid(), firmaId: '', datum: tag, reihenfolge: 2, kennzeichen: 'KR-D 2', name: 'Bremen', fahrerId: c, beifahrerIds: d, geaendertAm: jetztIso() });
+    window.__sms = [];
+    window.desktop = { ...(window.desktop || {}), sms: { massen: async l => { window.__sms = l; return l.map(x => (x.nummer.includes('2222222') ? { ok: false, fehler: 'nicht gesendet (kein Netz?)' } : { ok: true, fehler: '' })); } } };
+    alleSenden(tag);
+  }, tag);
+  await s.locator('#tp-sms', { hasText: 'Alle per SMS (3)' }).click();
+  await s.locator('#tp-sms-ergebnis', { hasText: '2 von 3 SMS gesendet' }).waitFor();
+  const r = await s.evaluate(() => ({ an: window.__sms.map(x => x.nummer), text: window.__sms[0].text,
+    rot: [...document.querySelectorAll('#tp-alle .marke.rot')].map(e => e.closest('.zeile').querySelector('b').textContent),
+    gruen: document.querySelectorAll('#tp-alle .marke.gruen').length, hinweis: document.querySelector('#tp-sms-ergebnis').textContent }));
+  assert.equal(r.an.length, 3, 'nur Personen mit Nummer');
+  assert.ok(r.text.startsWith('Hallo ') && r.text.includes('KR-D'), r.text);
+  assert.deepEqual([r.rot, r.gruen], [['Bernd Kurz'], 2]);
+  assert.ok(r.hinweis.includes('1 Person(en) bitte per WhatsApp') && r.hinweis.includes('1 ohne Telefonnummer'), r.hinweis);
+  assert.ok(await s.locator('#tp-alle .zeile', { hasText: 'Bernd Kurz' }).locator('[data-alle-wa]').isVisible(), 'WhatsApp-Knopf direkt daneben');
+  await s.close();
+});

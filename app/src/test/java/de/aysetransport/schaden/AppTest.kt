@@ -91,4 +91,20 @@ class AppTest {
         assertEquals(null, Geraet.smsZiel("sms:+491"))
         assertEquals(null, Geraet.smsZiel("sms://open?addresses=+491&body=x"))
     }
+
+    @Test fun smsMassenversandPrueftDieEmpfaenger() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val bruecke = Bruecke(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined), MailKonten(ctx, object : Tresor {
+            override fun verschluessele(klartext: String) = klartext
+            override fun entschluessele(geheim: String) = geheim
+        }), { error("kein Gerät im Test") }, {})
+        fun liste(vararg p: Pair<String, String>) = buildJsonArray { add(buildJsonArray { for ((nr, text) in p) add(buildJsonObject { put("nummer", nr); put("text", text) }) }) }
+        for (falsch in listOf(liste(), liste("abc" to "Hallo"), liste("+491701" to " "))) {
+            val e = runCatching { runBlocking { bruecke.ausfuehren("sms:massen", falsch) } }.exceptionOrNull()
+            assertTrue("abgelehnt: $falsch → $e", e is IllegalArgumentException)
+        }
+        // gültige Liste kommt bis zum Gerät (das es im Test nicht gibt)
+        val ok = runCatching { runBlocking { bruecke.ausfuehren("sms:massen", liste("+491701234567" to "Tour 12")) } }.exceptionOrNull()
+        assertTrue("$ok", ok is IllegalStateException && ok.message == "kein Gerät im Test")
+    }
 }

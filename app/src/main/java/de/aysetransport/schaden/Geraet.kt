@@ -33,7 +33,14 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.io.File
 import java.io.IOException
 import kotlin.coroutines.resume
@@ -161,7 +168,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
             .setTitle(if (nummern.size == 1) "SMS an ${nummern[0]}" else "SMS an ${nummern.size} Empfänger")
             .setMessage(text)
             .setPositiveButton("Senden") { _, _ ->
-                if (ContextCompat.checkSelfPermission(activity, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) sendeSms(nummern, text)
+                if (smsErlaubt()) sendeSms(nummern, text)
                 else activity.frageSms { erlaubt -> if (erlaubt) sendeSms(nummern, text) else smsApp(adresse) }
             }
             .setNeutralButton("In SMS-App") { _, _ -> smsApp(adresse) }
@@ -175,28 +182,66 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
 
     private fun meldung(text: String) = Toast.makeText(activity, text, Toast.LENGTH_LONG).show()
 
-    @SuppressLint("MissingPermission")
+    private fun smsErlaubt() = ContextCompat.checkSelfPermission(activity, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+
     private fun sendeSms(nummern: List<String>, text: String) {
+        var offen = nummern.size
+        val fehler = mutableListOf<String>()
+        for (nr in nummern) sendeEine(nr, text) { f ->
+            if (f.isNotEmpty()) fehler += nr
+            if (--offen == 0) meldung(if (fehler.isEmpty()) "SMS gesendet" else "SMS nicht gesendet an ${fehler.joinToString()} – bitte Mobilfunkempfang prüfen")
+        }
+    }
+
+    /** Eine SMS (ggf. in Teilen) senden. fertig("") sobald alle Teile raus sind, sonst fertig(Fehlertext). Läuft auf dem Haupt-Thread. */
+    @SuppressLint("MissingPermission")
+    private fun sendeEine(nr: String, text: String, fertig: (String) -> Unit) {
+        val aktion = "${activity.packageName}.SMS_GESENDET.${System.nanoTime()}" // je SMS eigene Rückmeldung
+        var empfaenger: BroadcastReceiver? = null
         try {
             val sm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) activity.getSystemService(SmsManager::class.java) else @Suppress("DEPRECATION") SmsManager.getDefault()
             val teile = sm.divideMessage(text)
-            val aktion = "${activity.packageName}.SMS_GESENDET.${System.nanoTime()}" // je Sendung eigene Rückmeldung
-            var offen = teile.size * nummern.size
+            var offen = teile.size
             var fehler = 0
-            // Rückmeldung je Teil-SMS: erst wenn alle durch sind, eine Meldung (Erfolg oder Fehler, z. B. kein Netz).
-            val empfaenger = object : BroadcastReceiver() {
+            empfaenger = object : BroadcastReceiver() {
                 override fun onReceive(c: Context, i: Intent) {
                     if (resultCode != Activity.RESULT_OK) fehler++
                     if (--offen > 0) return
                     runCatching { activity.unregisterReceiver(this) }
-                    meldung(if (fehler == 0) "SMS gesendet" else "SMS nicht gesendet – bitte Mobilfunkempfang prüfen")
+                    fertig(if (fehler == 0) "" else "nicht gesendet (kein Netz?)")
                 }
             }
             ContextCompat.registerReceiver(activity, empfaenger, IntentFilter(aktion), ContextCompat.RECEIVER_NOT_EXPORTED)
             val gesendet = PendingIntent.getBroadcast(activity, 0, Intent(aktion).setPackage(activity.packageName), PendingIntent.FLAG_IMMUTABLE)
-            for (nr in nummern) sm.sendMultipartTextMessage(nr, null, teile, ArrayList(teile.map { gesendet }), null)
+            sm.sendMultipartTextMessage(nr, null, teile, ArrayList(teile.map { gesendet }), null)
         } catch (e: Exception) {
-            meldung("SMS nicht gesendet: ${e.message ?: e.javaClass.simpleName}")
+            empfaenger?.let { runCatching { activity.unregisterReceiver(it) } }
+            fertig(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    /**
+     * Viele SMS auf einmal (Tourenplanung: jede Person ihre Tour). Einmal bestätigen, dann alle senden.
+     * Ergebnis je Empfänger in derselben Reihenfolge: ok oder Fehler – die Oberfläche bietet dann WhatsApp an.
+     */
+    suspend fun smsMassen(liste: List<Pair<String, String>>): JsonArray {
+        if (!activity.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) throw IOException("Dieses Gerät kann keine SMS senden.")
+        val ja = suspendCancellableCoroutine<Boolean> { k ->
+            AlertDialog.Builder(activity).setTitle("${liste.size} SMS senden?")
+                .setMessage("Jede Person bekommt ihre eigene Tour per SMS (normale SMS-Kosten).")
+                .setPositiveButton("Senden") { _, _ -> if (k.isActive) k.resume(true) }
+                .setNegativeButton("Abbrechen") { _, _ -> if (k.isActive) k.resume(false) }
+                .setOnCancelListener { if (k.isActive) k.resume(false) }
+                .show()
+        }
+        if (!ja) throw IOException("Abgebrochen")
+        if (!smsErlaubt() && !suspendCancellableCoroutine<Boolean> { k -> activity.frageSms { if (k.isActive) k.resume(it) } }) throw IOException("Ohne SMS-Berechtigung geht der Versand nicht.")
+        val offen = liste.map { (nr, text) -> CompletableDeferred<String>().also { d -> sendeEine(nr, text) { d.complete(it) } } }
+        return buildJsonArray {
+            for (d in offen) {
+                val f = withTimeoutOrNull(90_000) { d.await() } ?: "keine Rückmeldung vom Netz"
+                add(buildJsonObject { put("ok", f.isEmpty()); put("fehler", f) })
+            }
         }
     }
 
