@@ -22,11 +22,11 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigat
 window.WEB_STAND = 1795469016; window.WEB_VERSION = '4.19.2';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#1F4E79">
+<meta name="theme-color" content="#0A0A0C">
 <link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
 <!-- iPhone/iPad: als App vom Home-Bildschirm im Vollbild -->
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Ayse CRM"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="theme-color" content="#F8F9FF">
+<meta name="apple-mobile-web-app-title" content="Ayse CRM"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 :root{
   --bg:#F8F9FF;--flaeche:#F2F3FA;--flaeche2:#ECEEF4;--hoch:#E1E2E8;--text:#191C20;--leise:#43474E;--rand:#C3C7CF;--linie:#DFE2EB;
@@ -682,6 +682,55 @@ dialog.klein{width:min(420px,calc(100vw - 32px));z-index:60}
 .win ::-webkit-scrollbar-thumb{background:var(--win-text3);border-radius:6px;border:4px solid transparent;background-clip:content-box}
 .win ::-webkit-scrollbar-thumb:hover{border-width:3px;background:var(--win-text2);background-clip:content-box}
 .win ::-webkit-scrollbar-corner{background:transparent}
+
+/* ===== Design Web + Android (nicht Windows): schwarz mit roten Akzenten, Glas-Karten, Pill-Navigation. Standard dunkel, „hell“ wählbar. ===== */
+:root:not(.win){
+  --bg:#0A0A0C;--flaeche:#151518;--flaeche2:#1E1E23;--hoch:#2A2A31;--text:#F4F4F5;--leise:#A1A1AA;--rand:#2F2F36;--linie:#222228;
+  --primaer:#E5243B;--auf-primaer:#FFFFFF;--primaer-hell:#3B0F17;--auf-primaer-hell:#FFB3BC;--fehler:#FF6B7A;
+  --blau-f:#16304D;--blau-t:#CFE3FF;--violett-f:#2E2A63;--violett-t:#E3DFFF;--gelb-f:#4A3800;--gelb-t:#FFE08A;--lila-f:#40284F;--lila-t:#F2DAFF;
+  --tuerkis-f:#123F43;--tuerkis-t:#BFE9EC;--orange-f:#5C2A08;--orange-t:#FFD2B5;--gruen-f:#163F21;--gruen-t:#BDEFC2;--grau-f:#2A2A31;--grau-t:#D4D4D8;--rot-f:#5A0F19;--rot-t:#FFD0D6;
+  --verlauf-rot:linear-gradient(180deg,#F23A50 0%,#C8162B 55%,#9E0F1F 100%);--glow:0 8px 24px rgba(229,36,59,.35);
+  --karte-verlauf:linear-gradient(160deg,rgba(255,255,255,.055),rgba(255,255,255,.01));--glas:rgba(22,22,26,.78);
+  color-scheme:dark;
+}
+:root:not(.win)[data-thema=hell]{
+  --bg:#F5F5F7;--flaeche:#FFFFFF;--flaeche2:#F0F0F3;--hoch:#E4E4E8;--text:#141417;--leise:#5B5B66;--rand:#DCDCE2;--linie:#E9E9EE;
+  --primaer:#D3182F;--auf-primaer:#FFFFFF;--primaer-hell:#FDE3E6;--auf-primaer-hell:#7A0B18;--fehler:#BA1A1A;
+  --blau-f:#D1E4FF;--blau-t:#0B3A63;--violett-f:#E3DFFF;--violett-t:#2F2A7A;--gelb-f:#FFDF9E;--gelb-t:#4F3A00;--lila-f:#F2DAFF;--lila-t:#4A3657;
+  --tuerkis-f:#BFE9EC;--tuerkis-t:#00363A;--orange-f:#FFDBC8;--orange-t:#6A2D00;--gruen-f:#BDEFC2;--gruen-t:#0C3A18;--grau-f:#E4E4E8;--grau-t:#43474E;--rot-f:#FFDAD6;--rot-t:#93000A;
+  --karte-verlauf:linear-gradient(160deg,#FFFFFF,#FAFAFC);--glas:rgba(255,255,255,.82);--glow:0 6px 18px rgba(211,24,47,.25);
+  color-scheme:light;
+}
+:root:not(.win) body{background:radial-gradient(130% 55% at 50% -8%,rgba(229,36,59,.30),rgba(120,10,25,.10) 45%,transparent 70%) fixed,var(--bg)}
+:root:not(.win)[data-thema=hell] body{background:radial-gradient(130% 45% at 50% -8%,rgba(229,36,59,.12),transparent 65%) fixed,var(--bg)}
+:root:not(.win) header{background:color-mix(in srgb,var(--bg) 55%,transparent);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border-bottom:1px solid color-mix(in srgb,var(--rand) 50%,transparent)}
+:root:not(.win) #app-titel{color:var(--text);font-weight:700;letter-spacing:.01em}
+:root:not(.win) #globale-suche{background:var(--flaeche2);border-color:var(--rand);border-radius:16px}
+:root:not(.win) .karte{background:var(--karte-verlauf),var(--flaeche);border:1px solid var(--rand);border-radius:22px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+:root:not(.win)[data-thema=hell] .karte{box-shadow:0 4px 18px rgba(20,20,30,.06)}
+:root:not(.win) .karte.klickbar:hover,:root:not(.win) .karte.gewaehlt{background:var(--flaeche2)}
+:root:not(.win) .kachel{border-radius:20px;background:var(--karte-verlauf),var(--flaeche2);border-color:var(--rand)}
+:root:not(.win) .kachel:hover{border-color:var(--primaer);box-shadow:var(--glow)}
+:root:not(.win) .knopf{border-radius:999px;font-weight:500}
+:root:not(.win) .knopf.voll{background:var(--verlauf-rot);color:#fff;box-shadow:var(--glow)}
+:root:not(.win) .knopf.tonal{background:var(--flaeche2);color:var(--text);border:1px solid var(--rand)}
+:root:not(.win) .chip{border-radius:999px;background:var(--flaeche2);border-color:var(--rand)}
+:root:not(.win) .chip[aria-pressed=true]{background:var(--verlauf-rot);color:#fff;border-color:transparent;box-shadow:var(--glow)}
+:root:not(.win) :is(input:not([type=checkbox]):not([type=radio]),select,textarea){border-radius:14px}
+:root:not(.win) input[type=checkbox],:root:not(.win) input[type=radio]{accent-color:var(--primaer)}
+:root:not(.win) dialog{border-radius:28px;border:1px solid var(--rand);background:var(--karte-verlauf),var(--flaeche);box-shadow:0 24px 60px rgba(0,0,0,.5)}
+:root:not(.win) dialog::backdrop{background:rgba(0,0,0,.6);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+:root:not(.win) .tabelle-rahmen{border-radius:18px;border:1px solid var(--rand)}
+:root:not(.win) .nav-knopf[aria-current=page]{background:var(--verlauf-rot);color:#fff;box-shadow:var(--glow)}
+:root:not(.win) .nav-knopf .zahl{background:var(--primaer);color:#fff}
+@media (min-width:900px){:root:not(.win) #navi{background:color-mix(in srgb,var(--flaeche) 70%,transparent);border-right:1px solid var(--linie)}}
+/* Handy: schwebende Pill-Leiste unten */
+@media (max-width:899px){
+  :root:not(.win) #navi{left:calc(12px + env(safe-area-inset-left));right:calc(12px + env(safe-area-inset-right));bottom:calc(10px + env(safe-area-inset-bottom));padding:6px;border-radius:999px;
+    background:var(--glas);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--rand);box-shadow:0 12px 32px rgba(0,0,0,.45)}
+  :root:not(.win) .nav-klein .nav-knopf{border-radius:999px}
+  :root:not(.win) body.nav-offen .nav-gross{border-radius:0 28px 28px 0;background:var(--karte-verlauf),var(--flaeche)}
+}
 </style>
 </head>
 <body>

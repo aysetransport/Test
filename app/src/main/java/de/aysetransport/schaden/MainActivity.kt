@@ -93,8 +93,8 @@ class MainActivity : ComponentActivity() {
             WindowInsetsCompat.CONSUMED
         }
         WindowCompat.getInsetsController(window, wurzel).apply {
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
         }
         geraet = Geraet(this, wurzel)
 
