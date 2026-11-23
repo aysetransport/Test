@@ -19,7 +19,7 @@ window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwh
 })();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
-window.WEB_STAND = 1795444687; window.WEB_VERSION = '4.17.0';
+window.WEB_STAND = 1795449526; window.WEB_VERSION = '4.17.0';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4E79">
@@ -2638,7 +2638,7 @@ const CRM_FELDER = {
     ['rechnungBank', 'Abweichende Bankverbindung auf Rechnungen an diese Firma: Bank (leer = Standard aus den Firmendaten)'], ['rechnungIban', 'Abweichende IBAN'], ['rechnungBic', 'Abweichende BIC'], ['notizen', 'Notizen', 'lang']]],
   ansprechpartner: ['Ansprechpartner', [['name', 'Name', 'pflicht'], ['thema', 'Zuständig für (Disposition, Abrechnung, Schäden, Geschäftsführung …)'], ['telefon', 'Telefon', 'tel'], ['email', 'E-Mail', 'email'], ['notiz', 'Notiz', 'lang']]],
   adressen: ['Adresse', [['art', 'Art', ADRESS_ART], ['strasse', 'Straße und Hausnummer'], ['plz', 'PLZ'], ['ort', 'Ort', 'pflicht'], ['notiz', 'Notiz (z. B. Rampe, Öffnungszeiten)', 'lang']]],
-  preise: ['Preis', [['bezeichnung', 'Bezeichnung (Tourpauschale, Montage, Extra-km, Etage, Maut …)', 'pflicht'], ['betrag', 'Betrag in Euro', 'geld'], ['einheit', 'Einheit (pro Tour, pro km …)'], ['gueltigAb', 'Gültig ab', 'date'], ['notiz', 'Notiz', 'lang']]],
+  preise: ['Preis', [['bezeichnung', 'Bezeichnung (Einsatzart wie Tourpauschale, Montage … oder Tour/Ziel wie „Tour 12 – Hamburg“ – erscheint dann zur Auswahl in der Tourenplanung)', 'pflicht'], ['betrag', 'Betrag in Euro', 'geld'], ['einheit', 'Einheit (pro Tour, pro km …)'], ['gueltigAb', 'Gültig ab', 'date'], ['notiz', 'Notiz', 'lang']]],
   aktivitaeten: ['Kontakt', [['datum', 'Datum', 'date'], ['art', 'Art', AKTIVITAET_ART], ['kontakt', 'Ansprechpartner'], ['text', 'Was wurde besprochen?', 'lang pflicht']]],
   chancen: ['Verkaufschance', [['titel', 'Worum geht es? (z. B. Montage für neue Filiale)', 'pflicht'], ['phase', 'Phase', Object.fromEntries(Object.entries(CHANCEN_PHASE).map(([k, [l]]) => [k, l]))],
     ['betrag', 'Geschätzter Wert in Euro (z. B. pro Jahr)', 'geld'], ['erwartetAm', 'Entscheidung erwartet bis', 'date'], ['notiz', 'Notiz', 'lang']]],
@@ -4269,6 +4269,9 @@ function tourHinweise(t, lage = tagesLage(t.datum)) {
     if (!z) h.push(['grau', 'nicht im Fuhrpark']);
   }
   if (t.kennzeichen && !t.fahrerId) h.push(['gelb', 'Fahrer fehlt']);
+  const ziele = zieleZum(t.auftraggeberId, t.datum);
+  if (ziele.length && t.name && !zielPreis(ziele, t)) h.push(['gelb', 'Ziel nicht in den Stammdaten']);
+  else if (ziele.length && !t.name && t.kennzeichen) h.push(['gelb', 'Ziel fehlt']);
   for (const id of teamVon(t)) {
     const m = maVon(id); if (!m) { h.push(['rot', 'Mitarbeiter gelöscht']); continue; }
     const vorn = m.name.split(' ')[0];
@@ -4357,12 +4360,14 @@ function zeichneTouren() {
     const h = tourHinweise(t, lage), bf = beifahrerVon(t), art = einsatzartZu(t.einsatzart);
     const plaetze = Math.min(BEIFAHRER_MAX, Math.max(bf.length + 1, art ? art.beifahrer || 0 : 1));
     const schaeden = schaedenVonTour(t), beleg = t.belegId && S.belege[t.belegId] && !S.belege[t.belegId].geloescht ? S.belege[t.belegId] : null;
+    const ziele = zieleZum(t.auftraggeberId, t.datum);
     return `<div class="tour ${t.kennzeichen ? '' : 'leer'}" data-tour-zeile="${t.id}">
       <div class="tour-nr">${i + 1}</div>
       <label class="tf kz"><span>Fahrzeug</span><input data-feld="kennzeichen" list="tp-kz" value="${esc(t.kennzeichen || '')}" placeholder="Kennzeichen" autocomplete="off"></label>
       <label class="tf nr"><span>Tour-Nr.</span><input data-feld="tourNr" value="${esc(t.tourNr || '')}"></label>
       <label class="tf ag"><span>Auftraggeber</span><input data-feld="auftraggeber" list="tp-ag" value="${esc(tourAuftraggeberName(t))}" autocomplete="off"></label>
-      <label class="tf name"><span>Tour / Ziel</span><input data-feld="name" value="${esc(t.name || '')}"></label>
+      <label class="tf name"><span>Tour / Ziel</span>${ziele.length ? `<select data-feld="name"><option value=""></option>${ziele.map(p => `<option ${normal(p.bezeichnung) === normal(t.name) ? 'selected' : ''}>${esc(p.bezeichnung)}</option>`).join('')}
+        ${t.name && !zielPreis(ziele, t) ? `<option selected>${esc(t.name)}</option>` : ''}</select>` : `<input data-feld="name" value="${esc(t.name || '')}" placeholder="Ziele: Firma → Preise">`}</label>
       <label class="tf zeit"><span>Ladezeit</span><input data-feld="uhrzeit" value="${esc(t.uhrzeit || '')}" placeholder="07:00"></label>
       <label class="tf art"><span>Einsatzart</span><select data-feld="einsatzart"><option value=""></option>${arten.map(a => `<option ${normal(a.name) === normal(t.einsatzart) ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
         ${t.einsatzart && !art ? `<option selected>${esc(t.einsatzart)}</option>` : ''}</select></label>
@@ -5091,6 +5096,11 @@ function preiseZum(firmaId, stichtag) {
   return [...beste.values()].sort((a, b) => a.bezeichnung.localeCompare(b.bezeichnung, 'de'));
 }
 /** Passender Preis für eine Einsatzart: gleiche Bezeichnung, dann enthalten, sonst die einzige Tourpauschale. */
+/** Touren/Ziele einer Firma (Stammdaten): Einträge ihrer Preisliste, die keine Einsatzart sind – Name = Ziel, Betrag = Preis je Tour. */
+const zieleZum = (firmaId, tag) => (firmaId && S.auftraggeber[firmaId] ? preiseZum(firmaId, tag).filter(p => !einsatzartZu(p.bezeichnung)) : []);
+const zielPreis = (preise, t) => (t.name && preise.find(p => normal(p.bezeichnung) === normal(t.name) && !einsatzartZu(p.bezeichnung))) || null;
+/** Preis einer Tour: der ihres Ziels, sonst der ihrer Einsatzart. */
+const preisFuerTour = (preise, t) => zielPreis(preise, t) || preisFuerArt(preise, t.einsatzart);
 function preisFuerArt(preise, art) {
   const a = normal(art);
   return (a && (preise.find(p => normal(p.bezeichnung) === a) || preise.find(p => normal(p.bezeichnung).includes(a) || a.includes(normal(p.bezeichnung)))))
@@ -5122,17 +5132,18 @@ function rechnungAusTourenVorschau(firma, von, bis, aufteilung) {
   const preise = preiseZum(firma.id, bis);
   const gruppen = {};
   for (const t of touren) {
-    const k = aufteilung === 'TOUR' ? [t.tourNr, t.name, t.einsatzart].join('|') : t.einsatzart || '';
-    (gruppen[k] = gruppen[k] || { art: t.einsatzart || '', text: aufteilung === 'TOUR' ? [t.tourNr && 'Tour ' + t.tourNr, t.name].filter(Boolean).join(' – ') + (t.einsatzart ? ` (${t.einsatzart})` : '') : t.einsatzart || 'Touren', touren: [] }).touren.push(t);
+    const zp = zielPreis(preise, t);
+    const k = aufteilung === 'TOUR' ? [t.tourNr, t.name, t.einsatzart].join('|') : zp ? 'Z|' + zp.id : t.einsatzart || '';
+    (gruppen[k] = gruppen[k] || { art: t.einsatzart || '', ziel: zp, text: aufteilung === 'TOUR' ? [t.tourNr && 'Tour ' + t.tourNr, t.name].filter(Boolean).join(' – ') + (t.einsatzart ? ` (${t.einsatzart})` : '') : t.einsatzart || 'Touren', touren: [] }).touren.push(t);
   }
-  const liste = Object.values(gruppen).sort((a, b) => a.text.localeCompare(b.text, 'de')).map(g => ({ ...g, menge: g.touren.length, tage: aufteilung === 'TOUR' ? tageText([...new Set(g.touren.map(t => t.datum))]) : '', preis: preisFuerArt(preise, g.art) }));
+  const liste = Object.values(gruppen).sort((a, b) => a.text.localeCompare(b.text, 'de')).map(g => ({ ...g, menge: g.touren.length, tage: aufteilung === 'TOUR' ? tageText([...new Set(g.touren.map(t => t.datum))]) : '', preis: g.ziel || preisFuerArt(preise, g.art) }));
   const zeitraumText = `${datumText(von)} – ${datumText(bis)}`;
   const preisWahl = (z, i) => `<select data-tpr-preis="${i}" aria-label="Preis für ${esc(z.text)}"><option value="">ohne Preis (später eintragen)</option>${preise.map(p => `<option value="${p.id}" ${z.preis && z.preis.id === p.id ? 'selected' : ''}>${esc(p.bezeichnung)} · ${p.betragCent != null ? geld(p.betragCent) : '–'}${p.einheit ? ' ' + esc(p.einheit) : ''}</option>`).join('')}</select>`;
   dialog(`<form method="dialog" id="tpr-vorschau"><h2>Rechnung an ${esc(firmaName(firma))}</h2><p class="leise">Leistungszeitraum ${esc(zeitraumText)} · ${touren.length} Touren${alleT.length > touren.length ? ` (${alleT.length - touren.length} schon abgerechnet)` : ''}</p>
     ${!liste.length ? '<p class="leise">Keine gefahrenen, offenen Touren im Zeitraum.</p>'
       : `<div id="tpr-zeilen">${liste.map((z, i) => `<div class="karte block" style="padding:10px;margin:8px 0"><div class="zeile eng"><b class="fuell">${esc(z.text)}</b><span>${z.menge}×</span></div>${z.tage ? `<small class="leise">${esc(z.tage)}</small>` : ''}
           <div class="zeile eng" style="margin-top:6px"><label class="feld fuell" style="margin:0">${preisWahl(z, i)}</label><b data-tpr-betrag="${i}" style="min-width:90px;text-align:right"></b></div></div>`).join('')}</div>
-        <p><b>Netto: <span id="tpr-summe"></span></b></p>${preise.length ? '' : '<p class="leise">Diese Firma hat noch keine Preise – unter „Preise und Konditionen“ anlegen (Name = Einsatzart) oder in der Rechnung eintragen.</p>'}`}
+        <p><b>Netto: <span id="tpr-summe"></span></b></p>${preise.length ? '' : '<p class="leise">Diese Firma hat noch keine Preise – unter „Preise und Konditionen“ anlegen (Name = Einsatzart oder Tour/Ziel) oder in der Rechnung eintragen.</p>'}`}
     <div class="dialog-knoepfe"><button type="button" class="knopf text" data-zu>Abbrechen</button><button class="knopf voll" ${liste.length ? '' : 'disabled'}>Rechnung anlegen</button></div></form>`);
   const gewaehlt = i => S.preise[$(`[data-tpr-preis="${i}"]`).value] || null;
   const rechne = () => {
@@ -5145,7 +5156,7 @@ function rechnungAusTourenVorschau(firma, von, bis, aufteilung) {
     ev.preventDefault();
     const pos = liste.map((z, i) => {
       const p = gewaehlt(i);
-      const bez = aufteilung === 'TOUR' || !p ? z.text : p.bezeichnung + (normal(p.bezeichnung) === normal(z.art) || !z.art ? '' : ` – ${z.art}`);
+      const bez = aufteilung === 'TOUR' || !p ? z.text : p.bezeichnung + (normal(p.bezeichnung) === normal(z.art) || !z.art || z.ziel ? '' : ` – ${z.art}`);
       return { bez, einheit: [p && p.einheit, z.tage].filter(Boolean).join(' · '), menge: z.menge, einzelCent: p && p.betragCent != null ? p.betragCent : 0 };
     });
     const id = BelegAktionen.neu('RECHNUNG', firma.id, { positionen: JSON.stringify(pos), notiz: `Aus der Tourenplanung: ${zeitraumText} (${touren.length} Touren)`,
@@ -5307,7 +5318,7 @@ function ergebnisKern() {
   const a = kostenAnnahmen(), pt = tourenProTag();
   const touren = alle('touren'), jeBeleg = new Map();
   for (const t of touren) if (t.belegId) (jeBeleg.get(t.belegId) || jeBeleg.set(t.belegId, []).get(t.belegId)).push(t);
-  const listenpreis = x => { if (c.preis.has(x.id)) return c.preis.get(x.id); const p = x.auftraggeberId && S.auftraggeber[x.auftraggeberId] ? preisFuerArt(preiseZum(x.auftraggeberId, x.datum), x.einsatzart) : null; const e = p && p.betragCent != null ? p : null; c.preis.set(x.id, e); return e; };
+  const listenpreis = x => { if (c.preis.has(x.id)) return c.preis.get(x.id); const p = x.auftraggeberId && S.auftraggeber[x.auftraggeberId] ? preisFuerTour(preiseZum(x.auftraggeberId, x.datum), x) : null; const e = p && p.betragCent != null ? p : null; c.preis.set(x.id, e); return e; };
   // Anteile einer Rechnung auf ihre Touren (Summe = 1)
   const anteile = l => { const g = l.map(x => (listenpreis(x) || {}).betragCent || 0), sum = g.reduce((n, x) => n + x, 0); return l.map((x, i) => (sum ? g[i] / sum : 1 / l.length)); };
   const erloes = new Map(), quelle = new Map(), abgerechnet = new Set(), zeilen = [];
@@ -6744,10 +6755,11 @@ function tagesHinweiseZeigen(versuch = 0) {
 /** Für alle Firmen mit gefahrenen, noch nicht abgerechneten Touren im Zeitraum je eine Rechnung (Positionen je Einsatzart × Preisliste). */
 function sammelPositionen(firma, touren, bis) {
   const preise = preiseZum(firma.id, bis), gruppen = {};
-  for (const t of touren) (gruppen[t.einsatzart || ''] = gruppen[t.einsatzart || ''] || []).push(t);
-  return Object.entries(gruppen).sort((a, b) => a[0].localeCompare(b[0], 'de')).map(([art, l]) => {
-    const p = preisFuerArt(preise, art);
-    return { art, touren: l, preis: p, pos: { bez: p ? p.bezeichnung + (normal(p.bezeichnung) === normal(art) || !art ? '' : ` – ${art}`) : art || 'Touren', einheit: (p && p.einheit) || 'je Tour', menge: l.length, einzelCent: p && p.betragCent != null ? p.betragCent : 0 } };
+  // je Tour/Ziel aus den Stammdaten eine Position (eigener Preis), sonst je Einsatzart
+  for (const t of touren) { const zp = zielPreis(preise, t), k = zp ? 'Z|' + zp.bezeichnung : t.einsatzart || ''; (gruppen[k] = gruppen[k] || []).push(t); }
+  return Object.entries(gruppen).sort((a, b) => a[0].localeCompare(b[0], 'de')).map(([k, l]) => {
+    const art = l[0].einsatzart || '', ziel = k.startsWith('Z|'), p = ziel ? zielPreis(preise, l[0]) : preisFuerArt(preise, art);
+    return { art, touren: l, preis: p, pos: { bez: p ? p.bezeichnung + (ziel || normal(p.bezeichnung) === normal(art) || !art ? '' : ` – ${art}`) : art || 'Touren', einheit: (p && p.einheit) || 'je Tour', menge: l.length, einzelCent: p && p.betragCent != null ? p.betragCent : 0 } };
   });
 }
 function monatsabrechnungDialog() {

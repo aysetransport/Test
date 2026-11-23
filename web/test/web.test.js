@@ -1577,6 +1577,7 @@ test('Bestehende Rechnungen korrigieren: Zahlung zurücknehmen, Korrekturrechnun
   assert.deepEqual(entwurf, { von: true, pos: true, bnr: 'B-77', alt: 'TEILBEZAHLT', nr: true }, 'alte Rechnung gilt weiter, solange die Korrektur Entwurf ist');
   await s.locator('#beleg-form [name="einzel"]').first().fill('200,00');
   await s.locator('#beleg-speichern').click();
+  await s.waitForFunction(k => positionen(S.belege[k])[0].einzelCent === 20000, kid); // erst gespeichert, dann festschreiben (auf langsamen Rechnern sonst alter Preis)
   await s.locator('[data-beleg-akt="festschreiben"]').click();
   const k = await s.evaluate(([k, r, t]) => ({ alt: S.belege[r].status, ersetzt: S.belege[r].ersetztDurch === k, st: S.belege[k].status, bez: S.belege[k].bezahltCent, offen: offenCent(S.belege[k]),
     tour: S.touren[t].belegId === k, umsatz: alle('belege').filter(zaehltUmsatz).filter(b => b.id === r || b.id === k).map(b => b.id === k),
@@ -2342,5 +2343,39 @@ test('App-Update (neues Setup/APK): geladen → fragen → installieren', async 
   await s.locator('#dialog [data-app-installieren]').click();
   assert.equal(await s.evaluate(() => window.__inst), 1);
   assert.ok((await s.evaluate(() => updateKarte())).includes('App-Update 4.18.0 installieren'));
+  await s.close();
+});
+
+test('Tourenplanung: Tour/Ziel als Auswahl aus den Stammdaten der Firma (Preisliste), Rechnung mit Ziel-Preisen', async () => {
+  const s = await geraet(null, { bereich: 'touren' });
+  const tag = '2026-11-10';
+  await s.evaluate(tag => {
+    const f = uuid(), m = uuid(), jetzt = jetztIso();
+    S.auftraggeber[f] = { id: f, name: 'Möbel Krause', geaendertAm: jetzt };
+    S.mitarbeiter[m] = { id: m, name: 'Ali Demir', rolle: 'FAHRER', aktiv: true, geaendertAm: jetzt };
+    merke('einsatzarten', { id: uuid(), name: 'Tourpauschale', beifahrer: 0, geaendertAm: jetzt });
+    for (const [b, c] of [['Tourpauschale', 30000], ['Tour 12 – Hamburg', 45000], ['Tour 7 – Bremen', 38000]]) merke('preise', { id: uuid(), firmaId: f, bezeichnung: b, betragCent: c, einheit: 'je Tour', geaendertAm: jetzt });
+    const tour = (name, kz) => merke('touren', { id: uuid(), datum: tag, reihenfolge: 0, kennzeichen: kz, auftraggeberId: f, auftraggeber: 'Möbel Krause', name, einsatzart: 'Tourpauschale', fahrerId: m, geaendertAm: jetzt });
+    tour('Tour 12 – Hamburg', 'KR-A 1'); tour('Tour 12 – Hamburg', 'KR-A 2'); tour('Tour 7 – Bremen', 'KR-A 3'); tour('', 'KR-A 4'); tour('HH alt', 'KR-A 5');
+    ANSICHT.tourTag = tag; nachAenderung();
+  }, tag);
+  // Auswahl statt Freitext: nur die Ziele, nicht die Einsatzart aus der Preisliste
+  const auswahl = await s.evaluate(() => [...document.querySelectorAll('select[data-feld="name"]')].map(x => [...x.options].map(o => o.textContent.trim()).filter(Boolean)));
+  assert.equal(auswahl.length, 5, 'jede Tourzeile hat ein Auswahlfeld');
+  assert.deepEqual(auswahl[0], ['Tour 12 – Hamburg', 'Tour 7 – Bremen']);
+  assert.ok(auswahl.some(l => l.includes('HH alt')), 'alter Freitext bleibt sichtbar');
+  const hinweise = await s.locator('#liste').textContent();
+  assert.ok(hinweise.includes('Ziel nicht in den Stammdaten') && hinweise.includes('Ziel fehlt'));
+  // Ziel wählen
+  const zeile = s.locator('[data-tour-zeile]').filter({ has: s.locator('select[data-feld="name"] option[selected]', { hasText: 'HH alt' }) });
+  await zeile.locator('select[data-feld="name"]').selectOption('Tour 12 – Hamburg');
+  await s.evaluate(() => { const t = Object.values(S.touren).find(x => !x.name); merke('touren', { ...t, name: 'Tour 7 – Bremen' }); nachAenderung(); });
+  // Rechnung: je Ziel eine Position mit dem Ziel-Preis (nicht der Tourpauschale)
+  const r = await s.evaluate(tag => { const f = Object.values(S.auftraggeber)[0];
+    return sammelPositionen(f, tourenVonFirma(f, tag, tag), tag).map(g => [g.pos.bez, g.pos.menge, g.pos.einzelCent]); }, tag);
+  assert.deepEqual(r, [['Tour 12 – Hamburg', 3, 45000], ['Tour 7 – Bremen', 2, 38000]]);
+  assert.equal(await s.evaluate(() => tourRechnung(Object.values(S.touren).find(t => t.name === 'Tour 7 – Bremen')).erloes), 38000, 'Statistik schätzt mit demselben Preis');
+  await s.evaluate(() => { const f = Object.values(S.auftraggeber)[0]; rechnungAusTourenVorschau(f, '2026-11-10', '2026-11-10', 'ART'); });
+  assert.equal(await s.locator('#tpr-summe').textContent(), await s.evaluate(() => geld(3 * 45000 + 2 * 38000)));
   await s.close();
 });
