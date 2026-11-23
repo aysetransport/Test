@@ -107,4 +107,10 @@ class AppTest {
         val ok = runCatching { runBlocking { bruecke.ausfuehren("sms:massen", liste("+491701234567" to "Tour 12")) } }.exceptionOrNull()
         assertTrue("$ok", ok is IllegalStateException && ok.message == "kein Gerät im Test")
     }
+
+    @Test fun smsFehlerSindVerstaendlich() {
+        assertTrue(Geraet.smsFehlerText(android.telephony.SmsManager.RESULT_ERROR_GENERIC_FAILURE).contains("Standard-SIM"))
+        assertEquals("kein Netz", Geraet.smsFehlerText(android.telephony.SmsManager.RESULT_ERROR_NO_SERVICE))
+        assertEquals("Fehlercode 999 von Android", Geraet.smsFehlerText(999))
+    }
 }

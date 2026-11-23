@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.IntentFilter
 import android.net.Uri
 import android.telephony.SmsManager
+import android.telephony.SubscriptionManager
 import android.widget.Toast
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
@@ -188,9 +189,16 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
         var offen = nummern.size
         val fehler = mutableListOf<String>()
         for (nr in nummern) sendeEine(nr, text) { f ->
-            if (f.isNotEmpty()) fehler += nr
-            if (--offen == 0) meldung(if (fehler.isEmpty()) "SMS gesendet" else "SMS nicht gesendet an ${fehler.joinToString()} – bitte Mobilfunkempfang prüfen")
+            if (f.isNotEmpty()) fehler += "$nr: $f"
+            if (--offen == 0) meldung(if (fehler.isEmpty()) "SMS gesendet" else "SMS nicht gesendet – ${fehler.joinToString("; ")}")
         }
+    }
+
+    /** SMS über die SIM, die in Android als Standard für SMS eingestellt ist (Dual-SIM: sonst kann das Senden scheitern). */
+    private fun smsManager(): SmsManager {
+        val sim = SubscriptionManager.getDefaultSmsSubscriptionId()
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) activity.getSystemService(SmsManager::class.java).let { if (sim != SubscriptionManager.INVALID_SUBSCRIPTION_ID) it.createForSubscriptionId(sim) else it }
+        else @Suppress("DEPRECATION") (if (sim != SubscriptionManager.INVALID_SUBSCRIPTION_ID) SmsManager.getSmsManagerForSubscriptionId(sim) else SmsManager.getDefault())
     }
 
     /** Eine SMS (ggf. in Teilen) senden. fertig("") sobald alle Teile raus sind, sonst fertig(Fehlertext). Läuft auf dem Haupt-Thread. */
@@ -199,16 +207,16 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
         val aktion = "${activity.packageName}.SMS_GESENDET.${System.nanoTime()}" // je SMS eigene Rückmeldung
         var empfaenger: BroadcastReceiver? = null
         try {
-            val sm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) activity.getSystemService(SmsManager::class.java) else @Suppress("DEPRECATION") SmsManager.getDefault()
+            val sm = smsManager()
             val teile = sm.divideMessage(text)
             var offen = teile.size
             var fehler = 0
             empfaenger = object : BroadcastReceiver() {
                 override fun onReceive(c: Context, i: Intent) {
-                    if (resultCode != Activity.RESULT_OK) fehler++
+                    if (resultCode != Activity.RESULT_OK && fehler == 0) fehler = resultCode
                     if (--offen > 0) return
                     runCatching { activity.unregisterReceiver(this) }
-                    fertig(if (fehler == 0) "" else "nicht gesendet (kein Netz?)")
+                    fertig(if (fehler == 0) "" else smsFehlerText(fehler))
                 }
             }
             ContextCompat.registerReceiver(activity, empfaenger, IntentFilter(aktion), ContextCompat.RECEIVER_NOT_EXPORTED)
@@ -274,6 +282,17 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
     }
 
     companion object {
+        /** Fehlercode von Android → verständlicher Grund (SmsManager.RESULT_ERROR_…). */
+        fun smsFehlerText(code: Int) = when (code) {
+            SmsManager.RESULT_ERROR_GENERIC_FAILURE -> "allgemeiner Fehler – bei Dual-SIM in den Android-Einstellungen eine Standard-SIM für SMS festlegen (nicht „Immer fragen“), sonst Guthaben/Tarif prüfen"
+            SmsManager.RESULT_ERROR_RADIO_OFF -> "Mobilfunk aus (Flugmodus?)"
+            SmsManager.RESULT_ERROR_NO_SERVICE, SmsManager.RESULT_RADIO_NOT_AVAILABLE -> "kein Netz"
+            SmsManager.RESULT_ERROR_NULL_PDU -> "Nachricht konnte nicht erstellt werden"
+            SmsManager.RESULT_ERROR_LIMIT_EXCEEDED -> "Sendelimit von Android erreicht – später erneut"
+            SmsManager.RESULT_ERROR_SHORT_CODE_NOT_ALLOWED, SmsManager.RESULT_ERROR_SHORT_CODE_NEVER_ALLOWED -> "Kurzwahlnummer nicht erlaubt"
+            SmsManager.RESULT_ERROR_FDN_CHECK_FAILURE -> "Rufnummernbeschränkung (FDN) der SIM"
+            else -> "Fehlercode $code von Android"
+        }
         private val NUMMER = Regex("^[+0-9 ()/-]{3,}$")
 
         /** Empfänger und Text aus einer sms:-Adresse der Oberfläche (sms:+49…,+49…?body=…); null, wenn etwas fehlt. */
