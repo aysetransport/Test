@@ -1,8 +1,11 @@
 name: Web-App
 
+# Nur beim Veröffentlichen – vorher laufen dieselben Tests lokal.
 on:
   push:
-  pull_request:
+    branches: [claude/android-schadensfall-app-krncja]
+    paths: ['web/**', 'cloud/**', '.github/workflows/web.yml']
+  workflow_dispatch:
 
 permissions:
   contents: read
