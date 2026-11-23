@@ -2598,3 +2598,64 @@ test('Postfach: Absender-Infos, erkannte Verweise und E-Rechnung im Anhang mit e
   await s.locator('#pf-erechnung', { hasText: 'Schon erfasst' }).waitFor();
   await s.close();
 });
+
+test('Scannen (Windows): Tankbelege und Rechnungen auslesen, prüfen, speichern – Stapel und einzeln, Folgeseiten, Doppelte', async () => {
+  const s = await geraet(null, { bereich: 'finanzen' });
+  const bon = 'ARAL Tankstelle\n\nMusterstr. 5, 47798 Krefeld\nSäule 4 Diesel\n\n62,48 1 x 1,759 EUR/l\n\nBetrag 109,90 EUR\n\nSumme EUR 109,90\n\nKfz-Kennz.: KR-AT 100\nKM-Stand: 120345\n\n12.11.2026 07:43 Beleg-Nr 4711\nMwSt 19% 17,55';
+  const bon2 = 'SHELL Station Moers\nDiesel 40,00 l\nGesamt EUR 70,40\n13.11.26';
+  const re1 = 'Werkstatt Meier GmbH\nIndustriestr. 9, 47800 Krefeld\nAyse Transport UG\nRechnung\nRechnungs-Nr.: WM-2026-118\nRechnungsdatum: 10.11.2026\nInspektion und Reifenwechsel\nNetto 500,00\nMwSt 19 % 95,00\nGesamtbetrag 595,00 EUR\nZahlbar innerhalb 14 Tagen\nIBAN DE02 1203 0000 0000 2020 51';
+  const re1b = 'Seite 2\nAGB und Hinweise zur Gewährleistung';
+  const re2 = 'Toll Collect GmbH\nRechnung Nr. TC-998877\nDatum 05.11.2026\nMaut Oktober\nRechnungsbetrag 1.234,56 EUR';
+  await s.evaluate(([bon, bon2, re1, re1b, re2]) => {
+    merke('fahrzeuge', { id: uuid(), kennzeichen: 'KR-AT 100', status: 'AKTIV', geaendertAm: jetztIso() }); nachAenderung();
+    window.__modus = []; window.__texte = [];
+    const seite = (n, text) => ({ name: n + '.jpg', mimeType: 'image/jpeg', base64: btoa(n), text });
+    window.desktop = { plattform: 'win32', beiZiel() {}, oeffneDatei: async () => true, benachrichtige: async () => true,
+      scan: { geraete: async () => [{ id: 'hp', name: 'HP ScanJet Pro N4000 snw1' }],
+        stapel: async (id, modus) => { window.__modus.push(modus); const l = window.__texte.shift(); return l.map((t, i) => seite('s' + window.__modus.length + '_' + i, t)); },
+        lesen: async b64 => { const n = atob(b64); return { text: window.__alle[n], sicherheit: n.endsWith('_1') && window.__schlecht ? 40 : 90 }; } } };
+    window.__alle = {};
+    const merkeTexte = (k, l) => l.forEach((t, i) => { window.__alle['s' + k + '_' + i] = t; });
+    window.__texte.push([bon, bon2]); merkeTexte(1, [bon, bon2]);
+    window.__texte.push([re1, re1b, re2]); merkeTexte(2, [re1, re1b, re2]);
+    window.__texte.push([re2]); merkeTexte(3, [re2]);
+  }, [bon, bon2, re1, re1b, re2]);
+  // Auslesen eines Tankbelegs (OCR liest „l“ als 1)
+  const t = await s.evaluate(b => tankbelegLesen(b), bon);
+  assert.deepEqual([t.datum, t.betragCent, t.liter, t.kz, t.km, t.ort, t.unsicher], ['2026-11-12', 10990, 62.48, 'KR-AT 100', '120345', 'Aral', []]);
+  // Tankbelege: Stapel scannen → zwei vorausgefüllte Zeilen → speichern (mit Scan als Dokument)
+  await s.locator('[data-tankbelege]').first().click();
+  await s.locator('#tank-scan').click();
+  await s.waitForFunction(() => document.querySelectorAll('#tank-tabelle tbody tr[data-scan]').length === 2);
+  assert.equal(await s.evaluate(() => window.__modus[0]), 'STAPEL');
+  assert.equal(await s.locator('#tank-tabelle tr[data-scan="1"] [data-t=betrag]').inputValue(), '70,40');
+  await s.locator('#tank-form button.voll').click();
+  await s.locator('#toast', { hasText: '2 Tankbelege gespeichert' }).waitFor();
+  const tank = await s.evaluate(() => { const fz = alle('fahrzeuge')[0];
+    return { akte: alle('fahrzeugeintraege').filter(x => x.art === 'TANKEN').map(x => [x.datum, x.betragCent, x.menge, x.kmStand]),
+      dok: alle('anlagen').filter(a => a.fallId === fz.id).map(a => a.anzeigename), ohne: alle('eingangsrechnungen').filter(e => e.kategorie === 'KRAFTSTOFF').map(e => [e.lieferant, e.datum, eingangBrutto(e)]) }; });
+  assert.deepEqual(tank.akte, [['2026-11-12', 10990, 6248, 120345]]);
+  assert.ok(tank.dok[0].startsWith('Tankbeleg 12.11.2026'), tank.dok);
+  assert.deepEqual(tank.ohne, [['Shell', '2026-11-13', 7040]]);
+  // Rechnungen: Stapel mit Folgeseite → zwei Rechnungen, die erste mit zwei Seiten
+  await s.locator('[data-rechnungen-scannen]').click();
+  await s.locator('#ers-scan').click();
+  await s.waitForFunction(() => document.querySelectorAll('#ers-tabelle tbody tr').length === 2);
+  const zeilen = await s.evaluate(() => [...document.querySelectorAll('#ers-tabelle tbody tr')].map(r => Object.fromEntries([...r.querySelectorAll('[data-t]')].map(i => [i.dataset.t, i.type === 'checkbox' ? i.checked : i.value]))));
+  assert.deepEqual([zeilen[0].lieferant, zeilen[0].nummer, zeilen[0].datum, zeilen[0].faelligAm, zeilen[0].brutto, zeilen[0].mwst, zeilen[0].kategorie, zeilen[0].iban],
+    ['Werkstatt Meier GmbH', 'WM-2026-118', '2026-11-10', '2026-11-24', '595,00', '19', 'WERKSTATT', 'DE02120300000000202051']);
+  assert.deepEqual([zeilen[1].lieferant, zeilen[1].nummer, zeilen[1].brutto, zeilen[1].kategorie], ['Toll Collect GmbH', 'TC-998877', '1234,56', 'MAUT']);
+  assert.equal(await s.locator('[data-ers-seiten="0"]').textContent(), ' 2', 'Folgeseite hängt an der ersten Rechnung');
+  // einzeln: lange Bons per Hand → nächste Rechnung kommt dazu, wird als doppelt erkannt
+  await s.locator('#ers-form [name=ers-modus][value=EINZELN]').check();
+  await s.locator('#ers-scan').click();
+  await s.waitForFunction(() => document.querySelectorAll('#ers-tabelle tbody tr').length === 3);
+  assert.equal(await s.evaluate(() => window.__modus[2]), 'EINZELN');
+  assert.equal(await s.locator('#ers-scan').textContent(), '🖨 Nächste Rechnung scannen');
+  await s.locator('#ers-form button.voll').click();
+  await s.locator('#toast', { hasText: '2 Eingangsrechnung(en) gespeichert' }).waitFor();
+  assert.ok((await s.locator('#toast').textContent()).includes('schon erfasst und übersprungen (TC-998877)'));
+  const er = await s.evaluate(() => alle('eingangsrechnungen').filter(e => e.notiz === 'Gescannt').map(e => [e.lieferant, e.nettoCent, e.mwstCent, e.faelligAm, alle('anlagen').filter(a => a.fallId === e.id).length]).sort());
+  assert.deepEqual(er, [['Toll Collect GmbH', 103745, 19711, null, 1], ['Werkstatt Meier GmbH', 50000, 9500, '2026-11-24', 2]]);
+  await s.close();
+});

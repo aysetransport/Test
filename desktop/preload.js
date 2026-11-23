@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('desktop', {
     zoom: f => aufruf('fenster:zoom', f),
     neu: (bereich, ziel) => aufruf('fenster:neu', bereich, ziel), // Unterfenster: Bereich und ggf. Datensatz (#/beleg/…)
   },
+  // Scanner (WIA, Stapel über den Einzug) und Texterkennung (offline) – z. B. für Tankbelege
+  scan: { geraete: () => aufruf('scan:geraete'), stapel: (id, modus) => aufruf('scan:stapel', id, modus) /* 'STAPEL' | 'EINZELN' */, lesen: base64 => aufruf('ocr:lesen', base64) },
   // Update der App selbst (neues Setup bzw. neue APK)
   app: { pruefen: () => aufruf('app:pruefen'), installieren: () => aufruf('app:installieren') },
   // In-App-Update der Oberfläche

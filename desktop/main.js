@@ -11,6 +11,7 @@ const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const mail = require('./mail');
 const { webUpdate } = require('./webupdate');
+const scan = require('./scan');
 const { autoUpdater } = require('electron-updater');
 
 const ORDNER = path.join(__dirname, 'app');
@@ -67,6 +68,10 @@ behandle('app:installieren', () => {
   setImmediate(() => { lageMerken(); autoUpdater.quitAndInstall(true, true); }); // still installieren, danach neu starten
   return true;
 });
+behandle('scan:geraete', () => scan.geraete());
+behandle('scan:stapel', (id, modus) => scan.stapel(id, modus === 'EINZELN' ? 'EINZELN' : 'STAPEL'));
+behandle('ocr:lesen', base64 => scan.lesen(base64));
+app.on('will-quit', () => { scan.beenden().catch(() => {}); });
 behandle('mail:konto', a => ohnePasswort(ladeKonto(a)));
 behandle('mail:einrichten', async (konfig, pw, a) => {
   await mail.pruefe(konfig, pw);

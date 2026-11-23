@@ -24,10 +24,10 @@ test.before(async () => {
 });
 test.after(async () => { await cloud.schliessen(); await gm.beenden(); fs.rmSync(daten, { recursive: true, force: true }); });
 
-async function starte() {
+async function starte(env = {}) {
   const app = await electron.launch({
     args: [path.join(__dirname, '..'), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],
-    env: { ...process.env, SCHADEN_DATEN: daten, SCHADEN_TEST: '1' },
+    env: { ...process.env, SCHADEN_DATEN: daten, SCHADEN_TEST: '1', ...env },
   });
   const s = await app.firstWindow();
   s.on('pageerror', e => { throw e; });
@@ -312,6 +312,19 @@ test('Windows-App: Unterfenster mit eigenem Bereich, gleicher Datenstand in beid
     const w = await x; await w.waitForLoadState();
     assert.ok(!w.url().includes('javascript') && !w.url().includes('böse'), w.url());
     assert.equal(app.windows().length, zahl + 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Windows-App: Tankbeleg scannen und mit der Texterkennung auslesen (Ordner statt Scanner)', async () => {
+  const { app, s } = await starte({ SCHADEN_SCAN_ORDNER: path.join(__dirname, 'scans') });
+  try {
+    await s.evaluate(() => { merke('fahrzeuge', { id: uuid(), kennzeichen: 'KR-AT 100', status: 'AKTIV', geaendertAm: jetztIso() }); nachAenderung(); tankbelegeDialog(); });
+    await s.locator('#tank-scan').click();
+    await s.waitForFunction(() => document.querySelector('#tank-tabelle tbody tr[data-scan]'), null, { timeout: 90000 });
+    const w = await s.evaluate(() => Object.fromEntries([...document.querySelectorAll('#tank-tabelle tr[data-scan] input')].map(i => [i.dataset.t, i.value])));
+    assert.deepEqual([w.betrag, w.liter, w.kz, w.km, w.ort], ['109,90', '62,48', 'KR-AT 100', '120345', 'Aral']);
   } finally {
     await app.close();
   }
