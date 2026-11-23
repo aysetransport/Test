@@ -255,7 +255,7 @@ test('Auftraggeber: Kontaktdaten am Fall und eigene Liste mit denselben Abgleich
   assert.deepEqual(weg.auftraggeber.map(e => [e.geloescht, e.name]), [[true, undefined]]);
   const spaeter = u.sync({ seit: weg.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Wieder da?', geaendertAm: '2026-11-12T08:00:00Z' }] });
   assert.equal(spaeter.auftraggeber[0].geloescht, true, 'gelöscht bleibt gelöscht');
-  assert.equal(u.aufruf('status').api, 14);
+  assert.equal(u.aufruf('status').api, 15);
 });
 
 test('CRM: Ansprechpartner, Preise usw. gleichen sich ab und verschwinden mit ihrer Firma', () => {
@@ -505,10 +505,10 @@ test('Hauptadmin: verwaltet Admins, schaltet die Cloud-PIN ab; Notfall-Funktion 
 test('Selbst-Update: lädt Code.gs, prüft Prüfsumme, ersetzt Code, neue Version auf derselben Bereitstellung; nur Hauptadmin', () => {
   const crypto = require('node:crypto');
   const sha = x => crypto.createHash('sha256').update(x, 'utf8').digest('hex');
-  const neuerCode = '// neue Fassung\nvar API_VERSION = 15;';
-  const web = { 'cloud-update.json': JSON.stringify({ stand: 500, api: 15, version: '4.14.0', sha256: sha(neuerCode) }), 'cloud/Code.gs': neuerCode };
+  const neuerCode = '// neue Fassung\nvar API_VERSION = 16;';
+  const web = { 'cloud-update.json': JSON.stringify({ stand: 500, api: 16, version: '4.16.0', sha256: sha(neuerCode) }), 'cloud/Code.gs': neuerCode };
   const api = [], projekt = { files: [{ name: 'appsscript', type: 'JSON', source: '{}' }, { name: 'Code', type: 'SERVER_JS', source: 'alt' }] };
-  let deployment = { deploymentConfig: { versionNumber: 7 } }, statusApi = 15;
+  let deployment = { deploymentConfig: { versionNumber: 7 } }, statusApi = 16;
   const antwort = (code, text) => ({ getResponseCode: () => code, getContentText: () => text });
   const UrlFetchApp = { fetch(url, opt = {}) {
     if (url.startsWith('https://aysetransport.github.io/schaden/')) { const p = url.replace('https://aysetransport.github.io/schaden/', '').replace(/\?.*$/, ''); return web[p] != null ? antwort(200, web[p]) : antwort(404, ''); }
@@ -530,20 +530,20 @@ test('Selbst-Update: lädt Code.gs, prüft Prüfsumme, ersetzt Code, neue Versio
   u.aufruf('pinFestlegen', 'pin-1234');
   assert.equal(u.aufruf('status').selbstUpdate, true);
   const info = u.aufruf('cloudUpdateInfo', 'pin-1234');
-  assert.equal(info.verfuegbar.api, 15);
+  assert.equal(info.verfuegbar.api, 16);
   const r = u.aufruf('cloudAktualisieren', 'pin-1234');
-  assert.deepEqual(r, { neu: true, vorher: 14, api: 15, version: 8 });
+  assert.deepEqual(r, { neu: true, vorher: 15, api: 16, version: 8 });
   assert.equal(projekt.files.find(f => f.name === 'Code').source, neuerCode, 'Code ersetzt');
   assert.equal(deployment.deploymentConfig.versionNumber, 8, 'dieselbe Bereitstellung zeigt auf die neue Version');
   assert.equal(u.eigenschaften.get('CODE_STAND'), '500');
   assert.equal(u.aufruf('cloudAktualisieren', 'pin-1234').neu, false, 'kein zweites Mal');
   // Prüfsumme falsch → nichts geändert
-  web['cloud-update.json'] = JSON.stringify({ stand: 600, api: 15, sha256: 'falsch' });
+  web['cloud-update.json'] = JSON.stringify({ stand: 600, api: 16, sha256: 'falsch' });
   const anzahl = api.length;
   assert.throws(() => u.aufruf('cloudAktualisieren', 'pin-1234'), /Prüfsumme/);
   assert.equal(api.length, anzahl, 'keine Änderung am Projekt');
   // neue Version antwortet nicht → zurück auf vorherige
-  web['cloud-update.json'] = JSON.stringify({ stand: 700, api: 16, sha256: sha(neuerCode) }); statusApi = 15;
+  web['cloud-update.json'] = JSON.stringify({ stand: 700, api: 17, sha256: sha(neuerCode) }); statusApi = 16;
   assert.throws(() => u.aufruf('cloudAktualisieren', 'pin-1234'), /vorherige Version ist wieder aktiv/);
   assert.equal(deployment.deploymentConfig.versionNumber, 8, 'zurückgesetzt');
   // nur Hauptadmin

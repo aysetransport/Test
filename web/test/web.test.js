@@ -1579,6 +1579,95 @@ test('Gutschrift mindert Umsatz und offenen Betrag; Finanzen erst ab Stichtag', 
   await s.close();
 });
 
+test('Bestehende Rechnungen korrigieren: Zahlung zurücknehmen, Korrekturrechnung ersetzt die alte, Storno aufheben, Gutschrift und Angebot berichtigen', async () => {
+  const s = await geraet(null, { bereich: 'finanzen' });
+  const ids = await s.evaluate(() => {
+    const f = Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV' });
+    const pos = JSON.stringify([{ bez: 'Montage', menge: 2, einzelCent: 25000 }]);
+    const r1 = BelegAktionen.neu('RECHNUNG', f, { positionen: pos }); BelegAktionen.speichern({ ...S.belege[r1], status: 'OFFEN' });
+    BelegAktionen.zahlung(S.belege[r1], 59500, heute());
+    const r2 = BelegAktionen.neu('RECHNUNG', f, { positionen: pos, bestellnummer: 'B-77' }); BelegAktionen.speichern({ ...S.belege[r2], status: 'OFFEN' });
+    BelegAktionen.zahlung(S.belege[r2], 10000, '2026-11-01');
+    const t = uuid(); merke('touren', { id: t, datum: heute(), auftraggeberId: f, belegId: r2, geaendertAm: jetztIso() });
+    const r3 = BelegAktionen.neu('RECHNUNG', f, { positionen: pos }); BelegAktionen.speichern({ ...S.belege[r3], status: 'STORNIERT' });
+    const g = BelegAktionen.gutschrift(S.belege[r3], true); BelegAktionen.speichern({ ...S.belege[g], status: 'BEZAHLT', bezahltCent: 59500, bezahltAm: heute() });
+    const a = BelegAktionen.neu('ANGEBOT', f, { positionen: pos }); BelegAktionen.speichern({ ...S.belege[a], status: 'ABGELEHNT' });
+    const r4 = BelegAktionen.neu('RECHNUNG', f, { positionen: pos }); BelegAktionen.speichern({ ...S.belege[r4], status: 'OFFEN' });
+    return { f, r1, r2, r3, r4, g, a, t };
+  });
+  const oeffne = id => s.evaluate(id => { location.hash = '#/beleg/' + id; }, id);
+  // 1) versehentlich bezahlt → wieder unbezahlt (gesperrte, bezahlte Rechnung)
+  assert.equal(await s.evaluate(id => S.belege[id].status, ids.r1), 'BEZAHLT');
+  await oeffne(ids.r1);
+  await s.locator('[data-beleg-akt="korrigieren"]').click();
+  await s.locator('#kr-status').click();
+  await s.locator('[data-br-betrag="0"]').click();
+  await s.locator('#berichtigen-form [name="grund"]').fill('Zahlung gehörte zu anderer Rechnung');
+  await s.locator('#br-ok').click();
+  const r1 = await s.evaluate(id => ({ st: S.belege[id].status, c: S.belege[id].bezahltCent, am: S.belege[id].bezahltAm, offen: istRechnungOffen(S.belege[id]),
+    verlauf: alle('aktivitaeten').some(a => /berichtigt: Status Bezahlt → Offen, bezahlt .* → 0,00.*anderer Rechnung/.test(a.text)) }), ids.r1);
+  assert.deepEqual(r1, { st: 'OFFEN', c: 0, am: null, offen: true, verlauf: true });
+  await s.locator('#detail [data-beleg-akt="zahlung"]').waitFor();
+  // 2) Korrekturrechnung: übernimmt alles, ersetzt die alte erst beim Versenden
+  await oeffne(ids.r2);
+  await s.locator('[data-beleg-akt="korrigieren"]').click();
+  await s.locator('#kr-neu').click();
+  await s.waitForFunction(alt => location.hash.startsWith('#/beleg/') && !location.hash.endsWith(alt), ids.r2);
+  const kid = await s.evaluate(() => location.hash.split('/').pop());
+  const entwurf = await s.evaluate(([k, r]) => ({ von: S.belege[k].korrekturVon === r, pos: S.belege[k].positionen === S.belege[r].positionen, bnr: S.belege[k].bestellnummer, alt: S.belege[r].status, nr: S.belege[k].nummer !== S.belege[r].nummer }), [kid, ids.r2]);
+  assert.deepEqual(entwurf, { von: true, pos: true, bnr: 'B-77', alt: 'TEILBEZAHLT', nr: true }, 'alte Rechnung gilt weiter, solange die Korrektur Entwurf ist');
+  await s.locator('#beleg-form [name="einzel"]').first().fill('200,00');
+  await s.locator('#beleg-speichern').click();
+  await s.locator('[data-beleg-akt="festschreiben"]').click();
+  const k = await s.evaluate(([k, r, t]) => ({ alt: S.belege[r].status, ersetzt: S.belege[r].ersetztDurch === k, st: S.belege[k].status, bez: S.belege[k].bezahltCent, offen: offenCent(S.belege[k]),
+    tour: S.touren[t].belegId === k, umsatz: alle('belege').filter(zaehltUmsatz).filter(b => b.id === r || b.id === k).map(b => b.id === k),
+    xml: eRechnungXml(S.belege[k]), html: belegHtml(S.belege[k]).includes('Ersetzt Rechnung'), nrAlt: S.belege[r].nummer,
+    verlauf: alle('aktivitaeten').some(a => a.text.includes('durch Korrekturrechnung')) }), [kid, ids.r2, ids.t]);
+  assert.deepEqual({ ...k, xml: undefined }, { alt: 'STORNIERT', ersetzt: true, st: 'TEILBEZAHLT', bez: 10000, offen: 47600 - 10000, tour: true, umsatz: [true], xml: undefined, html: true, nrAlt: k.nrAlt, verlauf: true });
+  assert.ok(k.xml.includes('<ram:TypeCode>384</ram:TypeCode>') && k.xml.includes(`<ram:IssuerAssignedID>${k.nrAlt}</ram:IssuerAssignedID>`), 'E-Rechnung: korrigierte Rechnung (384) mit Verweis');
+  // ersetzte Rechnung kann nicht wieder gültig gemacht werden, solange die Korrektur gilt
+  await oeffne(ids.r2);
+  await s.locator('[data-beleg-akt="korrigieren"]').click();
+  assert.equal(await s.locator('#kr-neu').count(), 1);
+  await s.locator('#kr-status').click();
+  assert.equal(await s.locator('#berichtigen-form [name="status"]').isDisabled(), true);
+  await s.locator('#berichtigen-form [data-zu]').click();
+  // 3) Storno aus Versehen → aufheben
+  await oeffne(ids.r3);
+  await s.locator('[data-beleg-akt="korrigieren"]').click();
+  await s.locator('#kr-status').click();
+  await s.locator('#berichtigen-form [name="status"]').selectOption('GUELTIG');
+  await s.locator('#br-ok').click();
+  assert.equal(await s.evaluate(id => S.belege[id].status, ids.r3), 'OFFEN');
+  // 4) Gutschrift: „ausgezahlt“ zurücknehmen; Angebot wieder offen; versendete Rechnung zurück auf Entwurf
+  for (const [id, wert, soll] of [[ids.g, 'OFFEN', 'OFFEN'], [ids.a, 'OFFEN', 'OFFEN'], [ids.r4, 'ENTWURF', 'ENTWURF']]) {
+    await oeffne(id);
+    await s.locator(id === ids.r4 ? '[data-beleg-akt="korrigieren"]' : '[data-beleg-akt="berichtigen"]').click();
+    if (id === ids.r4) await s.locator('#kr-status').click();
+    await s.locator('#berichtigen-form [name="status"]').selectOption(wert);
+    await s.locator('#br-ok').click();
+    assert.equal(await s.evaluate(id => S.belege[id].status, id), soll);
+  }
+  assert.equal(await s.evaluate(id => S.belege[id].bezahltCent, ids.g), 0);
+  // offizielle Prüfung der korrigierten Rechnung (wie im E-Rechnungs-Test)
+  const regeln = process.env.ERECHNUNG_REGELN;
+  if (regeln) {
+    const xml = await s.evaluate(k => {
+      S.einstellungen.rechnung = { ...rechnungsDaten(), name: 'Ayse Transport UG', strasse: 'Musterstraße 1', plzOrt: '12345 Musterstadt', telefon: '0123 456789', email: 'info@example.de',
+        ustId: 'DE987654321', steuer: '126/5000/1234', iban: 'DE89 3704 0044 0532 0130 00', bic: 'COBADEFFXXX', bank: 'Musterbank' };
+      const f = S.belege[k].firmaId; S.auftraggeber[f] = { ...S.auftraggeber[f], email: 'rechnung@example.com' };
+      Aktionen.crmSpeichern('adressen', { firmaId: f, art: 'RECHNUNG', strasse: 'Industriestraße 5', plz: '47803', ort: 'Krefeld' });
+      return eRechnungXml(S.belege[k]);
+    }, kid);
+    const fs = require('node:fs'), os = require('node:os'), { execFileSync } = require('node:child_process');
+    const datei = path.join(os.tmpdir(), 'xrechnung-korrektur.xml'); fs.writeFileSync(datei, xml);
+    let aus; try { aus = execFileSync('python3', [path.join(__dirname, '../../tools/erechnung-pruefen.py'), datei, regeln], { encoding: 'utf8' }); } catch (e) { aus = e.stdout; }
+    const erg = JSON.parse(aus);
+    assert.deepEqual({ xsd: erg.xsd, fehler: erg.fehler }, { xsd: [], fehler: [] }, aus);
+  }
+  await s.close();
+});
+
 test('Lieferavis, Statuslink für den Endkunden und Bewertung nach der Lieferung', async () => {
   const cloud = await starteCloud();
   const a = await geraet(cloud.url, { bereich: 'touren' });
