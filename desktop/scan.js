@@ -10,7 +10,7 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 
 // Gemeinsamer Teil der Skripte: Gerät wählen, Einzug finden, Fehlercodes lesen, Bild auf mehreren Wegen holen.
-const GRUNDLAGE = `$ErrorActionPreference = 'Stop'
+const GRUNDLAGE = `$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $JPEG = '{B96B3CAE-0728-11D3-9D7B-0000F81EF32E}'; $BMP = '{B96B3CAB-0728-11D3-9D7B-0000F81EF32E}'
 # WIA-Fehlercode (0x8021xxxx) – PowerShell verpackt COM-Fehler, der Code steckt oft in einer inneren Ausnahme
 function Code($fehler) { $x = $fehler.Exception; while ($x) { if (((($x.HResult -shr 16) -band 0xFFFF) -eq 0x8021)) { return $x.HResult }; $x = $x.InnerException }; return 0 }
@@ -46,11 +46,11 @@ function Hole($item) {
   }
   throw ($fehler -join ' | ')
 }`;
-const GERAETE_PS = `$ErrorActionPreference = 'Stop'
+const GERAETE_PS = `$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $dm = New-Object -ComObject WIA.DeviceManager
 $l = @($dm.DeviceInfos | Where-Object { $_.Type -eq 1 } | ForEach-Object { [pscustomobject]@{ id = $_.DeviceID; name = $_.Properties.Item('Name').Value } })
 ConvertTo-Json -InputObject $l -Compress`;
-// Einzug (3088 = 1), Graustufen (6146 = 2), 300 dpi (6147/6148). STAPEL: bis „Papier leer“ (0x80210003) eine Seite nach der anderen.
+// Einzug (3088 = 1), Graustufen (6146 = 2) – Auflösung wie vom Treiber vorgegeben. STAPEL: bis „Papier leer“ (0x80210003) eine Seite nach der anderen.
 // EINZELN: genau ein Beleg mit größter Seitenlänge (6152 = Höhe in Pixeln, 3096 = Seiten) – lange Kassenbons, per Hand geführt.
 const STAPEL_PS = GRUNDLAGE + `
 $dev = Versuche { (Geraet).Connect() }
@@ -59,7 +59,8 @@ Setze $dev.Properties 3088 1
 if (-not $stapel) { Setze $dev.Properties 3096 1 }
 $item = Einzug $dev
 Setze $item.Properties 3088 1
-Setze $item.Properties 6146 2; Setze $item.Properties 6147 300; Setze $item.Properties 6148 300
+# Auflösung bleibt beim Treiber (HP: 200 dpi) – Breite/Länge sind in Pixeln dieser Auflösung; mit 300 dpi wird die Seite abgeschnitten und riesig
+Setze $item.Properties 6146 2
 if (-not $stapel) { SetzeMax $item.Properties 6152 }
 $n = 0
 while ($true) {
