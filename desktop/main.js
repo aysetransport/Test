@@ -37,8 +37,11 @@ function passwort(konto) {
 }
 const ohnePasswort = k => (k ? Object.fromEntries(Object.entries(k).filter(([n]) => n !== 'passwort' && n !== 'verschluesselt')) : null);
 
+let aufrufer = null; // Fenster, aus dem der laufende Aufruf kommt (mehrere Fenster)
+const quelle = () => (aufrufer && !aufrufer.isDestroyed() ? aufrufer : fenster);
 function behandle(kanal, arbeit) {
   ipcMain.handle(kanal, async (_e, ...args) => {
+    aufrufer = BrowserWindow.fromWebContents(_e.sender);
     try { return { ok: await arbeit(...args) }; } catch (e) { return { fehler: e.message || String(e), anmeldung: !!e.anmeldung }; }
   });
 }
@@ -127,7 +130,7 @@ behandle('datei:speichern', async (vorschlag, base64) => {
     fs.writeFileSync(ziel, Buffer.from(String(base64), 'base64'));
     return ziel;
   }
-  const { canceled, filePath } = await dialog.showSaveDialog(fenster, { defaultPath: path.join(app.getPath('documents'), name) });
+  const { canceled, filePath } = await dialog.showSaveDialog(quelle(), { defaultPath: path.join(app.getPath('documents'), name) });
   if (canceled || !filePath) return '';
   fs.writeFileSync(filePath, Buffer.from(String(base64), 'base64'));
   return filePath;
@@ -158,9 +161,10 @@ function lageMerken() {
   if (!fenster || fenster.isDestroyed()) return;
   try { fs.writeFileSync(fensterDatei(), JSON.stringify({ ...fenster.getNormalBounds(), maximiert: fenster.isMaximized() })); } catch {}
 }
-function erstelleFenster() {
-  const lage = letzteLage();
-  fenster = new BrowserWindow({
+/** Ein Fenster der App. haupt = das erste (Lage merken, beim Schließen gehen alle zu); sonst ein Unterfenster für mehrere Dinge gleichzeitig. */
+function fensterBauen(url, haupt) {
+  const lage = haupt ? letzteLage() : { width: 1100, height: 800 };
+  const w = new BrowserWindow({
     width: lage.width || 1280, height: lage.height || 860, ...(lage.x != null ? { x: lage.x, y: lage.y } : {}), minWidth: 380, minHeight: 500,
     title: 'Ayse CRM', icon: path.join(ORDNER, 'icon-512.png'), show: false,
     backgroundColor: MICA ? '#00000000' : nativeTheme.shouldUseDarkColors ? '#202020' : '#F3F3F3',
@@ -168,53 +172,66 @@ function erstelleFenster() {
     ...(MICA ? { backgroundMaterial: 'mica' } : {}),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true },
   });
-  if (lage.maximiert) fenster.maximize();
-  for (const e of ['resize', 'move']) fenster.on(e, () => { clearTimeout(lageMerken.t); lageMerken.t = setTimeout(lageMerken, 600); });
-  fenster.on('close', lageMerken);
-  fenster.webContents.session.setSpellCheckerLanguages(['de-DE']);
+  if (haupt) {
+    if (lage.maximiert) w.maximize();
+    for (const e of ['resize', 'move']) w.on(e, () => { clearTimeout(lageMerken.t); lageMerken.t = setTimeout(lageMerken, 600); });
+    w.on('close', lageMerken);
+    w.on('closed', () => { for (const x of BrowserWindow.getAllWindows()) x.close(); }); // Hauptfenster zu → App zu
+  }
+  w.webContents.session.setSpellCheckerLanguages(['de-DE']);
   // Links nach außen (Mail, Telefon, Webseiten) öffnen die Programme des Rechners, nicht ein zweites Fenster.
-  fenster.webContents.setWindowOpenHandler(({ url }) => {
+  w.webContents.setWindowOpenHandler(({ url }) => {
     if (/^(https?:|mailto:|tel:)/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  fenster.webContents.on('will-navigate', (e, url) => {
+  w.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith('app://')) { e.preventDefault(); if (/^(https?:|mailto:|tel:)/i.test(url)) shell.openExternal(url); }
   });
   // Rechtsklick in Textfeldern und auf markiertem Text: das gewohnte Windows-Menü (mit Rechtschreibvorschlägen).
-  fenster.webContents.on('context-menu', (_e, p) => {
+  w.webContents.on('context-menu', (_e, p) => {
     const eintraege = [];
-    for (const v of (p.dictionarySuggestions || []).slice(0, 5)) eintraege.push({ label: v, click: () => fenster.webContents.replaceMisspelling(v) });
-    if (p.misspelledWord) eintraege.push({ label: 'Zum Wörterbuch hinzufügen', click: () => fenster.webContents.session.addWordToSpellCheckerDictionary(p.misspelledWord) }, { type: 'separator' });
+    for (const v of (p.dictionarySuggestions || []).slice(0, 5)) eintraege.push({ label: v, click: () => w.webContents.replaceMisspelling(v) });
+    if (p.misspelledWord) eintraege.push({ label: 'Zum Wörterbuch hinzufügen', click: () => w.webContents.session.addWordToSpellCheckerDictionary(p.misspelledWord) }, { type: 'separator' });
     if (p.isEditable) eintraege.push({ label: 'Rückgängig', role: 'undo', enabled: p.editFlags.canUndo }, { type: 'separator' }, { label: 'Ausschneiden', role: 'cut', enabled: p.editFlags.canCut });
     if (p.isEditable || p.selectionText) eintraege.push({ label: 'Kopieren', role: 'copy', enabled: p.editFlags.canCopy });
     if (p.isEditable) eintraege.push({ label: 'Einfügen', role: 'paste', enabled: p.editFlags.canPaste }, { type: 'separator' }, { label: 'Alles auswählen', role: 'selectAll' });
     if (p.linkURL && /^https?:/i.test(p.linkURL)) eintraege.push({ type: 'separator' }, { label: 'Link kopieren', click: () => require('electron').clipboard.writeText(p.linkURL) });
-    if (eintraege.length) Menu.buildFromTemplate(eintraege).popup({ window: fenster });
+    if (eintraege.length) Menu.buildFromTemplate(eintraege).popup({ window: w });
   });
   // Windows-Tastenkürzel, die sonst das Anwendungsmenü liefern würde: Zoom (Strg +/−/0), F11 Vollbild, Strg+Umschalt+I nur in Tests nicht nötig.
-  fenster.webContents.on('before-input-event', (e, i) => {
+  w.webContents.on('before-input-event', (e, i) => {
     if (i.type !== 'keyDown') return;
-    const wc = fenster.webContents, z = wc.getZoomFactor();
+    const wc = w.webContents, z = wc.getZoomFactor();
     if (i.control && (i.key === '+' || i.key === '=' || i.code === 'NumpadAdd')) { wc.setZoomFactor(Math.min(2, Math.round((z + 0.1) * 10) / 10)); e.preventDefault(); }
     else if (i.control && (i.key === '-' || i.code === 'NumpadSubtract')) { wc.setZoomFactor(Math.max(0.6, Math.round((z - 0.1) * 10) / 10)); e.preventDefault(); }
     else if (i.control && (i.key === '0' || i.code === 'Numpad0')) { wc.setZoomFactor(1); e.preventDefault(); }
-    else if (i.key === 'F11') { fenster.setFullScreen(!fenster.isFullScreen()); e.preventDefault(); }
+    else if (i.key === 'F11') { w.setFullScreen(!w.isFullScreen()); e.preventDefault(); }
     else return;
-    wc.send('fenster:zoom', wc.getZoomFactor());
+    wc.send('w:zoom', wc.getZoomFactor());
   });
-  fenster.once('ready-to-show', () => fenster.show());
-  fenster.loadURL('app://schaden/index.html');
+  w.once('ready-to-show', () => w.show());
+  w.loadURL(url);
+  return w;
 }
+function erstelleFenster() { fenster = fensterBauen('app://schaden/index.html', true); }
+/** Unterfenster mit einem Bereich und ggf. einem Datensatz (#/beleg/…); es teilt den Datenstand mit dem Hauptfenster. */
+behandle('fenster:neu', (bereich, ziel) => {
+  const b = /^[a-z]{1,20}$/.test(String(bereich)) ? bereich : '', z = /^#\/[\w%@.\/-]{0,200}$/.test(String(ziel)) ? ziel : '';
+  const x = fensterBauen(`app://schaden/index.html?neben=1${b ? '&bereich=' + b : ''}${z}`, false);
+  return x.id;
+});
 if (IST_WINDOWS) {
-  systemPreferences.on('accent-color-changed', () => { if (fenster) fenster.webContents.send('fenster:info', fensterInfo()); });
-  nativeTheme.on('updated', () => { if (fenster) fenster.webContents.send('fenster:info', fensterInfo()); });
+  const allen = () => { for (const w of BrowserWindow.getAllWindows()) w.webContents.send('fenster:info', fensterInfo()); };
+  systemPreferences.on('accent-color-changed', allen);
+  nativeTheme.on('updated', allen);
 }
 ipcMain.on('fenster:info', e => { e.returnValue = fensterInfo(); });
 /** Farben der Titelleiste (Fenster-Knöpfe) passend zum hellen/dunklen Design der Oberfläche. */
 behandle('fenster:titelleiste', (farbe, symbol, thema) => {
   if (['light', 'dark', 'system'].includes(thema)) nativeTheme.themeSource = thema; // Mica und Fenster-Knöpfe folgen dem Design der App
-  if (!IST_WINDOWS || !fenster) return false;
-  fenster.setTitleBarOverlay({ color: MICA ? '#00000000' : String(farbe || '#F3F3F3'), symbolColor: String(symbol || '#1A1A1A'), height: TITEL_HOEHE });
+  const w = quelle();
+  if (!IST_WINDOWS || !w) return false;
+  w.setTitleBarOverlay({ color: MICA ? '#00000000' : String(farbe || '#F3F3F3'), symbolColor: String(symbol || '#1A1A1A'), height: TITEL_HOEHE });
   return true;
 });
 /** Zähler auf dem Taskleistensymbol (z. B. ungelesene Mails); png = kleines Abzeichen als Data-URL, leer = entfernen. */
@@ -225,7 +242,7 @@ behandle('fenster:zaehler', (anzahl, png) => {
   return true;
 });
 behandle('fenster:blinken', () => { if (fenster && !fenster.isFocused()) fenster.flashFrame(true); return true; });
-behandle('fenster:zoom', f => { if (fenster) fenster.webContents.setZoomFactor(Math.max(0.6, Math.min(2, Number(f) || 1))); return fenster ? fenster.webContents.getZoomFactor() : 1; });
+behandle('fenster:zoom', f => { const w = quelle(); if (w) w.webContents.setZoomFactor(Math.max(0.6, Math.min(2, Number(f) || 1))); return w ? w.webContents.getZoomFactor() : 1; });
 
 app.on('second-instance', () => { if (fenster) { if (fenster.isMinimized()) fenster.restore(); fenster.focus(); } });
 app.on('window-all-closed', () => app.quit());

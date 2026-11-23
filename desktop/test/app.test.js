@@ -288,3 +288,31 @@ test('Windows-App: Rechnung als PDF speichern und per E-Mail mit PDF-Anhang send
     await app.close();
   }
 });
+
+test('Windows-App: Unterfenster mit eigenem Bereich, gleicher Datenstand in beiden Fenstern', async () => {
+  const { app, s } = await starte();
+  try {
+    const neu = app.waitForEvent('window');
+    await s.evaluate(() => window.desktop.fenster.neu('finanzen', ''));
+    const u = await neu;
+    u.on('pageerror', e => { throw e; });
+    await u.waitForFunction(() => window.__appBereit);
+    assert.deepEqual(await u.evaluate(() => [NEBENFENSTER, ANSICHT.bereich]), [true, 'finanzen']);
+    assert.equal(await s.evaluate(() => NEBENFENSTER), false, 'erstes Fenster bleibt Hauptfenster');
+    // im Unterfenster anlegen → erscheint im Hauptfenster
+    await u.evaluate(() => Aktionen.firmaSpeichern({ name: 'Aus dem Unterfenster GmbH', status: 'AKTIV' }));
+    await s.waitForFunction(() => alle('auftraggeber').some(f => f.name === 'Aus dem Unterfenster GmbH'), null, { timeout: 10000 });
+    // und umgekehrt
+    await s.evaluate(() => Aktionen.firmaSpeichern({ name: 'Aus dem Hauptfenster KG', status: 'AKTIV' }));
+    await u.waitForFunction(() => alle('auftraggeber').some(f => f.name === 'Aus dem Hauptfenster KG'), null, { timeout: 10000 });
+    // ungültige Ziele werden nicht geladen
+    const zahl = app.windows().length;
+    const x = app.waitForEvent('window');
+    await s.evaluate(() => window.desktop.fenster.neu('../böse', 'javascript:alert(1)'));
+    const w = await x; await w.waitForLoadState();
+    assert.ok(!w.url().includes('javascript') && !w.url().includes('böse'), w.url());
+    assert.equal(app.windows().length, zahl + 1);
+  } finally {
+    await app.close();
+  }
+});

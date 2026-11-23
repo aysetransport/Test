@@ -19,7 +19,7 @@ window.API_URL = "https://script.google.com/macros/s/AKfycbw_wOlZk2pXCaHAVOOCjwh
 })();
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Stand dieser Oberfläche (von tools/app-update.js gesetzt) – für das In-App-Update der Windows- und Android-App.
-window.WEB_STAND = 1795459692; window.WEB_VERSION = '4.17.0';
+window.WEB_STAND = 1795459877; window.WEB_VERSION = '4.18.0';
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4E79">
@@ -972,6 +972,9 @@ function csvErstellen(faelle, anlagenJeFall) {
 
 // ============================== Daten im Browser ==============================
 const SPEICHER = 'schadensfaelle-v1', PIN_SPEICHER = 'schadensfaelle-pin';
+/** Unterfenster der Windows-App: eigener Bereich, gleicher Datenstand. Abgleich, Mailabruf und Updates laufen nur im Hauptfenster. */
+const NEBENFENSTER = /[?&]neben=1(&|$)/.test(location.search);
+const fensterNeu = (bereich, ziel = '') => { const f = window.desktop && window.desktop.fenster && window.desktop.fenster.neu; if (!f) return false; f(bereich, ziel).catch(e => toast(e.message)); return true; };
 const CRM_TABELLEN = ['adressen', 'ansprechpartner', 'preise', 'aktivitaeten', 'aufgaben', 'dokumente', 'chancen', 'belege', 'fahrzeuge', 'fahrzeugeintraege',
   'mitarbeiter', 'personaleintraege', 'abwesenheiten', 'einsatzarten', 'touren', 'zeiten', 'aufgabenIntern', 'tachotage', 'stopps', 'eingangsrechnungen'];
 const LEER = () => ({ faelle: {}, verlauf: {}, anlagen: {}, auftraggeber: {}, ...Object.fromEntries(CRM_TABELLEN.map(t => [t, {}])), seit: 0, kennung: '', apiUrl: '', nurLokal: false,
@@ -1235,7 +1238,7 @@ const offene = tabelle => Object.values(S[tabelle]).filter(d => d._dirty);
 function planeAbgleich(ms = 1200) { if (!mitCloud()) return; clearTimeout(SYNC.timer); SYNC.timer = setTimeout(abgleich, ms); zeichneSync(); }
 
 async function abgleich() {
-  if (!mitCloud()) return;
+  if (!mitCloud() || NEBENFENSTER) return; // das Hauptfenster gleicht für alle Fenster ab
   if (!PIN) { anmeldung(); return; }
   if (SYNC.laeuft) { SYNC.nochmal = true; return; }
   SYNC.laeuft = true; SYNC.nochmal = false; zeichneSync();
@@ -1669,6 +1672,7 @@ function zeichneNavi() {
   $('#navi').innerHTML = `<div class="nav-gross">${gruppen.map(g => `<div class="nav-gruppe">${esc(g)}</div>${Object.keys(BEREICHE).filter(k => BEREICHE[k][2] === g && bereichSichtbar(k)).map(k => knopf(k)).join('')}`).join('')}
       <div class="nav-gruppe"></div><button class="nav-knopf" data-nav-einstellungen><span class="nav-symbol" aria-hidden="true">${winSymbol('einstellungen', '⚙')}</span><span class="nav-text">Einstellungen</span></button>
       <button class="nav-knopf" data-nav-thema><span class="nav-symbol" aria-hidden="true">${winSymbol('thema', { hell: '☀', dunkel: '🌙' }[S.einstellungen.thema] || '🌓')}</span><span class="nav-text">Darstellung: ${{ hell: 'hell', dunkel: 'dunkel' }[S.einstellungen.thema] || 'automatisch'}</span></button>
+      ${window.desktop && window.desktop.fenster && window.desktop.fenster.neu ? `<button class="nav-knopf" data-nav-fenster title="Aktuelle Ansicht in einem eigenen Fenster (Strg+Umschalt+N) – Strg-Klick auf einen Bereich öffnet ihn dort"><span class="nav-symbol" aria-hidden="true">⧉</span><span class="nav-text">Neues Fenster</span></button>` : ''}
       <button class="nav-knopf" data-nav-hilfe><span class="nav-symbol" aria-hidden="true">${winSymbol('hilfe', '⌨')}</span><span class="nav-text">Tastenkürzel</span></button></div>
     <div class="nav-klein">${unten.filter(bereichSichtbar).map(k => knopf(k)).join('')}
       <button class="nav-knopf" data-nav-mehr aria-current="${mehrAktiv ? 'page' : 'false'}"><span class="nav-symbol" aria-hidden="true">☰</span><span class="nav-text">${mehrAktiv ? esc(t(BEREICHE[aktiv][0])) : 'Mehr'}</span>
@@ -1676,13 +1680,15 @@ function zeichneNavi() {
 }
 function bereichWechseln(k) {
   if (!formularSchliessen()) return;
-  ANSICHT.bereich = k; try { localStorage.setItem('crm-bereich', k); } catch {}
+  ANSICHT.bereich = k; try { if (!NEBENFENSTER) localStorage.setItem('crm-bereich', k); } catch {}
   if (k === 'touren' && !ANSICHT.tourTag) ANSICHT.tourTag = heute();
   if (route().art) gehe('#/'); else zeichne();
   window.scrollTo(0, 0);
 }
 $('#navi').addEventListener('click', e => {
   const b = e.target.closest('[data-bereich]');
+  if (b && (e.ctrlKey || e.shiftKey || e.metaKey) && fensterNeu(b.dataset.bereich)) return;
+  if (e.target.closest('[data-nav-fenster]')) { fensterNeu(ANSICHT.bereich, location.hash.startsWith('#/') ? location.hash : ''); return; }
   if (b) { document.body.classList.remove('nav-offen'); bereichWechseln(b.dataset.bereich); return; }
   if (e.target.closest('[data-nav-mehr]')) { document.body.classList.add('nav-offen'); return; }
   if (e.target.closest('[data-nav-einstellungen]')) { document.body.classList.remove('nav-offen'); gehe('#/einstellungen'); return; }
@@ -1841,6 +1847,7 @@ $('#liste').addEventListener('click', e => {
 const KONTEXT = [];
 const ANSICHT = { filter: 'OFFEN', suche: '', notiz: '', bereich: 'firmen', firmenSuche: '', firmenStatus: '', firmaFuerNeuenFall: '' };
 try { const b = localStorage.getItem('crm-bereich'); if (b && b in BEREICHE) ANSICHT.bereich = b; } catch {}
+try { const b = new URLSearchParams(location.search).get('bereich'); if (NEBENFENSTER && b && b in BEREICHE) ANSICHT.bereich = b; } catch {}
 function route() {
   const [, art = '', id = ''] = location.hash.split('/');
   return { art, id };
@@ -9843,6 +9850,7 @@ async function mailStart() {
   window.desktop.beiZiel(ziel => gehe(ziel));
   await mailsLaden();
   zeichne();
+  if (NEBENFENSTER) return; // Mails ruft nur das Hauptfenster ab
   if (MAIL.konto) { postfachAbrufen(); geplanteSenden(); }
   mailTimerSetzen();
 }
@@ -10294,8 +10302,7 @@ document.addEventListener('click', e => {
 if (updateApi()) {
   // Diese Fassung ist sauber gestartet – sonst fällt die App nach zwei Fehlstarts auf die mitgelieferte zurück.
   setTimeout(() => { updateApi().ok().catch(() => {}); updateApi().info().then(i => { UPD.info = i; }).catch(() => {}); }, 3000);
-  setTimeout(() => updatePruefen(false), 15000);
-  setInterval(() => updatePruefen(false), 4 * 3600 * 1000);
+  if (!NEBENFENSTER) { setTimeout(() => updatePruefen(false), 15000); setInterval(() => updatePruefen(false), 4 * 3600 * 1000); }
 }
 window.addEventListener('online', () => { if (SYNC.fehler === 'offline') { SYNC.fehler = ''; zeichneSync(); } toast('Wieder online – gleiche ab …'); abgleich(); });
 window.addEventListener('offline', () => { if (!mitCloud()) return; SYNC.fehler = 'offline'; zeichneSync(); toast('Offline – du kannst weiterarbeiten. Änderungen werden gespeichert und abgeglichen, sobald wieder Netz da ist.', 6000); });
@@ -10315,6 +10322,17 @@ if (anmeldeLink && anmeldeLink.neueCloud) {
 else if (anmeldeLink && mitCloud()) mitLink();
 else if (mitCloud()) abgleich();
 mailStart();
+// Mehrere Fenster: ändert ein anderes Fenster die Daten, hier übernehmen; das Hauptfenster gleicht sie dann ab.
+window.addEventListener('storage', e => {
+  if (e.key !== SPEICHER || !e.newValue) return;
+  try { const mailsHier = S.mails; S = Object.assign(LEER(), JSON.parse(e.newValue)); if (!S.mails) S.mails = mailsHier; } catch { return; }
+  zeichne(); planeAbgleich();
+});
+// Mittelklick bzw. Strg-Klick auf einen Bereich oder Verweis: in einem eigenen Fenster
+document.addEventListener('auxclick', e => { if (e.button !== 1) return; const b = e.target.closest('#navi [data-bereich]'), a = e.target.closest('a[href^="#/"]');
+  if (b && fensterNeu(b.dataset.bereich)) e.preventDefault(); else if (a && fensterNeu(ANSICHT.bereich, a.getAttribute('href'))) e.preventDefault(); });
+document.addEventListener('click', e => { const a = e.target.closest('a[href^="#/"]'); if (a && (e.ctrlKey || e.metaKey) && fensterNeu(ANSICHT.bereich, a.getAttribute('href'))) e.preventDefault(); }, true);
+document.addEventListener('keydown', e => { if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'n' && fensterNeu(ANSICHT.bereich, location.hash.startsWith('#/') ? location.hash : '')) e.preventDefault(); });
 window.__appBereit = true;
 </script>
 </body>

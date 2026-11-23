@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('desktop', {
     zaehler: (anzahl, png) => aufruf('fenster:zaehler', anzahl, png),
     blinken: () => aufruf('fenster:blinken'),
     zoom: f => aufruf('fenster:zoom', f),
+    neu: (bereich, ziel) => aufruf('fenster:neu', bereich, ziel), // Unterfenster: Bereich und ggf. Datensatz (#/beleg/…)
   },
   // Update der App selbst (neues Setup bzw. neue APK)
   app: { pruefen: () => aufruf('app:pruefen'), installieren: () => aufruf('app:installieren') },
