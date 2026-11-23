@@ -70,6 +70,7 @@ behandle('app:installieren', () => {
 });
 behandle('scan:geraete', () => scan.geraete());
 behandle('scan:stapel', (id, modus) => scan.stapel(id, modus === 'EINZELN' ? 'EINZELN' : 'STAPEL'));
+behandle('scan:pruefen', (id, test) => scan.pruefen(id, !!test));
 behandle('ocr:lesen', base64 => scan.lesen(base64));
 app.on('will-quit', () => { scan.beenden().catch(() => {}); });
 behandle('mail:konto', a => ohnePasswort(ladeKonto(a)));

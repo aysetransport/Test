@@ -2611,8 +2611,9 @@ test('Scannen (Windows): Tankbelege und Rechnungen auslesen, prüfen, speichern 
     window.__modus = []; window.__texte = [];
     const seite = (n, text) => ({ name: n + '.jpg', mimeType: 'image/jpeg', base64: btoa(n), text });
     window.desktop = { plattform: 'win32', beiZiel() {}, oeffneDatei: async () => true, benachrichtige: async () => true,
-      scan: { geraete: async () => [{ id: 'hp', name: 'HP ScanJet Pro N4000 snw1' }],
-        stapel: async (id, modus) => { window.__modus.push(modus); const l = window.__texte.shift(); return l.map((t, i) => seite('s' + window.__modus.length + '_' + i, t)); },
+      scan: { geraete: async () => [{ id: 'alt', name: 'HP (Netzwerk, alt)' }, { id: 'hp', name: 'HP ScanJet Pro N4000 snw1' }],
+        pruefen: async (id, test) => `Gerät ${id} test=${test}`,
+        stapel: async (id, modus) => { window.__modus.push(modus); window.__ids = [...(window.__ids || []), id]; const l = window.__texte.shift(); return l.map((t, i) => seite('s' + window.__modus.length + '_' + i, t)); },
         lesen: async b64 => { const n = atob(b64); return { text: window.__alle[n], sicherheit: n.endsWith('_1') && window.__schlecht ? 40 : 90 }; } } };
     window.__alle = {};
     const merkeTexte = (k, l) => l.forEach((t, i) => { window.__alle['s' + k + '_' + i] = t; });
@@ -2625,6 +2626,10 @@ test('Scannen (Windows): Tankbelege und Rechnungen auslesen, prüfen, speichern 
   assert.deepEqual([t.datum, t.betragCent, t.liter, t.kz, t.km, t.ort, t.unsicher], ['2026-11-12', 10990, 62.48, 'KR-AT 100', '120345', 'Aral', []]);
   // Tankbelege: Stapel scannen → zwei vorausgefüllte Zeilen → speichern (mit Scan als Dokument)
   await s.locator('[data-tankbelege]').first().click();
+  await s.waitForFunction(() => document.querySelectorAll('#dialog [data-scan-geraet] option').length === 2);
+  await s.locator('#dialog [data-scan-geraet]').selectOption('hp'); // gewählter Scanner wird benutzt und gemerkt
+  await s.locator('#dialog [data-scan-pruefen]').click();
+  await s.locator('#dialog [data-scan-bericht] pre', { hasText: 'Gerät hp test=true' }).waitFor();
   await s.locator('#tank-scan').click();
   await s.waitForFunction(() => document.querySelectorAll('#tank-tabelle tbody tr[data-scan]').length === 2);
   assert.equal(await s.evaluate(() => window.__modus[0]), 'STAPEL');
@@ -2639,6 +2644,7 @@ test('Scannen (Windows): Tankbelege und Rechnungen auslesen, prüfen, speichern 
   assert.deepEqual(tank.ohne, [['Shell', '2026-11-13', 7040]]);
   // Rechnungen: Stapel mit Folgeseite → zwei Rechnungen, die erste mit zwei Seiten
   await s.locator('[data-rechnungen-scannen]').click();
+  await s.waitForFunction(() => document.querySelector('#dialog [data-scan-geraet]').value === 'hp');
   await s.locator('#ers-scan').click();
   await s.waitForFunction(() => document.querySelectorAll('#ers-tabelle tbody tr').length === 2);
   const zeilen = await s.evaluate(() => [...document.querySelectorAll('#ers-tabelle tbody tr')].map(r => Object.fromEntries([...r.querySelectorAll('[data-t]')].map(i => [i.dataset.t, i.type === 'checkbox' ? i.checked : i.value]))));
@@ -2651,6 +2657,7 @@ test('Scannen (Windows): Tankbelege und Rechnungen auslesen, prüfen, speichern 
   await s.locator('#ers-scan').click();
   await s.waitForFunction(() => document.querySelectorAll('#ers-tabelle tbody tr').length === 3);
   assert.equal(await s.evaluate(() => window.__modus[2]), 'EINZELN');
+  assert.deepEqual(await s.evaluate(() => window.__ids), ['hp', 'hp', 'hp']);
   assert.equal(await s.locator('#ers-scan').textContent(), '🖨 Nächste Rechnung scannen');
   await s.locator('#ers-form button.voll').click();
   await s.locator('#toast', { hasText: '2 Eingangsrechnung(en) gespeichert' }).waitFor();

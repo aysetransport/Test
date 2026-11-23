@@ -321,6 +321,7 @@ test('Windows-App: Tankbeleg scannen und mit der Texterkennung auslesen (Ordner 
   const { app, s } = await starte({ SCHADEN_SCAN_ORDNER: path.join(__dirname, 'scans') });
   try {
     await s.evaluate(() => { merke('fahrzeuge', { id: uuid(), kennzeichen: 'KR-AT 100', status: 'AKTIV', geaendertAm: jetztIso() }); nachAenderung(); tankbelegeDialog(); });
+    assert.equal(await s.evaluate(() => window.desktop.scan.pruefen('test', true)), 'Test-Scanner (Ordner statt Scanner)');
     await s.locator('#tank-scan').click();
     await s.waitForFunction(() => document.querySelector('#tank-tabelle tbody tr[data-scan]'), null, { timeout: 90000 });
     const w = await s.evaluate(() => Object.fromEntries([...document.querySelectorAll('#tank-tabelle tr[data-scan] input')].map(i => [i.dataset.t, i.value])));
