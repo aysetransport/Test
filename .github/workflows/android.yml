@@ -30,18 +30,17 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Fester Signaturschlüssel aus den Secrets des Repositorys (optional, siehe README → Installieren).
+      # Fester Signaturschlüssel nur aus den Secrets (öffentliches Repository). Ohne ihn: Prüfen und Bauen ja, Veröffentlichen nein.
       # Damit tragen alle künftigen APKs dieselbe Signatur und lassen sich über die vorige installieren.
       - name: Signaturschlüssel bereitlegen
         env:
           SIGNATUR_BASE64: ${{ secrets.SIGNATUR_BASE64 }}
         run: |
           if [ -n "$SIGNATUR_BASE64" ]; then
-            echo "$SIGNATUR_BASE64" | base64 -d > "$RUNNER_TEMP/signatur.jks"
-            echo "SIGNATUR_DATEI=$RUNNER_TEMP/signatur.jks" >> "$GITHUB_ENV"
+            echo "$SIGNATUR_BASE64" | base64 -d > "$RUNNER_TEMP/signatur.p12"
+            echo "SIGNATUR_DATEI=$RUNNER_TEMP/signatur.p12" >> "$GITHUB_ENV"
           else
-            echo "Kein Secret hinterlegt – es gilt der Schlüssel im Repository (app/signatur)."
-            echo "SIGNATUR_DATEI=$GITHUB_WORKSPACE/app/signatur/ayse-crm.p12" >> "$GITHUB_ENV"
+            echo "::warning::Secret SIGNATUR_BASE64 fehlt – die APK wird gebaut, aber nicht veröffentlicht."
           fi
 
       # Fortlaufende versionCode, damit das App-Update jede neue APK als neuer erkennt (build.gradle.kts)

@@ -21,3 +21,8 @@ captures/
 
 .DS_Store
 node_modules/
+
+# Signaturschlüssel nie ins (öffentliche) Repository – nur GitHub-Secrets
+*.p12
+*.jks
+*.keystore
