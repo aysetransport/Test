@@ -341,6 +341,34 @@ dialog h3{font-size:var(--t-fuss);font-weight:600;color:var(--leise);margin:20px
 .leer{text-align:center;padding:48px 24px;color:var(--leise);font-size:var(--t-unter);display:flex;flex-direction:column;align-items:center;gap:4px}
 .leer > .ico:first-child,.leer > svg:first-child{width:44px;height:44px;margin:0 0 8px;color:var(--leise3);stroke-width:1.5}
 .leer b{display:block;color:var(--text);font-size:var(--t-titel3);font-weight:700;margin:6px 0 2px}
+/* Abschnitte (Apple): Überschrift über der Gruppe, Einträge als Zeilen mit Trennlinien */
+.gruppe{margin-bottom:24px}
+.gruppe-kopf{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:0 4px 6px}
+.gruppe-kopf h3{font-size:var(--t-titel3);font-weight:700;letter-spacing:-.015em;margin:0}
+.gruppe-kopf .knopf.text{min-height:32px}
+.gruppe > .karte{margin:0}
+.karte.liste{padding:4px 0;overflow:hidden}
+.karte.liste > *{position:relative;margin:0}
+.karte.liste > * + *::before{content:"";position:absolute;left:16px;right:0;top:0;border-top:.5px solid var(--linie)}
+.karte.liste > :is(.vorlage,.zeile,.termin,details,p,div){padding-left:16px;padding-right:12px}
+.karte.liste > .vorlage,.karte.liste > .zeile > .vorlage,.karte.liste > .termin > .vorlage{border-radius:0;padding-top:12px;padding-bottom:12px}
+.karte.liste > .zeile > .vorlage,.karte.liste > .termin > .vorlage{padding-left:0;flex:1;min-width:0}
+.karte.liste > .vorlage:hover,.karte.liste > .zeile:hover{background:color-mix(in srgb,var(--flaeche2) 45%,transparent)}
+.karte.liste > .leer-zeile,.karte.liste > p.leise{padding-top:12px;padding-bottom:12px}
+.leer-zeile{color:var(--leise);font-size:var(--t-unter);margin:0}
+.karte.liste > div > p.leise:only-child{padding:12px 0;font-size:var(--t-unter)}
+.karte.liste details > summary{padding:10px 0}
+/* Kopf einer Firma/Person wie in „Kontakte“: Bild, Name, Aktionen */
+.kontaktkopf{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:4px 0 18px}
+.avatar{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;font:600 36px/1 var(--schrift-rund);color:#fff;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--farbe,#8E8E93) 70%,#fff),var(--farbe,#8E8E93));box-shadow:0 6px 18px color-mix(in srgb,var(--farbe,#000) 30%,transparent)}
+.kk-name{font-size:var(--t-titel1);font-weight:700;letter-spacing:-.02em;margin-top:6px}
+.kk-unter{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+.kk-aktionen{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;width:100%;max-width:460px;margin-top:12px}
+.kk-aktion{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;min-height:60px;border:0;border-radius:var(--r-kachel);background:var(--flaeche);color:var(--primaer);font-size:var(--t-klein);font-weight:500;cursor:pointer}
+.kk-aktion .ico{width:22px;height:22px;margin:0}
+.kk-aktion:disabled{color:var(--leise3);cursor:default}
+.kk-aktion:not(:disabled):hover{background:color-mix(in srgb,var(--flaeche) 90%,var(--text))}
 /* Listen in Karten (Vorlagen, Auswahl) */
 .vorlage{display:block;width:100%;text-align:left;border:0;background:transparent;padding:12px;border-radius:12px;cursor:pointer;color:inherit;font-size:var(--t-callout)}
 .vorlage:hover{background:var(--flaeche2)}
@@ -2918,12 +2946,15 @@ function historieNeu() {
   box.innerHTML = ''; box.appendChild(kopf); box.insertAdjacentHTML('beforeend', historieHtml(e) || '<p class="leise">Noch nichts eingetragen.</p>');
 }
 
+/** Abschnitt nach Apple: Überschrift über der gruppierten Fläche, optional eine Aktion rechts daneben. */
+const gruppe = (titel, inhalt, aktion = '', attr = '') => `<section class="gruppe" ${attr}><div class="gruppe-kopf"><h3>${titel}</h3>${aktion}</div><div class="karte liste">${inhalt}</div></section>`;
 function zeichneFirma(id) {
   const e = S.auftraggeber[id];
   const el = $('#detail');
   if (!e || e.geloescht) { gehe('#/'); return; }
-  const bereich = (titel, tabelle, inhalt, neuText = 'Hinzufügen') => `<div class="karte block" data-bereich-firma="${tabelle}"><div class="zeile eng"><h3 class="fuell" style="margin:0">${titel}</h3>
-    <button class="knopf text" data-crm-neu="${tabelle}">＋ ${neuText}</button></div>${inhalt || '<p class="leise">Noch nichts eingetragen.</p>'}</div>`;
+  // Apple: Abschnitt mit Überschrift über der Gruppe, Aktion rechts daneben; Einträge als Zeilen mit Trennlinien
+  const bereich = (titel, tabelle, inhalt, neuText = 'Hinzufügen') => gruppe(titel, inhalt || '<p class="leer-zeile">Noch nichts eingetragen.</p>',
+    `<button class="knopf text" data-crm-neu="${tabelle}">＋ ${neuText}</button>`, `data-bereich-firma="${tabelle}"`);
   const zeile = (tabelle, x, titel, unter) => `<button class="vorlage" data-crm="${tabelle}" data-crm-id="${x.id}"><b>${esc(titel)}</b>${unter ? `<br><span class="leise" style="white-space:pre-wrap">${esc(unter)}</span>` : ''}</button>`;
   const kontakte = kontakteVon(id).map(k => `<div class="zeile eng">${zeile('ansprechpartner', k, k.name, [k.thema, k.telefon, k.email].filter(Boolean).join(' · '))}
       ${k.telefon ? `<button class="symbol" data-oeffne="tel:${esc(k.telefon.replace(/[^\d+]/g, ''))}" aria-label="${esc(k.name)} anrufen">☎</button>` : ''}
@@ -2953,19 +2984,25 @@ function zeichneFirma(id) {
     summe(ch.filter(c => c.phase === 'GEWONNEN').map(c => c.wertCent)) && ['Gewonnen', geld(summe(ch.filter(c => c.phase === 'GEWONNEN').map(c => c.wertCent)))],
     ['Letzter Kontakt', letzterKontakt(id) ? datumText(letzterKontakt(id)) : 'noch keiner']].filter(Boolean);
   el.dataset.id = 'firma' + id;
-  el.innerHTML = `<div class="karte" id="stammdaten">
-      <div class="zeile eng"><h2 class="gross fuell">${esc(firmaName(e))}</h2><span class="marke ${firmenStatus(e)[1]}">${firmenStatus(e)[0]}</span>
-        <button class="symbol" data-firma-bearbeiten aria-label="Stammdaten bearbeiten">✎</button></div>
-      ${e.telefon ? `<p><a href="tel:${esc(e.telefon.replace(/[^\d+]/g, ''))}">☎ ${esc(e.telefon)}</a></p>` : ''}
-      ${e.email ? `<p><button class="knopf text" style="padding:0" data-oeffne="mailto:${esc(e.email)}">✉ ${esc(e.email)}</button></p>` : ''}
-      ${e.website ? `<p><a href="${esc(/^https?:/i.test(e.website) ? e.website : 'https://' + e.website)}" target="_blank" rel="noopener">🌐 ${esc(e.website)}</a></p>` : ''}
-      ${e.notizen ? `<p class="leise" style="white-space:pre-wrap;margin-top:6px">${esc(e.notizen)}</p>` : ''}
-      ${schlagwortListe(e).length ? `<p class="leise" style="color:var(--primaer)">${schlagwortListe(e).map(w => '#' + esc(w)).join('  ')}</p>` : ''}
-      ${!e.telefon && !e.email && !e.website && !e.notizen ? '<p class="leise">Telefon, E-Mail, Website und Notizen über ✎ eintragen.</p>' : ''}
-      ${MAIL.konto ? '<button class="knopf" style="margin-top:8px" data-oeffne="mailto:' + esc(e.email || '') + '">✉ E-Mail schreiben</button>' : ''}</div>
+  const tel = e.telefon && e.telefon.replace(/[^\d+]/g, ''), web = e.website && (/^https?:/i.test(e.website) ? e.website : 'https://' + e.website);
+  const unter = (vonFirma('adressen', id)[0] || {}).ort || ''; // Rechtsform steht schon im Namen
+  const info = [e.telefon && ['Telefon', `<a href="tel:${esc(tel)}">${esc(e.telefon)}</a>`], e.email && ['E-Mail', `<button class="knopf text" style="padding:0;min-height:0" data-oeffne="mailto:${esc(e.email)}">${esc(e.email)}</button>`],
+    e.website && ['Website', `<a href="${esc(web)}" target="_blank" rel="noopener">${esc(e.website)}</a>`], e.notizen && ['Notizen', esc(e.notizen)],
+    schlagwortListe(e).length && ['Schlagworte', schlagwortListe(e).map(w => '#' + esc(w)).join('  ')]].filter(Boolean);
+  el.innerHTML = `<div class="kontaktkopf" id="stammdaten">
+      <span class="avatar" style="--farbe:${avatarFarbe(e.name)}" aria-hidden="true">${esc(initialen(firmaName(e)))}</span>
+      <h2 class="kk-name">${esc(firmaName(e))}</h2>
+      <p class="kk-unter"><span class="marke ${firmenStatus(e)[1]}">${firmenStatus(e)[0]}</span>${unter ? ` <span class="leise">${esc(unter)}</span>` : ''}</p>
+      <div class="kk-aktionen">
+        <button class="kk-aktion" ${tel ? `data-oeffne="tel:${esc(tel)}"` : 'disabled'}>${ico('phone', 'allein')}<span>Anrufen</span></button>
+        <button class="kk-aktion" ${e.email || MAIL.konto ? `data-oeffne="mailto:${esc(e.email || '')}"` : 'disabled'}>${ico('mail', 'allein')}<span>E-Mail</span></button>
+        <button class="kk-aktion" ${web ? `data-oeffne="${esc(web)}"` : 'disabled'}>${ico('globe', 'allein')}<span>Website</span></button>
+        <button class="kk-aktion" data-firma-bearbeiten aria-label="Stammdaten bearbeiten">${ico('pencil', 'allein')}<span>Bearbeiten</span></button>
+      </div></div>
+    ${info.length ? `<div class="karte"><dl>${info.map(([l, w]) => `<dt>${esc(l)}</dt><dd>${w}</dd>`).join('')}</dl></div>` : '<p class="leise" style="text-align:center;margin:-4px 0 16px">Telefon, E-Mail, Website und Notizen über „Bearbeiten“ eintragen.</p>'}
     <div class="karte" id="kennzahlen"><dl>${kennzahlen.map(([l, w]) => `<dt>${esc(l)}</dt><dd>${esc(w)}</dd>`).join('')}</dl></div>
     ${akquiseHtml(e)}
-    <div class="karte block"><div class="zeile eng"><h3 class="fuell" style="margin:0">Touren</h3><button class="knopf text" data-rechnung-touren="${id}">🧾 Rechnung aus Touren</button></div><div id="firma-touren">${firmaTourenHtml(e)}</div></div>
+    ${gruppe('Touren', `<div id="firma-touren">${firmaTourenHtml(e)}</div>`, `<button class="knopf text" data-rechnung-touren="${id}">🧾 Rechnung aus Touren</button>`)}
     ${bereich('Verkaufschancen', 'chancen', chancen)}
     ${bereich('Ansprechpartner', 'ansprechpartner', kontakte)}
     ${bereich('Adressen', 'adressen', adressen)}
@@ -9577,10 +9614,10 @@ function interessentDialog() {
 function akquiseHtml(e) {
   const offen = vonFirma('aufgaben', e.id).filter(a => !a.erledigt).sort((a, b) => String(a.faelligAm || '9').localeCompare(String(b.faelligAm || '9')))[0];
   const anrufe = vonFirma('aktivitaeten', e.id).filter(a => a.art === 'ANRUF').length, mails = vonFirma('aktivitaeten', e.id).filter(a => a.art === 'EMAIL').length;
-  return `<div class="karte block"><h3>Kontakt und Akquise</h3>
+  return `<section class="gruppe"><div class="gruppe-kopf"><h3>Kontakt und Akquise</h3></div><div class="karte">
     <p class="leise">${anrufe} Anrufe · ${mails} E-Mails${letzterKontakt(e.id) ? ' · letzter Kontakt ' + esc(datumText(letzterKontakt(e.id))) : ''}${offen ? ` · nächster Schritt: ${esc(offen.text)}${offen.faelligAm ? ' (' + esc(datumText(offen.faelligAm)) + ')' : ''}` : ''}</p>
     <div class="zeile" style="margin-top:8px"><button class="knopf voll" data-akquise="anruf">📞 Anruf festhalten</button>
-      <button class="knopf" data-akquise="mail">✉ Vorlage senden</button><button class="knopf" data-brief="AUFTRAG">📄 Brief</button>${e.status === 'INTERESSENT' || e.status === 'EHEMALIG' ? '<button class="knopf" data-akquise="ablauf">▶ Akquise-Ablauf</button>' : ''}</div></div>`;
+      <button class="knopf" data-akquise="mail">✉ Vorlage senden</button><button class="knopf" data-brief="AUFTRAG">📄 Brief</button>${e.status === 'INTERESSENT' || e.status === 'EHEMALIG' ? '<button class="knopf" data-akquise="ablauf">▶ Akquise-Ablauf</button>' : ''}</div></div></section>`;
 }
 function firmenVorlageWaehlen(firma) {
   dialog(`<h2>Vorlage für ${esc(firma.name)}</h2><div id="fv-liste">${Object.entries(FIRMEN_VORLAGEN).map(([k, [l, b]]) => `<button class="vorlage" data-fv="${k}"><b>${esc(l)}</b><br><span class="leise">${esc(firmenVorlageFuellen(b, firma))}</span></button>`).join('')}</div>
