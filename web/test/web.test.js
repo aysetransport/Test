@@ -1836,7 +1836,7 @@ test('Sprachen: Fahrer-Ansicht auf Türkisch und Arabisch (RTL), Kunden-Nachrich
 
 test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubte Einstellungen', async () => {
   const s = await geraet(null, { bereich: 'personal' });
-  const ansicht = async rolle => s.evaluate(r => { S.zugang = r === 'ADMIN' ? null : { rolle: r, name: 'X' }; S.nurLokal = false; S.apiUrl = 'https://example.invalid/exec'; zeichne(); return rolle(); }, rolle);
+  const ansicht = async rolle => s.evaluate(r => { S.zugang = r === 'ADMIN' ? null : { rolle: r, name: 'X' }; PIN = 'T:test'; S.nurLokal = false; S.apiUrl = 'https://example.invalid/exec'; zeichne(); return rolle(); }, rolle);
   await s.evaluate(() => { PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER' }); });
   // Admin (ohne Cloud) sieht Exporte
   assert.ok(await s.locator('[data-personal-csv]').isVisible());
