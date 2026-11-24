@@ -53,6 +53,22 @@ async function legeFallAn(s, felder) {
 const cloudDaten = cloud => JSON.parse(cloud.umgebung.datei('Schadensfaelle/daten.json').bytes.toString('utf8'));
 const jahr = new Date().getFullYear();
 
+test('Handy (Web/iPhone/Android): Suche öffnet sich, Menü schwebt als Panel über der unteren Leiste', async () => {
+  const s = await geraet(null, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, bereich: 'uebersicht' });
+  await s.evaluate(() => { merke('auftraggeber', { id: uuid(), name: 'Spedition Meier GmbH', geaendertAm: jetztIso() }); nachAenderung(); });
+  await s.locator('#suche-knopf').click();
+  assert.ok(await s.locator('#globale-suche').isVisible(), 'Suchfeld bleibt nach dem Klick offen');
+  await s.keyboard.type('Meier');
+  await s.locator('#suchtreffer .treffer', { hasText: 'Spedition Meier GmbH' }).waitFor();
+  await s.keyboard.press('Escape');
+  await s.locator('#menue-knopf').click();
+  const panel = await s.locator('.nav-gross').boundingBox(), leiste = await s.locator('.nav-klein').boundingBox();
+  assert.ok(panel.height > 300 && panel.y + panel.height <= leiste.y, `Menü schwebt über der Leiste (${JSON.stringify(panel)})`);
+  await s.locator('.nav-gross [data-bereich="firmen"]').click();
+  assert.equal(await s.evaluate(() => document.body.classList.contains('nav-offen')), false);
+  await s.close();
+});
+
 test('Fachlogik im Browser stimmt mit der Android-App überein', async () => {
   const s = await geraet();
   const r = await s.evaluate(() => ({
