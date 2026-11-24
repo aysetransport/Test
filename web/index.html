@@ -1317,12 +1317,40 @@ let PIN = ''; try { PIN = localStorage.getItem(PIN_SPEICHER) || ''; } catch {}
 const apiUrl = () => S.apiUrl || window.API_URL; // eine auf dem Gerät eingetragene Adresse geht vor
 const mitCloud = () => !!apiUrl() && !S.nurLokal;
 
+/**
+ * Großer Bestand: Passt der Stand nicht mehr in den localStorage (etwa 5 MB), liegt er ab dann in IndexedDB („stand“).
+ * Im localStorage bleibt nur ein kleiner Vermerk (__idb), damit Start und andere Fenster wissen, wo der Stand liegt.
+ */
+const STAND = { laedt: null };
+const standVermerk = () => JSON.stringify({ __idb: true, t: Date.now(), apiUrl: S.apiUrl, nurLokal: S.nurLokal, einstellungen: S.einstellungen });
 function speichere() {
   speichere.zaehler = (speichere.zaehler || 0) + 1;
+  if (STAND.laedt) { STAND.laedt.then(speichere); return; } // erst den Stand aus IndexedDB übernehmen, sonst würde er überschrieben
   // Mails liegen (ab dem ersten Laden) in IndexedDB – nicht im knappen localStorage.
-  try { const { mails: _m, ...ohneMails } = S; localStorage.setItem(SPEICHER, JSON.stringify(typeof MAILSPEICHER !== 'undefined' && MAILSPEICHER.inIdb ? ohneMails : S)); }
-  catch { toast('Speichern im Browser fehlgeschlagen – bitte Speicherplatz prüfen.'); }
+  const { mails: _m, ...ohneMails } = S, text = JSON.stringify(typeof MAILSPEICHER !== 'undefined' && MAILSPEICHER.inIdb ? ohneMails : S);
+  try { if (S.__idb) throw new Error('IndexedDB'); localStorage.setItem(SPEICHER, text); }
+  catch {
+    S.__idb = true;
+    Dateien.lege('stand', new Blob([text], { type: 'application/json' }))
+      .then(() => { try { localStorage.setItem(SPEICHER, standVermerk()); } catch {} })
+      .catch(() => toast('Speichern auf dem Gerät fehlgeschlagen – bitte Speicherplatz prüfen und mit der Cloud abgleichen.'));
+  }
   if (typeof mailsSpeichernBald === 'function') mailsSpeichernBald();
+}
+/** Stand aus IndexedDB laden (großer Bestand); was inzwischen lokal geändert wurde, bleibt erhalten. */
+function standLaden() {
+  return (STAND.laedt = (async () => {
+    try {
+      const blob = await Dateien.hole('stand'), geladen = blob ? JSON.parse(await blob.text()) : null;
+      if (geladen) {
+        const neu = Object.assign(LEER(), geladen, { __idb: true });
+        for (const t of TABELLEN) for (const d of Object.values(S[t] || {})) if (d._dirty) neu[t][d.id] = d;
+        if (S.mails) neu.mails = S.mails;
+        S = neu;
+      }
+    } finally { STAND.laedt = null; }
+    if (typeof zeichne === 'function') zeichne();
+  })());
 }
 const alle = tabelle => Object.values(S[tabelle]).filter(d => !d.geloescht);
 const faelle = () => alle('faelle');
@@ -1535,6 +1563,7 @@ const Dateien = {
     const u = URL.createObjectURL(blob); this.adressen.set(a.id, u); return u;
   },
 };
+if (S.__idb) standLaden();
 /** Große Fotos auf höchstens 2560 Pixel Kantenlänge verkleinern – spart Übertragung und Speicher. */
 async function verkleinere(datei) {
   if (!/^image\/(jpeg|png|webp)$/.test(datei.type) || datei.size < 1.5 * 1024 * 1024) return datei;
@@ -1572,6 +1601,7 @@ function planeAbgleich(ms = 1200) { if (!mitCloud()) return; clearTimeout(SYNC.t
 async function abgleich() {
   if (!mitCloud() || NEBENFENSTER) return; // das Hauptfenster gleicht für alle Fenster ab
   if (!PIN) { anmeldung(); return; }
+  if (STAND.laedt) { await STAND.laedt; }
   if (SYNC.laeuft) { SYNC.nochmal = true; return; }
   SYNC.laeuft = true; SYNC.nochmal = false; zeichneSync();
   try {
@@ -11264,7 +11294,11 @@ mailStart();
 // Mehrere Fenster: ändert ein anderes Fenster die Daten, hier übernehmen; das Hauptfenster gleicht sie dann ab.
 window.addEventListener('storage', e => {
   if (e.key !== SPEICHER || !e.newValue) return;
-  try { const mailsHier = S.mails; S = Object.assign(LEER(), JSON.parse(e.newValue)); if (!S.mails) S.mails = mailsHier; } catch { return; }
+  try {
+    const neu = JSON.parse(e.newValue);
+    if (neu.__idb) { S.__idb = true; standLaden().then(planeAbgleich); return; } // großer Bestand: aus IndexedDB nachladen
+    const mailsHier = S.mails; S = Object.assign(LEER(), neu); if (!S.mails) S.mails = mailsHier;
+  } catch { return; }
   zeichne(); planeAbgleich();
 });
 // Mittelklick bzw. Strg-Klick auf einen Bereich oder Verweis: in einem eigenen Fenster

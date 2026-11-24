@@ -97,7 +97,8 @@ behandle('benachrichtige', (titel, text, ziel) => {
   return true;
 });
 // Programme und Skripte aus Mails nie direkt starten (Phishing) – nur speichern lassen.
-const AUSFUEHRBAR = /\.(exe|com|scr|pif|bat|cmd|msi|msp|msix|appx|appinstaller|js|jse|vbs|vbe|wsf|wsh|hta|lnk|url|scf|ps1|psm1|reg|cpl|jar|inf|iso|img|vhdx?)$/i;
+// auch die selteneren Typen, über die Phishing Code startet (z. B. .msc/„GrimResource“, .chm, .xll, ClickOnce, Such- und Bibliotheks-Verknüpfungen)
+const AUSFUEHRBAR = /\.(exe|com|scr|pif|bat|cmd|msi|msp|msix|msixbundle|appx|appxbundle|appinstaller|js|jse|vbs|vbe|wsf|wsh|wsc|ws|hta|lnk|url|website|scf|ps1|psm1|psd1|reg|cpl|jar|inf|iso|img|vhdx?|msc|chm|hlp|xll|appref-ms|application|xbap|settingcontent-ms|library-ms|search-ms|searchconnector-ms|diagcab|gadget|onepkg|sct|mde|ade|adp|ins|isp|mst|shb|shs|vxd|sys|dll|ocx)$/i;
 behandle('datei:oeffnen', async (name, bytes) => {
   const sicher = String(name || 'Anlage').replace(/[\\/:*?"<>|]/g, '_').replace(/[.\s]+$/, '').slice(0, 120);
   if (AUSFUEHRBAR.test(sicher)) throw new Error(`„${sicher}“ ist ein Programm oder Skript und wird aus Sicherheitsgründen nicht geöffnet. Bitte nur öffnen, wenn der Absender sicher ist: erst speichern, dann prüfen.`);

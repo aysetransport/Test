@@ -119,6 +119,23 @@ test('Bedienung nach Apple (Web/Android): Verwerfen-Rückfrage, Aktionsblatt, Gl
   await s.close();
 });
 
+test('Voller Gerätespeicher: großer Bestand wandert in IndexedDB und ist nach dem Neustart vollständig da', async () => {
+  const s = await geraet();
+  await s.evaluate(() => {
+    const original = Storage.prototype.setItem; // localStorage „voll“: großer Stand passt nicht mehr hinein
+    Storage.prototype.setItem = function (k, v) { if (k === 'schadensfaelle-v1' && String(v).length > 3000) throw new DOMException('voll', 'QuotaExceededError'); return original.call(this, k, v); };
+    for (let i = 0; i < 40; i++) merke('auftraggeber', { id: uuid(), name: 'Großkunde ' + i, status: 'AKTIV', geaendertAm: jetztIso() });
+    nachAenderung();
+  });
+  await s.waitForFunction(() => JSON.parse(localStorage.getItem('schadensfaelle-v1') || '{}').__idb === true);
+  await s.reload(); await s.waitForFunction(() => window.__appBereit);
+  await s.waitForFunction(() => alle('auftraggeber').filter(f => f.name.startsWith('Großkunde')).length === 40);
+  await s.evaluate(() => { merke('auftraggeber', { id: uuid(), name: 'Nach dem Umzug', status: 'AKTIV', geaendertAm: jetztIso() }); nachAenderung(); });
+  await s.waitForTimeout(300); await s.reload(); await s.waitForFunction(() => window.__appBereit);
+  await s.waitForFunction(() => alle('auftraggeber').some(f => f.name === 'Nach dem Umzug') && alle('auftraggeber').length === 41);
+  await s.close();
+});
+
 test('Symbole (Web/Android): Navigation und Knöpfe mit Linien-Symbolen statt Emojis, Text bleibt erhalten', async () => {
   const s = await geraet(null, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, bereich: 'uebersicht' });
   assert.equal(await s.locator('.nav-klein [data-bereich=uebersicht] use').getAttribute('href'), '#i-house');
