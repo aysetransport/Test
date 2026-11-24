@@ -148,13 +148,12 @@ behandle('datei:speichern', async (vorschlag, base64) => {
 // (Andocken/Snap-Layouts bleiben erhalten), Mica-Hintergrund ab Windows 11 22H2, Akzentfarbe aus den Windows-Einstellungen.
 const IST_WINDOWS = process.platform === 'win32';
 const windowsBuild = () => (IST_WINDOWS ? Number(String(os.release()).split('.')[2]) || 0 : 0);
-const MICA = IST_WINDOWS && windowsBuild() >= 22621;
 const TITEL_HOEHE = 48;
 const fensterDatei = () => path.join(app.getPath('userData'), 'fenster.json');
 function fensterInfo() {
   let akzent = '';
   try { if (IST_WINDOWS) akzent = '#' + systemPreferences.getAccentColor().slice(0, 6); } catch {}
-  return { windows: IST_WINDOWS, windows11: windowsBuild() >= 22000, mica: MICA, akzent, dunkel: nativeTheme.shouldUseDarkColors, titelHoehe: TITEL_HOEHE, version: app.getVersion() };
+  return { windows: IST_WINDOWS, windows11: windowsBuild() >= 22000, akzent, dunkel: nativeTheme.shouldUseDarkColors, titelHoehe: TITEL_HOEHE, version: app.getVersion() };
 }
 /** Größe und Lage vom letzten Mal – nur, wenn sie noch auf einen vorhandenen Bildschirm passt. */
 function letzteLage() {
@@ -174,9 +173,8 @@ function fensterBauen(url, haupt) {
   const w = new BrowserWindow({
     width: lage.width || 1280, height: lage.height || 860, ...(lage.x != null ? { x: lage.x, y: lage.y } : {}), minWidth: 380, minHeight: 500,
     title: 'Ayse CRM', icon: path.join(ORDNER, 'icon-rund.png'), show: false,
-    backgroundColor: MICA ? '#00000000' : nativeTheme.shouldUseDarkColors ? '#202020' : '#F3F3F3',
-    ...(IST_WINDOWS ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#FFFFFF' : '#1A1A1A', height: TITEL_HOEHE } } : {}),
-    ...(MICA ? { backgroundMaterial: 'mica' } : {}),
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#F2F2F7', // wie die Oberfläche (Apple-Design, kein Mica)
+    ...(IST_WINDOWS ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#FFFFFF' : '#000000', height: TITEL_HOEHE } } : {}),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true },
   });
   if (haupt) {
@@ -235,10 +233,10 @@ if (IST_WINDOWS) {
 ipcMain.on('fenster:info', e => { e.returnValue = fensterInfo(); });
 /** Farben der Titelleiste (Fenster-Knöpfe) passend zum hellen/dunklen Design der Oberfläche. */
 behandle('fenster:titelleiste', (farbe, symbol, thema) => {
-  if (['light', 'dark', 'system'].includes(thema)) nativeTheme.themeSource = thema; // Mica und Fenster-Knöpfe folgen dem Design der App
+  if (['light', 'dark', 'system'].includes(thema)) nativeTheme.themeSource = thema; // Fenster-Knöpfe folgen dem Design der App
   const w = quelle();
   if (!IST_WINDOWS || !w) return false;
-  w.setTitleBarOverlay({ color: MICA ? '#00000000' : String(farbe || '#F3F3F3'), symbolColor: String(symbol || '#1A1A1A'), height: TITEL_HOEHE });
+  w.setTitleBarOverlay({ color: String(farbe || '#F2F2F7'), symbolColor: String(symbol || '#000000'), height: TITEL_HOEHE });
   return true;
 });
 /** Zähler auf dem Taskleistensymbol (z. B. ungelesene Mails); png = kleines Abzeichen als Data-URL, leer = entfernen. */

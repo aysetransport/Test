@@ -828,7 +828,8 @@ test('Android-App: Brücke (android.js) – Postfach, Speichern, Drucken, PDF un
   await s.locator('[data-nav-mehr]').click();
   await s.locator('.nav-gross [data-bereich=fuhrpark]').click();
   await s.evaluate(() => FuhrparkAktionen.speichern({ kennzeichen: 'RS-FK 4204' }));
-  await s.locator('[data-fuhrpark-csv]').click();
+  await s.locator('#mehr-knopf').click(); // am Handy stehen die Werkzeuge im „⋯“-Menü der Navigationsleiste
+  await s.locator('#dialog.menue [data-fuhrpark-csv]').click();
   await s.locator('#toast', { hasText: 'Gespeichert: Download/Ayse CRM/Fahrze' }).waitFor();
   const csv = await s.evaluate(() => window.__aufrufe.find(([n]) => n === 'datei:speichern')[1]);
   assert.match(csv[0], /^Fahrzeuge_\d{4}-\d{2}-\d{2}\.csv$/);
@@ -1600,8 +1601,7 @@ test('Fristen-Matrix und Ausrüstung: fällige Fristen, Ausgabe und Rückgabe', 
     PersonalAktionen.eintrag({ mitarbeiterId: a, art: 'AUSRUESTUNG', datum: '2026-01-05', text: 'Schlüssel Halle' });
     bereichWechseln('personal'); return a;
   });
-  await s.locator('.werkzeug-mehr').click();
-  await s.locator('[data-fristen-matrix]').click();
+  await s.locator('[data-fristen-matrix]').click(); // am PC stehen alle Werkzeuge in der Leiste
   await s.locator('.matrix tbody tr').first().waitFor();
   assert.equal(await s.locator('.matrix tbody tr').first().locator('th').textContent(), 'Ali Demir', 'Überfällige zuerst');
   assert.equal(await s.locator('.matrix td.rot').count(), 1); assert.equal(await s.locator('.matrix td.gelb').count(), 1);
@@ -1983,7 +1983,7 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await s.close();
 });
 
-test('Windows-App im Windows-Stil: Start ohne Fehler, Titelleiste folgt dem Design, Taskleisten-Zähler, Kontextmenü, Statusleiste', async () => {
+test('Windows-App im Apple-Design: Start ohne Fehler, Titelleiste gehört dem Fenster und folgt hell/dunkel, Taskleisten-Zähler, Kontextmenü', async () => {
   const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1400, height: 900 } });
   await kontext.route('https://script.google.com/**', r => r.abort());
   await kontext.addInitScript(() => {
@@ -1998,12 +1998,12 @@ test('Windows-App im Windows-Stil: Start ohne Fehler, Titelleiste folgt dem Desi
   const fehler = []; s.on('pageerror', f => fehler.push(f.message));
   await s.goto(seite.url); await s.waitForFunction(() => window.__appBereit);
   assert.deepEqual(fehler, [], 'Start ohne Fehler');
-  assert.ok(await s.evaluate(() => document.documentElement.classList.contains('win') && document.documentElement.classList.contains('mica')));
-  assert.equal(await s.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--win-akzent').trim()), '#C239B3');
-  assert.deepEqual(await s.evaluate(() => window.__fenster.titel.at(-1)), ['#202020', '#FFFFFF', 'dark'], 'Titelleiste dunkel');
+  assert.ok(await s.evaluate(() => document.documentElement.classList.contains('fenster') && !document.documentElement.classList.contains('win')), 'gleiches Design, Fenster-Titelleiste');
+  assert.equal(await s.evaluate(() => getComputedStyle($('header')).webkitAppRegion || getComputedStyle($('header')).getPropertyValue('app-region')), 'drag', 'Kopfleiste zieht das Fenster');
+  assert.deepEqual(await s.evaluate(() => window.__fenster.titel.at(-1)), ['#000000', '#FFFFFF', 'dark'], 'Titelleiste dunkel');
   await s.evaluate(() => { S.einstellungen.thema = 'hell'; themaSetzen(); });
-  assert.deepEqual(await s.evaluate(() => window.__fenster.titel.at(-1)), ['#F3F3F3', '#1A1A1A', 'light']);
-  await s.locator('#statusleiste').waitFor();
+  assert.deepEqual(await s.evaluate(() => window.__fenster.titel.at(-1)), ['#F2F2F7', '#000000', 'light']);
+  assert.equal(await s.locator('#statusleiste').count(), 0, 'keine Statusleiste (Apple)');
   await s.evaluate(() => Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV', telefon: '0211 1' }));
   await s.locator('[data-firma]').first().click({ button: 'right' });
   await s.locator('.kontext-menue button', { hasText: 'Öffnen' }).waitFor();
