@@ -6,7 +6,7 @@ const quelle = path.join(__dirname, '..', '..', 'web');
 const ziel = path.join(__dirname, '..', 'app');
 fs.rmSync(ziel, { recursive: true, force: true });
 fs.mkdirSync(ziel, { recursive: true });
-for (const datei of ['index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'pdfjs/pdf.min.js', 'pdfjs/pdf.worker.min.js', 'sprachen.json', 'app-update.json']) {
+for (const datei of ['index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-rund.png', 'pdfjs/pdf.min.js', 'pdfjs/pdf.worker.min.js', 'sprachen.json', 'app-update.json']) {
   fs.mkdirSync(path.dirname(path.join(ziel, datei)), { recursive: true });
   fs.copyFileSync(path.join(quelle, datei), path.join(ziel, datei));
 }
