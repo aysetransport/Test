@@ -62,7 +62,7 @@ test('Handy (Web/iPhone/Android): Suche öffnet sich, Menü schwebt als Panel ü
   await s.keyboard.type('Meier');
   await s.locator('#suchtreffer .treffer', { hasText: 'Spedition Meier GmbH' }).waitFor();
   await s.keyboard.press('Escape');
-  await s.locator('#menue-knopf').click();
+  await s.locator('[data-nav-mehr]').click();
   const panel = await s.locator('.nav-gross').boundingBox(), leiste = await s.locator('.nav-klein').boundingBox();
   assert.ok(panel.height > 300 && panel.y + panel.height <= leiste.y, `Menü schwebt über der Leiste (${JSON.stringify(panel)})`);
   await s.locator('.nav-gross [data-bereich="firmen"]').click();
@@ -1331,13 +1331,18 @@ test('iPhone: kein seitliches Scrollen in allen Bereichen, Menü und Dialoge bed
     const [w, v] = await s.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
     assert.ok(w <= v + 1, `${b}: ${w} > ${v}`);
   }
-  await s.locator('#menue-knopf').click();
+  await s.locator('[data-nav-mehr]').click(); // am Handy wie iOS: kein ☰, alle Bereiche unter „Mehr“
   await s.locator('.nav-gross [data-bereich=zeiten]').click();
   await s.waitForFunction(() => ANSICHT.bereich === 'zeiten' && !document.body.classList.contains('nav-offen'));
-  await s.evaluate(() => neuMenue());
-  await s.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished))); // Dialog federt auf – erst danach messen
+  await s.evaluate(() => aufgabeDialog(null));
+  await s.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished))); // Sheet federt auf – erst danach messen
   const d = await s.locator('#dialog').boundingBox();
-  assert.ok(d.width >= 389, 'Dialoge am Handy über die ganze Breite');
+  assert.ok(d.width >= 389, 'Sheets am Handy über die ganze Breite');
+  await s.evaluate(() => $('#dialog').close());
+  // „+“ öffnet ein Apple-Menü (schmal, am Knopf) mit drei Hauptaktionen oben
+  await s.locator('#neu-knopf').click();
+  await s.locator('#dialog.menue .am-oben [data-neu-art]').first().waitFor();
+  assert.ok((await s.locator('#dialog').boundingBox()).width < 320, 'Menü statt Vollbild');
   await kontext.close();
 });
 
