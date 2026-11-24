@@ -1856,7 +1856,7 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await ansicht('FAHRER');
   await s.evaluate(() => { location.hash = '#/x'; location.hash = '#/einstellungen'; zeichne(); });
   await s.locator('#detail h3', { hasText: 'Bedienung' }).waitFor();
-  assert.deepEqual(await s.$$eval('#detail > .karte.block h3', l => l.map(x => x.textContent)), ['Bedienung']);
+  assert.deepEqual(await s.$$eval('#detail > .karte.block h3', l => l.map(x => x.textContent).sort()), ['Anmeldung', 'Bedienung']);
   assert.equal(await s.locator('#detail [data-einst-wahl="ichId"]').count(), 0);
   assert.equal(await s.locator('#detail [data-einst-wahl="sprache"]').count(), 1);
   await s.close();
