@@ -74,11 +74,12 @@ test('Liquid Glass und Animationen (Web/Android): Glas auf schwebenden Flächen,
   const s = await geraet(null, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'no-preference', bereich: 'uebersicht' });
   assert.match(await s.evaluate(() => getComputedStyle($('#navi'), '::before').backdropFilter), /blur/);
   await s.evaluate(() => bereichWechseln('firmen'));
-  assert.ok(await s.evaluate(() => document.getAnimations().length > 0), 'Bereichswechsel blendet ein');
+  assert.ok(await s.evaluate(() => new Promise(r => requestAnimationFrame(() => r(document.getAnimations().length > 0)))), 'Bereichswechsel blendet ein (ein Bild nach dem Aufbau)');
   await s.evaluate(() => dialog('<h2>Test</h2>'));
   assert.equal(await s.evaluate(() => getComputedStyle($('#dialog')).animationName), 'sheet-auf', 'am Handy als iOS-Sheet von unten');
   assert.equal(await s.locator('.nav-klein .nav-linse').count(), 1, 'Glaslinse unter dem aktiven Tab');
-  assert.match(await s.evaluate(() => getComputedStyle($('#dialog')).backdropFilter), /blur/);
+  assert.equal(await s.evaluate(() => getComputedStyle($('#dialog')).backdropFilter), 'none', 'bewegte Flächen ohne Echtzeit-Unschärfe (flüssig)');
+  assert.match(await s.evaluate(() => getComputedStyle($('#suche-knopf')).backdropFilter), /blur/, 'stehende Glasknöpfe mit Unschärfe');
   await s.evaluate(() => $('#dialog').close());
   await s.emulateMedia({ reducedMotion: 'reduce' });
   await s.evaluate(() => document.getAnimations().forEach(a => a.finish()));

@@ -712,8 +712,10 @@ dialog.klein{width:min(420px,calc(100vw - 32px));z-index:60}
   --karte-verlauf:linear-gradient(160deg,#FFFFFF,#FAFAFC);--glas:rgba(255,255,255,.82);--glow:0 6px 18px rgba(211,24,47,.25);
   color-scheme:light;
 }
-:root:not(.win) body{background:radial-gradient(130% 55% at 50% -8%,rgba(229,36,59,.30),rgba(120,10,25,.10) 45%,transparent 70%) fixed,var(--bg)}
-:root:not(.win)[data-thema=hell] body{background:radial-gradient(130% 45% at 50% -8%,rgba(229,36,59,.12),transparent 65%) fixed,var(--bg)}
+:root:not(.win) body{background:var(--bg)}
+/* Hintergrundschein als eigene feste Ebene: der Grafikchip verschiebt sie nur, statt sie bei jedem Scroll-Bild neu zu malen */
+:root:not(.win) body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(130% 55% at 50% -8%,rgba(229,36,59,.30),rgba(120,10,25,.10) 45%,transparent 70%)}
+:root:not(.win)[data-thema=hell] body::before{background:radial-gradient(130% 45% at 50% -8%,rgba(229,36,59,.12),transparent 65%)}
 :root:not(.win) header{background:transparent;border-bottom:1px solid color-mix(in srgb,var(--rand) 50%,transparent)}
 /* Glas-Unschärfe im ::before: backdrop-filter am Element selbst würde fixierte Kinder (Menü, Suche) darin einsperren */
 :root:not(.win) :is(header,#navi)::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
@@ -781,24 +783,28 @@ body[data-rolle=GESPERRT] :is(#menue-knopf,#suche-knopf,#suche-global,#neu-knopf
 /* ===== Liquid Glass nach Apples Richtlinien (Web + Android, nicht Windows) =====
    Glas nur auf der Ebene für Navigation und Bedienung (Tab-Leiste, Seitenleiste, Kopf-Knöpfe, Suche, Menü, Sheets, Meldungen) – nie im Inhalt.
    Variante „Regular“: unscharf und in der Helligkeit angeglichen, damit Beschriftungen lesbar bleiben. Farbe sparsam: Rot nur für Auswahl und Hauptaktion. */
-:root:not(.win){--glas:color-mix(in srgb,var(--flaeche) 55%,transparent);--glas-dicht:color-mix(in srgb,var(--flaeche) 86%,transparent);
-  --glas-rand:rgba(255,255,255,.12);--glas-licht:rgba(255,255,255,.26);--glas-unschaerfe:blur(22px) saturate(180%) brightness(1.05);--glas-schatten:0 10px 30px rgba(0,0,0,.35);
+:root:not(.win){--glas:color-mix(in srgb,var(--flaeche) 55%,transparent);--glas-dicht:color-mix(in srgb,var(--flaeche) 95%,transparent);
+  --glas-rand:rgba(255,255,255,.12);--glas-licht:rgba(255,255,255,.26);--glas-unschaerfe:blur(16px) saturate(170%) brightness(1.05);--glas-schatten:0 10px 30px rgba(0,0,0,.35);
   --glow:0 0 0 transparent;--feder:cubic-bezier(.2,.9,.25,1.15);--weich:cubic-bezier(.2,.8,.2,1)}
-:root:not(.win)[data-thema=hell]{--glow:0 0 0 transparent;--glas:color-mix(in srgb,#fff 60%,transparent);--glas-dicht:color-mix(in srgb,#fff 88%,transparent);--glas-rand:rgba(0,0,0,.07);--glas-licht:rgba(255,255,255,.95);--glas-schatten:0 10px 30px rgba(0,0,0,.12)}
+:root:not(.win)[data-thema=hell]{--glow:0 0 0 transparent;--glas:color-mix(in srgb,#fff 60%,transparent);--glas-dicht:color-mix(in srgb,#fff 96%,transparent);--glas-rand:rgba(0,0,0,.07);--glas-licht:rgba(255,255,255,.95);--glas-schatten:0 10px 30px rgba(0,0,0,.12)}
 /* Lichtkante auf Glas: oben links hell, nach unten rechts auslaufend */
 :root:not(.win) :is(#toast,.nav-linse)::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
   background:linear-gradient(140deg,rgba(255,255,255,.6),rgba(255,255,255,.08) 30%,rgba(255,255,255,0) 55%,rgba(255,255,255,.2));
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
-:root:not(.win) :is(#toast,#suchtreffer,dialog,body.nav-offen .nav-gross,header .symbol,#suche-knopf){-webkit-backdrop-filter:var(--glas-unschaerfe);backdrop-filter:var(--glas-unschaerfe);border:1px solid var(--glas-rand)}
-:root:not(.win) :is(#toast,header .symbol,#suche-knopf){background:var(--glas);box-shadow:inset 0 1px 0 var(--glas-licht),var(--glas-schatten)}
+:root:not(.win) :is(header .symbol,#suche-knopf){-webkit-backdrop-filter:var(--glas-unschaerfe);backdrop-filter:var(--glas-unschaerfe);border:1px solid var(--glas-rand)}
+/* Flächen, die sich beim Erscheinen bewegen (Sheets, Menüs, Suche, Meldungen): dichtes Material ohne Echtzeit-Unschärfe –
+   sonst müsste das Handy den Hintergrund in jedem Animationsbild neu weichzeichnen (Ruckeln) */
+:root:not(.win) :is(#toast,#suchtreffer,dialog,body.nav-offen .nav-gross){border:1px solid var(--glas-rand)}
+:root:not(.win) :is(header .symbol,#suche-knopf){background:var(--glas);box-shadow:inset 0 1px 0 var(--glas-licht),var(--glas-schatten)}
+:root:not(.win) #toast{background:var(--glas-dicht);box-shadow:inset 0 1px 0 var(--glas-licht),var(--glas-schatten)}
 :root:not(.win) :is(#suchtreffer,dialog,body.nav-offen .nav-gross){background:var(--glas-dicht);box-shadow:inset 1px 1px 0 var(--glas-licht),inset -1px -1px 0 rgba(255,255,255,.05),0 24px 60px rgba(0,0,0,.45)}
 :root:not(.win) #toast{position:fixed;color:var(--text);border-radius:22px}
 /* Kopf: kein Balken mehr – Knöpfe schweben als Glas-Kreise; darunter Scroll-Kanten-Effekt (Inhalt wird ausgeblendet und unscharf) */
 :root:not(.win) header{border-bottom:0}
-:root:not(.win) header::before{background:linear-gradient(to bottom,var(--bg) 0%,color-mix(in srgb,var(--bg) 75%,transparent) 55%,transparent);
-  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);-webkit-mask-image:linear-gradient(to bottom,#000 50%,transparent);mask-image:linear-gradient(to bottom,#000 50%,transparent)}
+:root:not(.win) header::before{background:linear-gradient(to bottom,var(--bg) 0%,color-mix(in srgb,var(--bg) 75%,transparent) 55%,transparent);-webkit-backdrop-filter:none;backdrop-filter:none}
 :root:not(.win) header .symbol{width:40px;height:40px;border-radius:50%;display:inline-grid;place-items:center}
-:root:not(.win) #neu-knopf{border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 6px 18px rgba(0,0,0,.3)}
+:root:not(.win) #neu-knopf{border:1px solid var(--glas-rand);box-shadow:inset 0 1px 0 var(--glas-licht),var(--glas-schatten)}
+@media (max-width:899px){:root:not(.win) #neu-knopf{width:40px;height:40px;padding:0;border-radius:50%;background:var(--glas);color:var(--text);-webkit-backdrop-filter:var(--glas-unschaerfe);backdrop-filter:var(--glas-unschaerfe)}}
 /* Inhalt: ruhiges, festes Material – kein Glas. Größere, konzentrische Rundungen (Abschnitt 26 px − Innenabstand 16 px = 10 px innen). */
 :root:not(.win) .karte{background:var(--flaeche);border:1px solid color-mix(in srgb,var(--text) 6%,transparent);border-radius:26px;box-shadow:none}
 :root:not(.win)[data-thema=hell] .karte{box-shadow:0 1px 2px rgba(0,0,0,.04)}
@@ -817,32 +823,32 @@ body[data-rolle=GESPERRT] :is(#menue-knopf,#suche-knopf,#suche-global,#neu-knopf
 @media (max-width:899px){
   /* Tab-Leiste: Glas mit Lichtkante; Suche als eigener runder Knopf am Ende (wie iOS) */
   :root:not(.win) #navi{right:calc(12px + 64px + 8px + env(safe-area-inset-right));box-shadow:inset 0 1px 0 var(--glas-licht),var(--glas-schatten);border-color:var(--glas-rand);
-    transition:padding .3s var(--weich)}
+    transform-origin:0 100%;transition:transform .35s var(--weich);will-change:transform}
   :root:not(.win) #navi::before{background:var(--glas);-webkit-backdrop-filter:var(--glas-unschaerfe);backdrop-filter:var(--glas-unschaerfe)}
   :root:not(.win) #navi::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
     background:linear-gradient(140deg,rgba(255,255,255,.55),rgba(255,255,255,.08) 30%,rgba(255,255,255,0) 60%,rgba(255,255,255,.18));
     -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
   :root:not(.win) #suche-knopf{position:fixed;z-index:7;right:calc(12px + env(safe-area-inset-right));bottom:calc(10px + env(safe-area-inset-bottom));width:64px;height:64px;border-radius:50%;
-    display:grid;place-items:center;font-size:22px;transition:width .3s var(--weich),height .3s var(--weich)}
+    display:grid;place-items:center;font-size:22px;transform-origin:100% 100%;transition:transform .35s var(--weich);will-change:transform}
   :root:not(.win) .nav-klein .nav-knopf{position:relative;z-index:1;border-radius:999px}
   :root:not(.win) .nav-klein .nav-knopf[aria-current=page]{background:transparent;box-shadow:none;color:var(--primaer)}
   :root:not(.win) .nav-linse{position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;background:color-mix(in srgb,var(--text) 12%,transparent);box-shadow:inset 0 1px 0 var(--glas-licht)}
-  :root:not(.win) .nav-text{transition:opacity .2s,max-height .3s var(--weich);max-height:20px}
+  :root:not(.win) .nav-text{transition:opacity .2s}
   :root:not(.win) .nav-klein .nav-text{font-size:10.5px;letter-spacing:-.01em}
   /* Beim Herunterscrollen tritt die Tab-Leiste zurück (nur Symbole), beim Hochscrollen kommt sie wieder (JS: body.leiste-klein) */
-  :root:not(.win) body.leiste-klein .nav-klein .nav-text{opacity:0;max-height:0}
-  :root:not(.win) body.leiste-klein #suche-knopf{width:48px;height:48px}
+  :root:not(.win) body.leiste-klein .nav-klein .nav-text{opacity:0}
+  :root:not(.win) body.leiste-klein #navi{transform:translateY(8px) scale(.9)}
+  :root:not(.win) body.leiste-klein #suche-knopf{transform:translateY(8px) scale(.8)}
   /* Scroll-Kanten-Effekt unten: Inhalt hinter der Leiste wird ausgeblendet und unscharf */
   :root:not(.win) body::after{content:"";position:fixed;left:0;right:0;bottom:0;height:calc(120px + env(safe-area-inset-bottom));z-index:5;pointer-events:none;
-    background:linear-gradient(to top,var(--bg) 15%,color-mix(in srgb,var(--bg) 55%,transparent) 55%,transparent);
-    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);-webkit-mask-image:linear-gradient(to top,#000 40%,transparent);mask-image:linear-gradient(to top,#000 40%,transparent)}
+    background:linear-gradient(to top,var(--bg) 15%,color-mix(in srgb,var(--bg) 60%,transparent) 55%,transparent)}
   :root:not(.win) body.nav-offen .nav-gross{transform-origin:50% 100%}
 }
 @media (max-width:700px){
   /* Sheets: von unten, größere Rundung, Griff; nach unten ziehen schließt (JS). Volle Höhe = dichteres Glas. */
   :root:not(.win) dialog{margin:auto 0 0;height:calc(100dvh - 12px - env(safe-area-inset-top));max-height:calc(100dvh - 12px - env(safe-area-inset-top));border-radius:34px 34px 0 0;border-bottom:0;padding-top:22px}
   :root:not(.win) dialog::before{content:"";display:block;width:38px;height:5px;border-radius:3px;background:color-mix(in srgb,var(--text) 30%,transparent);margin:-10px auto 12px}
-  :root:not(.win) .dialog-knoepfe{background:var(--glas-dicht);-webkit-backdrop-filter:blur(14px) saturate(180%);backdrop-filter:blur(14px) saturate(180%)}
+  :root:not(.win) .dialog-knoepfe{background:var(--glas-dicht)}
 }
 /* Bewegung: federnd, nichts Lineares; Menüs wachsen aus ihrer Leiste */
 @media (prefers-reduced-motion:no-preference){
@@ -932,8 +938,7 @@ header .symbol .ico,#suche-knopf .ico{width:22px;height:22px}
 
 @media (max-width:899px){
   /* Scroll-Kante unter der Kopfleiste: Inhalt darunter wird ausgeblendet und unscharf (reicht etwas unter die Leiste) */
-  :root:not(.win) header::before{inset:0 0 -28px 0;background:linear-gradient(to bottom,var(--bg) 30%,color-mix(in srgb,var(--bg) 82%,transparent) 65%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
-    -webkit-mask-image:linear-gradient(to bottom,#000 62%,transparent);mask-image:linear-gradient(to bottom,#000 62%,transparent)}
+  :root:not(.win) header::before{inset:0 0 -44px 0;background:linear-gradient(to bottom,var(--bg) 0%,var(--bg) 58%,color-mix(in srgb,var(--bg) 70%,transparent) 80%,transparent)}
   /* Status als runder Knopf mit Punkt (grün = aktuell); Text nur, wenn etwas zu tun ist */
   :root:not(.win) #sync:not([data-zustand=anmelden]):not([data-zustand=fehler]){font-size:0;line-height:0;width:40px;height:40px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
     background:var(--glas);border:1px solid var(--glas-rand);-webkit-backdrop-filter:var(--glas-unschaerfe);backdrop-filter:var(--glas-unschaerfe)}
@@ -1948,9 +1953,10 @@ function zeichneNaviInhalt() {
 /** Sanftes, gestaffeltes Einblenden – nur beim Wechsel von Bereich oder Ansicht, nicht bei jedem Neuzeichnen (z. B. nach dem Abgleich). */
 function einblenden(el, seitlich = false) {
   if (!el || !el.animate || document.documentElement.classList.contains('win') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  [...el.querySelectorAll(':scope > :not(.dashboard), :scope > .dashboard > *')].slice(0, 14).forEach((x, i) => x.animate(
-    [{ opacity: 0, transform: seitlich ? 'translateX(18px)' : 'translateY(12px) scale(.985)', filter: 'blur(6px)' }, { opacity: 1, transform: 'none', filter: 'none' }],
-    { duration: 420, delay: i * 35, easing: 'cubic-bezier(.2,.9,.25,1)', fill: 'backwards' }));
+  // nur Verschieben und Deckkraft – das erledigt der Grafikchip ohne Neuberechnung (Unschärfe oder Größen würden ruckeln)
+  [...el.querySelectorAll(':scope > :not(.dashboard), :scope > .dashboard > *')].slice(0, 8).forEach((x, i) => x.animate(
+    [{ opacity: 0, transform: seitlich ? 'translateX(16px)' : 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
+    { duration: 300, delay: i * 25, easing: 'cubic-bezier(.2,.9,.25,1)', fill: 'backwards' }));
 }
 const bewegung = () => !document.documentElement.classList.contains('win') && !matchMedia('(prefers-reduced-motion: reduce)').matches;
 /** Tab-Leiste (Handy): eine Glaslinse liegt unter dem aktiven Punkt und gleitet beim Wechsel federnd hinüber (dehnt sich unterwegs wie Flüssigkeit). */
@@ -1997,7 +2003,7 @@ function bereichWechseln(k) {
   ANSICHT.bereich = k; try { if (!NEBENFENSTER) localStorage.setItem('crm-bereich', k); } catch {}
   if (k === 'touren' && !ANSICHT.tourTag) ANSICHT.tourTag = heute();
   if (route().art) gehe('#/'); else zeichne();
-  window.scrollTo(0, 0); einblenden($('#liste'));
+  window.scrollTo(0, 0); requestAnimationFrame(() => einblenden($('#liste'))); // erst aufbauen, dann bewegen
 }
 $('#navi').addEventListener('click', e => {
   const b = e.target.closest('[data-bereich]');
@@ -10648,7 +10654,16 @@ function symboleEinsetzen(wurzel = document.body) {
     el.insertAdjacentHTML('afterbegin', ico(SYMBOL_EMOJI[m[1]], t.data.trim() ? '' : 'allein') + `<span class="emoji-ersetzt" aria-hidden="true">${m[1]} </span>`);
   }
 }
-{ let wartet = false; new MutationObserver(() => { if (wartet) return; wartet = true; requestAnimationFrame(() => { wartet = false; symboleEinsetzen(); }); }).observe(document.body, { childList: true, subtree: true, characterData: true }); }
+// nur die Teile prüfen, die sich geändert haben (statt der ganzen Seite) – hält Neuzeichnen und Abgleich flüssig
+{ const offen = new Set(); let geplant = false;
+  new MutationObserver(liste => {
+    for (const m of liste) { const el = m.target.nodeType === 1 ? m.target : m.target.parentElement; if (el) offen.add(el); }
+    if (geplant) return; geplant = true;
+    requestAnimationFrame(() => {
+      geplant = false; const alle = [...offen]; offen.clear();
+      for (const w of alle.filter(el => el.isConnected && !alle.some(o => o !== el && o.contains(el)))) symboleEinsetzen(w.parentElement || w);
+    });
+  }).observe(document.body, { childList: true, subtree: true, characterData: true }); }
 // ============================== Windows-Stil (Windows-App) ==============================
 // Symbole aus „Segoe Fluent Icons“ (Windows 11, sonst Segoe MDL2), Statusleiste, Titelleisten-Farben, Kontextmenüs per
 // Rechtsklick, Windows-Tastenkürzel und Zähler auf dem Taskleistensymbol. Alles nur aktiv, wenn window.WIN gesetzt ist.
