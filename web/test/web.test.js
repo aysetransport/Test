@@ -87,6 +87,19 @@ test('Liquid Glass und Animationen (Web/Android): Glas auf schwebenden Flächen,
   await s.close();
 });
 
+test('Symbole (Web/Android): Navigation und Knöpfe mit Linien-Symbolen statt Emojis, Text bleibt erhalten', async () => {
+  const s = await geraet(null, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, bereich: 'uebersicht' });
+  assert.equal(await s.locator('.nav-klein [data-bereich=uebersicht] use').getAttribute('href'), '#i-house');
+  assert.equal(await s.evaluate(() => !!document.querySelector('#symbole #i-truck')), true, 'Sammlung eingebettet (offline)');
+  await s.evaluate(() => neuMenue());
+  await s.waitForFunction(() => document.querySelector('#dialog .ico use'));
+  // Emoji vorn im Knopf wird zum Symbol, bleibt aber im Text (Suche, Kopieren); Beträge bleiben unangetastet
+  assert.deepEqual(await s.evaluate(() => { const k = document.createElement('button'); k.className = 'knopf'; k.textContent = '🖨 Drucken'; const b = document.createElement('button'); b.className = 'knopf'; b.textContent = '12,50 €';
+    document.body.append(k, b); symboleEinsetzen(); return [k.querySelector('use').getAttribute('href'), k.textContent.includes('Drucken'), k.innerText.includes('🖨'), b.querySelector('.ico') === null]; }),
+    ['#i-printer', true, false, true]);
+  await s.close();
+});
+
 test('Fachlogik im Browser stimmt mit der Android-App überein', async () => {
   const s = await geraet();
   const r = await s.evaluate(() => ({
@@ -133,7 +146,7 @@ test('ohne Cloud: Fall anlegen, nachhaken, abschließen – bleibt nach dem Neul
   await s.locator('#wiedervorlage').getByText('in 7 Tagen fällig').waitFor();
   await s.locator('#liste').getByText('Offen (1)').waitFor();
 
-  await s.getByRole('button', { name: '✓ Nachgehakt' }).click();
+  await s.getByRole('button', { name: 'Nachgehakt' }).click();
   await s.locator('#ergebnis').fill('Kundin schickt die Fotos bis Freitag');
   await s.getByRole('button', { name: '2 Wochen' }).click();
   await s.locator('#wv-form').getByRole('button', { name: 'Geschädigter' }).click();
@@ -316,7 +329,7 @@ test('E-Mail-Vorlage, Zusammenfassung und CSV-Export', async () => {
   const s = await geraet(null, kontextOptionen);
   await legeFallAn(s, { kundeName: 'Anna Becker', kundeEmail: 'a.becker@example.org', tour: 'Tour 3', forderung: '1.280' });
 
-  await s.getByRole('button', { name: '✉ E-Mail' }).click();
+  await s.getByRole('button', { name: 'E-Mail' }).click();
   await s.locator('[data-vorlage=ERINNERUNG]').click();
   const mail = await s.evaluate(() => window.__geoeffnet);
   assert.ok(mail.startsWith('mailto:a.becker@example.org?subject='));
@@ -344,7 +357,7 @@ test('Auftraggeber: Vorlage an dessen Adresse, Auswahl aus der Liste, Abgleich d
     auftraggeberKontakt: 'Frau Kaya', auftraggeberTelefon: '02191 123', auftraggeberEmail: 'dispo@nordpark.example', auftragsReferenz: 'LS-48213' });
   await a.locator('#detail').getByRole('heading', { name: 'Auftraggeber' }).waitFor();
 
-  await a.getByRole('button', { name: '✉ E-Mail' }).click();
+  await a.getByRole('button', { name: 'E-Mail' }).click();
   await a.getByText('An den Auftraggeber').waitFor();
   await a.locator('[data-vorlage=SCHADENSMITTEILUNG]').click();
   const mail = decodeURIComponent(await a.evaluate(() => window.__geoeffnet));
@@ -353,14 +366,14 @@ test('Auftraggeber: Vorlage an dessen Adresse, Auswahl aus der Liste, Abgleich d
   await a.locator('.verlauf').getByText('E-Mail an Auftraggeber vorbereitet: Schadensmitteilung').waitFor();
 
   // Nur der Auftraggeber hat eine Nummer: Anrufen wählt ihn direkt.
-  await a.locator('#detail').getByRole('button', { name: '☎ Anrufen' }).click();
+  await a.locator('#detail').getByRole('button', { name: 'Anrufen' }).click();
   assert.equal(await a.locator('[data-anruf]').count(), 0);
   assert.equal(await a.evaluate(() => window.__geoeffnet), 'tel:02191123');
   // Mit Nummer beim Geschädigten fragt die App, wen sie anrufen soll.
   await a.getByRole('button', { name: 'Bearbeiten' }).click();
   await a.locator('[name=kundeTelefon]').fill('0171 555');
   await a.locator('#fall-form button.voll').click();
-  await a.locator('#detail').getByRole('button', { name: '☎ Anrufen' }).click();
+  await a.locator('#detail').getByRole('button', { name: 'Anrufen' }).click();
   await a.locator('[data-anruf=GESCHAEDIGTER]').click();
   assert.equal(await a.evaluate(() => window.__geoeffnet), 'tel:0171555');
 
