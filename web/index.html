@@ -735,6 +735,18 @@ dialog.klein{width:min(420px,calc(100vw - 32px));z-index:60}
 :root:not(.win) .nav-knopf[aria-current=page]{background:var(--verlauf-rot);color:#fff;box-shadow:var(--glow)}
 :root:not(.win) .nav-knopf .zahl{background:var(--primaer);color:#fff}
 @media (min-width:900px){:root:not(.win) #navi{background:color-mix(in srgb,var(--flaeche) 70%,transparent);border-right:1px solid var(--linie)}}
+/* Übersicht: Titel weiß, große Zahlen, erste Karte als rote „Hero“-Karte (wie die Vorlage) */
+:root:not(.win) .seitenkopf h1{font-size:26px;font-weight:700;letter-spacing:-.01em}
+:root:not(.win) .block h3{color:var(--text);font-size:15px;font-weight:600}
+:root:not(.win) .kennzahl{border-radius:16px;background:var(--karte-verlauf),var(--flaeche2);border:1px solid var(--linie)}
+:root:not(.win) .kennzahl b{font-size:24px;font-weight:700;letter-spacing:-.01em}
+:root:not(.win) .kennzahl.rot{background:var(--rot-f)}:root:not(.win) .kennzahl.gelb{background:var(--gelb-f)}:root:not(.win) .kennzahl.blau{background:var(--blau-f)}
+:root:not(.win) .dashboard>.karte:first-child{color:#fff;border-color:rgba(229,36,59,.45);
+  background:radial-gradient(120% 90% at 100% 0%,rgba(242,58,80,.55),transparent 55%),linear-gradient(160deg,#3d0c15,#170709 75%)}
+:root:not(.win) .dashboard>.karte:first-child :is(.leise,h3){color:rgba(255,255,255,.85)}
+:root:not(.win) .dashboard>.karte:first-child .kennzahl:not(.rot):not(.gelb):not(.blau){background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.08);color:#fff}
+:root:not(.win) .dashboard>.karte:first-child .knopf.voll{background:#fff;color:#B3121F;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+:root:not(.win) .dashboard>.karte:first-child .knopf:not(.voll){color:#fff;border-color:rgba(255,255,255,.3)}
 /* Handy: schwebende Pill-Leiste unten */
 @media (max-width:899px){
   :root:not(.win) #navi{left:calc(12px + env(safe-area-inset-left));right:calc(12px + env(safe-area-inset-right));bottom:calc(10px + env(safe-area-inset-bottom));padding:6px;border-radius:999px;
@@ -1732,7 +1744,7 @@ function zeichneNavi() {
   const gruppen = [...new Set(Object.values(BEREICHE).map(b => b[2]))];
   $('#navi').innerHTML = `<div class="nav-gross">${gruppen.map(g => `<div class="nav-gruppe">${esc(g)}</div>${Object.keys(BEREICHE).filter(k => BEREICHE[k][2] === g && bereichSichtbar(k)).map(k => knopf(k)).join('')}`).join('')}
       <div class="nav-gruppe"></div><button class="nav-knopf" data-nav-einstellungen><span class="nav-symbol" aria-hidden="true">${winSymbol('einstellungen', '⚙')}</span><span class="nav-text">Einstellungen</span></button>
-      <button class="nav-knopf" data-nav-thema><span class="nav-symbol" aria-hidden="true">${winSymbol('thema', { hell: '☀', dunkel: '🌙' }[S.einstellungen.thema] || '🌓')}</span><span class="nav-text">Darstellung: ${{ hell: 'hell', dunkel: 'dunkel' }[S.einstellungen.thema] || 'automatisch'}</span></button>
+      <button class="nav-knopf" data-nav-thema><span class="nav-symbol" aria-hidden="true">${winSymbol('thema', { hell: '☀', dunkel: '🌙' }[S.einstellungen.thema] || '🌓')}</span><span class="nav-text">Darstellung: ${{ hell: 'hell', dunkel: 'dunkel' }[S.einstellungen.thema] || THEMA_STANDARD()}</span></button>
       ${window.desktop && window.desktop.fenster && window.desktop.fenster.neu ? `<button class="nav-knopf" data-nav-fenster title="Aktuelle Ansicht in einem eigenen Fenster (Strg+Umschalt+N) – Strg-Klick auf einen Bereich öffnet ihn dort"><span class="nav-symbol" aria-hidden="true">⧉</span><span class="nav-text">Neues Fenster</span></button>` : ''}
       <button class="nav-knopf" data-nav-hilfe><span class="nav-symbol" aria-hidden="true">${winSymbol('hilfe', '⌨')}</span><span class="nav-text">Tastenkürzel</span></button></div>
     <div class="nav-klein">${unten.filter(bereichSichtbar).map(k => knopf(k)).join('')}
@@ -1765,6 +1777,8 @@ function menueUmschalten() {
 $('#menue-knopf').onclick = menueUmschalten;
 $('#nav-schleier').onclick = () => document.body.classList.remove('nav-offen');
 try { if (localStorage.getItem('nav-schmal')) document.body.classList.add('nav-schmal'); } catch {}
+// Windows folgt dem System; Web und Android sind im neuen Design ohne Wahl dunkel (siehe CSS :root:not(.win))
+const THEMA_STANDARD = () => (document.documentElement.classList.contains('win') ? 'automatisch' : 'Standard (dunkel)');
 function themaSetzen() { const t = S.einstellungen.thema; if (t === 'hell' || t === 'dunkel') document.documentElement.dataset.thema = t; else delete document.documentElement.dataset.thema;  if (typeof titelleisteFarben === 'function') titelleisteFarben(); }
 themaSetzen();
 /** Werkzeugleiste: am Handy nur die ersten Knöpfe, der Rest hinter „⋯ Mehr“. */
@@ -2402,7 +2416,7 @@ function zeichneEinstellungenVoll() {
     <div class="karte block"><h3>Bedienung</h3>
       <label class="feld">Wer nutzt dieses Gerät? (für „Meine Touren“, Stempeluhr und „Meine Aufgaben“)<select data-einst-wahl="ichId"><option value="">– niemand Bestimmtes –</option>${mitarbeiterListe(true).map(m => `<option value="${m.id}" ${e.ichId === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
       <label class="feld">Sprache der Bedienung (für Fahrer und Helfer; Kunden-Nachrichten, Belege und PDFs bleiben deutsch)<select data-einst-wahl="sprache">${Object.entries(SPRACHEN).map(([k, [n]]) => `<option value="${k}" ${sprache() === k ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
-      <label class="feld">Darstellung<select data-einst-wahl="thema">${[['auto', 'automatisch (wie das Gerät)'], ['hell', 'hell'], ['dunkel', 'dunkel']].map(([k, l]) => `<option value="${k}" ${(e.thema || 'auto') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label><p class="leise" style="margin-bottom:8px">Diese vier Bereiche stehen am Handy in der unteren Leiste (die übrigen unter „Mehr“):</p>
+      <label class="feld">Darstellung<select data-einst-wahl="thema">${[['auto', THEMA_STANDARD() === 'automatisch' ? 'automatisch (wie das Gerät)' : THEMA_STANDARD()], ['hell', 'hell'], ['dunkel', 'dunkel']].map(([k, l]) => `<option value="${k}" ${(e.thema || 'auto') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label><p class="leise" style="margin-bottom:8px">Diese vier Bereiche stehen am Handy in der unteren Leiste (die übrigen unter „Mehr“):</p>
       <div class="chips">${Object.entries(BEREICHE).map(([k, [l, sy]]) => `<button class="chip" data-nav-unten="${k}" aria-pressed="${navUnten().includes(k)}">${sy} ${l}</button>`).join('')}</div></div>
     <div class="karte block"><h3>Daten</h3><button class="knopf" id="csv">Fallliste für Excel exportieren (CSV)</button>
       <p class="leise" style="margin:10px 0 6px">Nach Tests: alle Angebote und Rechnungen samt erfasster Zahlungen entfernen – auf allen Geräten. Die Nummern beginnen danach wieder bei der Startnummer.</p>
