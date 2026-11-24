@@ -88,6 +88,37 @@ test('Liquid Glass und Animationen (Web/Android): Glas auf schwebenden Flächen,
   await s.close();
 });
 
+test('Bedienung nach Apple (Web/Android): Verwerfen-Rückfrage, Aktionsblatt, Glas nach dem Hereinfedern, 44-pt-Tippflächen, nichts steht über', async () => {
+  const s = await geraet(null, { viewport: { width: 360, height: 780 }, isMobile: true, hasTouch: true, reducedMotion: 'no-preference', bereich: 'faelle' });
+  // ungespeicherte Eingabe: „Abbrechen“ fragt nach, „Weiter bearbeiten“ behält alles
+  await s.evaluate(() => aufgabeDialog());
+  await s.locator('#dialog input:visible').first().fill('Reifen prüfen');
+  await s.locator('#dialog [data-zu]').first().click();
+  await s.locator('dialog.aktionsblatt', { hasText: 'Änderungen verwerfen' }).waitFor();
+  await s.locator('dialog.aktionsblatt [data-ab-nein]').click();
+  assert.equal(await s.evaluate(() => $('#dialog').open && $('#dialog input').value), 'Reifen prüfen');
+  await s.keyboard.press('Escape');
+  await s.locator('dialog.aktionsblatt #ja').click();
+  assert.equal(await s.evaluate(() => $('#dialog').open), false, 'verworfen → geschlossen');
+  // stehendes Sheet wird echtes Glas, beim Hereinfedern nicht
+  await s.evaluate(() => dialog('<h2>Glas</h2>'));
+  assert.equal(await s.evaluate(() => getComputedStyle($('#dialog')).backdropFilter), 'none');
+  await s.waitForFunction(() => $('#dialog').classList.contains('ruhig'));
+  assert.match(await s.evaluate(() => getComputedStyle($('#dialog')).backdropFilter), /blur/);
+  await s.evaluate(() => $('#dialog').close());
+  // Bestätigen als Aktionsblatt
+  await s.evaluate(() => { window.__ja = 0; bestaetige('Löschen?', 'Wirklich?', 'Löschen', () => window.__ja++); });
+  await s.locator('dialog.aktionsblatt #ja').click();
+  assert.equal(await s.evaluate(() => window.__ja), 1);
+  // Tippflächen und Überstände
+  assert.ok(await s.evaluate(() => $('#suche-knopf').getBoundingClientRect().height >= 44 && [...document.querySelectorAll('header .symbol')].filter(e => e.getClientRects().length).every(e => e.getBoundingClientRect().height >= 44)));
+  for (const k of ['faelle', 'zeiten', 'firmen']) {
+    await s.evaluate(k => bereichWechseln(k), k);
+    assert.deepEqual(await s.evaluate(() => [...document.querySelectorAll('#liste *')].filter(e => e.getClientRects().length && !e.closest('.chips:has(> :nth-child(5))')).filter(e => e.getBoundingClientRect().right > innerWidth + 1).map(e => e.textContent.trim().slice(0, 30))), [], 'nichts ragt über den Rand: ' + k);
+  }
+  await s.close();
+});
+
 test('Symbole (Web/Android): Navigation und Knöpfe mit Linien-Symbolen statt Emojis, Text bleibt erhalten', async () => {
   const s = await geraet(null, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, bereich: 'uebersicht' });
   assert.equal(await s.locator('.nav-klein [data-bereich=uebersicht] use').getAttribute('href'), '#i-house');
