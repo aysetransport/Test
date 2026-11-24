@@ -43,7 +43,7 @@ android {
         targetSdk = 36
         // Im Workflow fortlaufend (Lauf-Nummer), damit das App-Update jede neue APK als neuer erkennt.
         versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 38
-        versionName = "5.16.1"
+        versionName = "5.17.0"
     }
 
     // Fester Signaturschlüssel, sofern hinterlegt (Umgebungsvariablen, im Workflow aus GitHub-Secrets).
