@@ -46,7 +46,7 @@
       "target": [
         "nsis"
       ],
-      "icon": "app/icon-512.png"
+      "icon": "app/icon-rund.png"
     },
     "nsis": {
       "oneClick": false,

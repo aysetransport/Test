@@ -10,7 +10,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const WEB = path.join(__dirname, '..', 'web');
-const DATEIEN = ['index.html', 'sprachen.json', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'pdfjs/pdf.min.js', 'pdfjs/pdf.worker.min.js'];
+const DATEIEN = ['index.html', 'sprachen.json', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-rund.png', 'pdfjs/pdf.min.js', 'pdfjs/pdf.worker.min.js'];
 const version = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'desktop', 'package.json'), 'utf8')).version;
 const alt = (() => { try { return JSON.parse(fs.readFileSync(path.join(WEB, 'app-update.json'), 'utf8')); } catch { return {}; } })();
 const minNativ = Number(process.argv[2] || alt.minNativ || 1);

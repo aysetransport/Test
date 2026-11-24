@@ -91,7 +91,7 @@ behandle('mail:ruf', (befehl, daten, a) => { const k = ladeKonto(a); return mail
 // ------------------------------ Rechner-Funktionen ------------------------------
 behandle('benachrichtige', (titel, text, ziel) => {
   if (!Notification.isSupported()) return false;
-  const n = new Notification({ title: titel, body: text, icon: path.join(ORDNER, 'icon-192.png') });
+  const n = new Notification({ title: titel, body: text, icon: path.join(ORDNER, 'icon-rund.png') });
   n.on('click', () => { if (fenster) { if (fenster.isMinimized()) fenster.restore(); fenster.focus(); if (ziel) fenster.webContents.send('ziel', ziel); } });
   n.show();
   return true;
@@ -172,7 +172,7 @@ function fensterBauen(url, haupt) {
   const lage = haupt ? letzteLage() : { width: 1100, height: 800 };
   const w = new BrowserWindow({
     width: lage.width || 1280, height: lage.height || 860, ...(lage.x != null ? { x: lage.x, y: lage.y } : {}), minWidth: 380, minHeight: 500,
-    title: 'Ayse CRM', icon: path.join(ORDNER, 'icon-512.png'), show: false,
+    title: 'Ayse CRM', icon: path.join(ORDNER, 'icon-rund.png'), show: false,
     backgroundColor: MICA ? '#00000000' : nativeTheme.shouldUseDarkColors ? '#202020' : '#F3F3F3',
     ...(IST_WINDOWS ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#FFFFFF' : '#1A1A1A', height: TITEL_HOEHE } } : {}),
     ...(MICA ? { backgroundMaterial: 'mica' } : {}),
