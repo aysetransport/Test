@@ -1601,7 +1601,8 @@ test('Fristen-Matrix und Ausrüstung: fällige Fristen, Ausgabe und Rückgabe', 
     PersonalAktionen.eintrag({ mitarbeiterId: a, art: 'AUSRUESTUNG', datum: '2026-01-05', text: 'Schlüssel Halle' });
     bereichWechseln('personal'); return a;
   });
-  await s.locator('[data-fristen-matrix]').click(); // am PC stehen alle Werkzeuge in der Leiste
+  await s.locator('#mehr-knopf').click(); // am Handy stehen die Werkzeuge im „⋯“-Menü der Navigationsleiste
+  await s.locator('#dialog.menue [data-fristen-matrix]').click();
   await s.locator('.matrix tbody tr').first().waitFor();
   assert.equal(await s.locator('.matrix tbody tr').first().locator('th').textContent(), 'Ali Demir', 'Überfällige zuerst');
   assert.equal(await s.locator('.matrix td.rot').count(), 1); assert.equal(await s.locator('.matrix td.gelb').count(), 1);
@@ -1610,7 +1611,7 @@ test('Fristen-Matrix und Ausrüstung: fällige Fristen, Ausgabe und Rückgabe', 
   await s.locator('.matrix tbody tr').first().waitFor();
   assert.equal(await s.locator('.matrix tbody tr').count(), 1);
   await s.evaluate(() => $('#dialog').close());
-  if (!(await s.locator('[data-ausruestung]').isVisible())) await s.locator('.werkzeug-mehr').click();
+  if (!(await s.locator('[data-ausruestung]').isVisible())) await s.locator('#mehr-knopf').click();
   await s.locator('[data-ausruestung]', { hasText: '(2)' }).click();
   await s.locator('[data-aus-zurueck]').first().click();
   await s.locator('#toast', { hasText: 'zurückgegeben' }).waitFor();
@@ -1934,7 +1935,8 @@ test('Sprachen: Fahrer-Ansicht auf Türkisch und Arabisch (RTL), Kunden-Nachrich
     StoppAktionen.speichern({ tourId: t, reihenfolge: 1, kundeName: 'Frau Meier', adresse: 'Hauptstr. 1, Remscheid', betragCent: 13000 });
     bereichWechseln('fahrer'); return t;
   });
-  await s.locator('[data-sprache-wahl]').first().click();
+  await s.locator('#mehr-knopf').click(); // Werkzeuge der Ansicht im „⋯“-Menü der Navigationsleiste
+  await s.locator('#dialog.menue [data-sprache-wahl]').click();
   await s.locator('[data-sprache="tr"]').click();
   await s.locator('[data-stempel="start"]', { hasText: 'İşe başla' }).waitFor();
   assert.ok(await s.locator('.fahrer-tour', { hasText: 'Teslim et' }).count());
