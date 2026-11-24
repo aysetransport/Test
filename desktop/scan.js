@@ -27,11 +27,11 @@ function SetzeMax($props, $id) { foreach ($p in $props) { if ($p.PropertyID -eq 
 # Neuere Treiber (WIA 2) führen den Einzug als eigenes Element (Kategorie FE131934…) – sonst das erste Element
 function Einzug($dev) { foreach ($it in $dev.Items) { foreach ($p in $it.Properties) { if ($p.PropertyID -eq 4125 -and ([string]$p.Value) -match 'FE131934') { return $it } } }; return $dev.Items.Item(1) }
 # Bild holen: JPEG direkt, sonst BMP, sonst über den Windows-Scan-Dialog (manche HP-Treiber können nur das). Der erste Weg, der klappt, bleibt.
-# Immer als JPEG ablegen: BMP ist unkomprimiert (oft 25 MB+) – zu groß für Texterkennung und Ablage
+# BMP ist unkomprimiert (oft 25 MB+) → als PNG ablegen (Schwarz-Weiß: ~30 KB, verlustfrei – besser für die Texterkennung als JPEG)
 function Speichere($img, $ziel) {
-  if ($img.FileExtension -match '^jpe?g$') { $img.SaveFile("$ziel.jpg"); return }
+  if ($img.FileExtension -match '^(jpe?g|png)$') { $img.SaveFile("$ziel.$($img.FileExtension)"); return }
   $roh = "$ziel.roh.$($img.FileExtension)"; $img.SaveFile($roh); Add-Type -AssemblyName System.Drawing
-  $b = [System.Drawing.Image]::FromFile($roh); $b.Save("$ziel.jpg", [System.Drawing.Imaging.ImageFormat]::Jpeg); $b.Dispose(); Remove-Item $roh
+  $b = [System.Drawing.Image]::FromFile($roh); $b.Save("$ziel.png", [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose(); Remove-Item $roh
 }
 $script:wege = @('JPEG', 'BMP', 'DIALOG')
 function Hole($item) {
@@ -50,7 +50,7 @@ const GERAETE_PS = `$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding =
 $dm = New-Object -ComObject WIA.DeviceManager
 $l = @($dm.DeviceInfos | Where-Object { $_.Type -eq 1 } | ForEach-Object { [pscustomobject]@{ id = $_.DeviceID; name = $_.Properties.Item('Name').Value } })
 ConvertTo-Json -InputObject $l -Compress`;
-// Einzug (3088 = 1), Graustufen (6146 = 2) – Auflösung wie vom Treiber vorgegeben. STAPEL: bis „Papier leer“ (0x80210003) eine Seite nach der anderen.
+// Einzug (3088 = 1), Schwarz-Weiß (6146 = 4, „Text“ – am besten lesbar für Bons und Rechnungen) – Auflösung wie vom Treiber vorgegeben. STAPEL: bis „Papier leer“ (0x80210003) eine Seite nach der anderen.
 // EINZELN: genau ein Beleg mit größter Seitenlänge (6152 = Höhe in Pixeln, 3096 = Seiten) – lange Kassenbons, per Hand geführt.
 const STAPEL_PS = GRUNDLAGE + `
 $dev = Versuche { (Geraet).Connect() }
@@ -60,7 +60,7 @@ if (-not $stapel) { Setze $dev.Properties 3096 1 }
 $item = Einzug $dev
 Setze $item.Properties 3088 1
 # Auflösung bleibt beim Treiber (HP: 200 dpi) – Breite/Länge sind in Pixeln dieser Auflösung; mit 300 dpi wird die Seite abgeschnitten und riesig
-Setze $item.Properties 6146 2
+Setze $item.Properties 6146 4
 if (-not $stapel) { SetzeMax $item.Properties 6152 }
 $n = 0
 while ($true) {
@@ -80,7 +80,7 @@ try {
   foreach ($p in $dev.Properties) { if (@(3086, 3087, 3088, 3096) -contains $p.PropertyID) { $aus += ('  Gerät {0} ({1}) = {2}' -f $p.Name, $p.PropertyID, $p.Value) } }
   $k = 0; foreach ($it in $dev.Items) { $k++; $aus += ('Element {0}:' -f $k); foreach ($p in $it.Properties) { if (@(4098, 4125, 3088, 6146, 6147, 6151, 6152) -contains $p.PropertyID) { $max = ''; try { $max = ' (max ' + $p.SubTypeMax + ')' } catch {}; $aus += ('  {0} ({1}) = {2}{3}' -f $p.Name, $p.PropertyID, $p.Value, $max) } } }
   if ($env:SCAN_TEST -eq '1') {
-    $item = Einzug $dev; Setze $item.Properties 3088 1; Setze $item.Properties 6146 2
+    $item = Einzug $dev; Setze $item.Properties 3088 1; Setze $item.Properties 6146 4
     try { $img = Hole $item; $aus += ('Testscan: ok über {0}, {1} x {2} Pixel, {3} dpi, Format {4}' -f $script:wege[0], $img.Width, $img.Height, $img.HorizontalResolution, $img.FileExtension); Speichere $img (Join-Path $env:SCAN_ZIEL 'test') } catch { $aus += 'Testscan: ' + (Text $_) }
   }
 } catch { $aus += 'Verbinden: ' + (Text $_) }
@@ -137,8 +137,8 @@ async function pruefen(id, testscan) {
   if (process.env.SCHADEN_SCAN_ORDNER) return 'Test-Scanner (Ordner statt Scanner)';
   const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'ayse-pruefen-'));
   let aus = await powershell(PRUEFEN_PS, { SCAN_ID: String(id || ''), SCAN_TEST: testscan ? '1' : '0', SCAN_ZIEL: ordner });
-  const bild = path.join(ordner, 'test.jpg');
-  if (fs.existsSync(bild)) { // Texterkennung auf dem Testscan – zeigt, ob das Bild lesbar ist
+  const bild = ['test.png', 'test.jpg'].map(n => path.join(ordner, n)).find(f => fs.existsSync(f));
+  if (bild) { // Texterkennung auf dem Testscan – zeigt, ob das Bild lesbar ist
     const groesse = fs.statSync(bild).size;
     try { const r = await lesen(fs.readFileSync(bild).toString('base64')); aus += `\nTexterkennung: ${r.text.trim().length} Zeichen, Sicherheit ${r.sicherheit} %, Bild ${Math.round(groesse / 1024)} KB\nAnfang: ${r.text.trim().slice(0, 200).replace(/\s+/g, ' ')}`; }
     catch (e) { aus += `\nTexterkennung: ${e.message} (Bild ${Math.round(groesse / 1024)} KB)`; }

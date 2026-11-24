@@ -2624,6 +2624,14 @@ test('Scannen (Windows): Tankbelege und Rechnungen auslesen, prüfen, speichern 
   // Auslesen eines Tankbelegs (OCR liest „l“ als 1)
   const t = await s.evaluate(b => tankbelegLesen(b), bon);
   assert.deepEqual([t.datum, t.betragCent, t.liter, t.kz, t.km, t.ort, t.unsicher], ['2026-11-12', 10990, 62.48, 'KR-AT 100', '120345', 'Aral', []]);
+  // Echte Bons (Auszüge der Texterkennung, Schwarz-Weiß 200 dpi): „l“ als 1 oder |, zwei Zapfsäulen, Logo nicht gelesen, Betrag in der Folgezeile
+  const echt = await s.evaluate(() => [
+    tankbelegLesen('Lorkawskt1 Tankstellen GmbH\nVieringhausen 18-20\n42857 Remscheid\nBeleg-Nr., 3571/002/00002 18.11.2026 06:03\nRechnung\n4000005 Diesel FuelSave 169,02 EUR #A+\n*Zp 04 80,91 1 2,089 EUR/1 #*\n+000005 Diese] FuelSave 169,54 EUR #A+*\n*Zp 07 81,16 | 2,089 EUR/1 #*\nGesamtbetrag 338,56 EUR\nTyp Netto Must Brutto\nA:19,00% 284,50 54,06 338,56\nHeute haben Sie 322 Punkte\nmit Shell ClubSmart gesammelt.'),
+    tankbelegLesen('SHELL STATION"\nLorkowski Tankstellen GmbH\nBeleg-Nr. 2000/004/00001 17.11.2026 15:47\nKartenzahlung |\n*000005 Diesel FuelSave 120,65 EUR #A*\n*Zp 08 55,37 1 2,179 EUR/] #8 +\nGesantbetrag 120,65 EUR'),
+    tankbelegLesen('star Tankstelle\nGertrud Kolfenbach Tankstellen GmbH\n* 8,28 Liter SÄAULENNUMMER 12 *\n+*AdBlue (A) A 10,01 EUR*\n1,209 EUR/Liter\nBAR 10,01 EUR\nTOTAL 10,01 EUR\nNETTO 8,41 EUR BRUTTO 10,01 EUR\n#63783 16.11.26 16:41 Bediener 07 K.0002'),
+  ].map(w => [w.datum, w.betragCent, w.liter, w.ort, w.unsicher.join()]).concat([(w => [w.lieferant, w.datum, w.bruttoCent])(rechnungLesen('Mn\nBon-ID\n0BI GmbH &Co. Deutschland KG\nFiliale Remscheid\nLieferdatum = Kassenbondatum\n06427 03 8266 0004 17.11.2026 19:53:20\nZwischensumme in € 49,57\nHeyOBI Rabatt_1 %\nvon 49,57 = 0,50-\nEndsumme in ©\n\n49,07\ni d 49,07'))]));
+  assert.deepEqual(echt, [['2026-11-18', 33856, 162.07, 'Shell', ''], ['2026-11-17', 12065, 55.37, 'Shell', ''], ['2026-11-16', 1001, 8.28, 'Star', ''],
+    ['OBI GmbH &Co. Deutschland KG', '2026-11-17', 4907]]);
   // Tankbelege: Stapel scannen → zwei vorausgefüllte Zeilen → speichern (mit Scan als Dokument)
   await s.locator('[data-tankbelege]').first().click();
   await s.waitForFunction(() => document.querySelectorAll('#dialog [data-scan-geraet] option').length === 2);
