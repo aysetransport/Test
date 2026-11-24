@@ -1470,6 +1470,41 @@ test('Tour senden: WhatsApp an das ganze Team auf einmal', async () => {
   await s.close();
 });
 
+test('Touren an alle per WhatsApp der Reihe nach: zurück in der App öffnet sich die nächste Person, Pause, Ende', async () => {
+  const s = await geraet(null, { bereich: 'touren' });
+  await s.evaluate(() => {
+    const ma = (name, telefon) => PersonalAktionen.speichern({ name, rolle: 'FAHRER', telefon });
+    const a = ma('Ali Demir', '0171 1111'), b = ma('Ben Ott', '0172 2222'), c = ma('Cem Kaya', '0173 3333'), d = ma('Dana Roth', '');
+    FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 100', status: 'AKTIV' }); FuhrparkAktionen.speichern({ kennzeichen: 'RS-AT 200', status: 'AKTIV' });
+    TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeber: 'Möbel Krause', name: 'Küche', fahrerId: a, beifahrerIds: b });
+    TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 200', auftraggeber: 'Möbel Krause', name: 'Sofa', fahrerId: c, beifahrerIds: d });
+    window.__links = []; window.oeffneLink = u => window.__links.push(decodeURIComponent(u));
+    alleSenden(heute());
+  });
+  const knopf = s.locator('#tp-wa-reihe'), links = () => s.evaluate(() => window.__links);
+  const wegUndZurueck = () => s.evaluate(() => { dispatchEvent(new Event('blur')); dispatchEvent(new Event('focus')); });
+  assert.equal(await knopf.textContent(), '💬 Start: Ali (1/3)');
+  await knopf.click();
+  assert.ok((await links())[0].startsWith('https://wa.me/491711111?text=Hallo Ali,'), (await links())[0]);
+  await wegUndZurueck();
+  await s.waitForFunction(() => window.__links.length === 2, null, { timeout: 5000 });
+  assert.ok((await links())[1].startsWith('https://wa.me/491722222?text=Hallo Ben,'));
+  // Pause während des Countdowns
+  await wegUndZurueck();
+  await knopf.click();
+  await s.waitForTimeout(2500);
+  assert.equal((await links()).length, 2, 'Pause hält an');
+  assert.equal(await knopf.textContent(), '▶ Weiter: Cem (3/3)');
+  await knopf.click();
+  assert.ok((await links())[2].startsWith('https://wa.me/491733333?text=Hallo Cem,'));
+  assert.equal(await knopf.textContent(), '✓ Alle 3 per WhatsApp geöffnet');
+  assert.equal(await knopf.isDisabled(), true);
+  // nach dem Schließen keine Reaktion mehr auf Fensterwechsel
+  await s.evaluate(() => $('#dialog').close()); await wegUndZurueck(); await s.waitForTimeout(2500);
+  assert.equal((await links()).length, 3);
+  await s.close();
+});
+
 test('Fristen-Matrix und Ausrüstung: fällige Fristen, Ausgabe und Rückgabe', async () => {
   const s = await geraet(null, { bereich: 'personal', viewport: { width: 390, height: 844 } });
   const id = await s.evaluate(() => {
