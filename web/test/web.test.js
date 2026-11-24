@@ -17,7 +17,8 @@ test.after(async () => { await browser.close(); await seite.schliessen(); });
 /** Ein „Gerät“ = eigener Browser-Speicher. Mit cloudUrl ist die Cloud-Adresse schon eingetragen. */
 async function geraet(cloudUrl, optionen = {}) {
   const { bereich, ...kontextOptionen } = optionen;
-  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1200, height: 900 }, acceptDownloads: true, ...kontextOptionen });
+  // Animationen aus (schneller, stabil) – der Test „Liquid Glass“ prüft sie gesondert
+  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1200, height: 900 }, acceptDownloads: true, reducedMotion: 'reduce', ...kontextOptionen });
   // Tests sprechen nie die echte Cloud an: entweder die Test-Cloud oder „nur auf diesem Gerät“.
   await kontext.route('https://script.google.com/**', route => route.abort());
   await kontext.addInitScript(([url, bereich]) => {
@@ -66,6 +67,23 @@ test('Handy (Web/iPhone/Android): Suche öffnet sich, Menü schwebt als Panel ü
   assert.ok(panel.height > 300 && panel.y + panel.height <= leiste.y, `Menü schwebt über der Leiste (${JSON.stringify(panel)})`);
   await s.locator('.nav-gross [data-bereich="firmen"]').click();
   assert.equal(await s.evaluate(() => document.body.classList.contains('nav-offen')), false);
+  await s.close();
+});
+
+test('Liquid Glass und Animationen (Web/Android): Glas auf schwebenden Flächen, Einblenden beim Bereichswechsel, Dialog federt auf; „Bewegung reduzieren“ schaltet ab', async () => {
+  const s = await geraet(null, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'no-preference', bereich: 'uebersicht' });
+  assert.match(await s.evaluate(() => getComputedStyle($('#navi'), '::before').backdropFilter), /blur/);
+  await s.evaluate(() => bereichWechseln('firmen'));
+  assert.ok(await s.evaluate(() => document.getAnimations().length > 0), 'Bereichswechsel blendet ein');
+  await s.evaluate(() => dialog('<h2>Test</h2>'));
+  assert.equal(await s.evaluate(() => getComputedStyle($('#dialog')).animationName), 'sheet-auf', 'am Handy als iOS-Sheet von unten');
+  assert.equal(await s.locator('.nav-klein .nav-linse').count(), 1, 'Glaslinse unter dem aktiven Tab');
+  assert.match(await s.evaluate(() => getComputedStyle($('#dialog')).backdropFilter), /blur/);
+  await s.evaluate(() => $('#dialog').close());
+  await s.emulateMedia({ reducedMotion: 'reduce' });
+  await s.evaluate(() => document.getAnimations().forEach(a => a.finish()));
+  await s.evaluate(() => bereichWechseln('uebersicht'));
+  assert.equal(await s.evaluate(() => document.getAnimations().length), 0, 'keine Animation bei „Bewegung reduzieren“');
   await s.close();
 });
 
@@ -1304,6 +1322,7 @@ test('iPhone: kein seitliches Scrollen in allen Bereichen, Menü und Dialoge bed
   await s.locator('.nav-gross [data-bereich=zeiten]').click();
   await s.waitForFunction(() => ANSICHT.bereich === 'zeiten' && !document.body.classList.contains('nav-offen'));
   await s.evaluate(() => neuMenue());
+  await s.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished))); // Dialog federt auf – erst danach messen
   const d = await s.locator('#dialog').boundingBox();
   assert.ok(d.width >= 389, 'Dialoge am Handy über die ganze Breite');
   await kontext.close();
