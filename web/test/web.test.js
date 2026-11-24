@@ -2231,6 +2231,15 @@ test('Rechte: Fahrer sieht nirgends Daten von Kollegen (Zeiten, Abwesenheiten, A
   assert.equal(await a.evaluate(() => rolle()), 'FAHRER');
   const rest = await a.evaluate(() => JSON.stringify(Object.fromEntries(TABELLEN.map(t => [t, alle(t)]))));
   for (const geheim of ['CEM-ZEIT', 'CEM-URLAUB', 'CEM-AUFGABE', '1700']) assert.ok(!rest.includes(geheim), `${geheim} bleibt nach Fahrer-Anmeldung auf dem Büro-Gerät`);
+  // Rolle unbekannt (alte Installation, Abgleich klappt nicht): Fahrer-Ansicht, nie Admin – keine Übersicht
+  assert.deepEqual(await f.evaluate(() => { S.zugang = null; zeichne(); return [rolle(), FAHRER_BEREICHE.has(ANSICHT.bereich), bereichSichtbar('uebersicht'), !!document.querySelector('#navi [data-bereich=uebersicht]')]; }), ['FAHRER', true, false, false]);
+  // Abmelden: Daten weg, nur noch die Anmeldung – keine Übersicht, keine Suche, kein Menü
+  await f.evaluate(() => abmeldenUndLeeren());
+  await f.locator('#liste [data-anmelden]').waitFor();
+  assert.deepEqual(await f.evaluate(() => [rolle(), TABELLEN.reduce((n, t) => n + alle(t).length, 0), $('#navi').children.length, globaleSuche('Ali').length, getComputedStyle($('#neu-knopf')).display]),
+    ['GESPERRT', 0, 0, 0, 'none']);
+  await f.evaluate(() => bereichWechseln('uebersicht'));
+  assert.ok(!(await f.evaluate(() => document.body.innerText)).includes('Heute unterwegs'), 'Übersicht ohne Anmeldung');
   await k.close(); await a.close(); await cloud.schliessen();
 });
 
