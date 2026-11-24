@@ -599,3 +599,24 @@ test('Sitzungen verlängern sich bei Nutzung – nur ungenutzte laufen nach 90 T
   u.zeitVor(80 * 864e5); assert.ok(u.aufruf('stand', token), 'nach insgesamt 130 Tagen noch gültig');
   u.zeitVor(91 * 864e5); assert.throws(() => u.aufruf('stand', token), /erneut anmelden/, '91 Tage ungenutzt → abgelaufen');
 });
+
+test('Anmeldung: erfundene Benutzernamen legen keine eigenen Zähler an (Eigenschaften-Speicher bleibt klein)', () => {
+  const u = eingerichtet();
+  u.aufruf('benutzerSpeichern', PIN, { login: 'ali', name: 'Ali', rolle: 'FAHRER', passwort: 'fahrer-123' });
+  const vorher = u.eigenschaften.size;
+  for (let i = 0; i < 50; i++) assert.throws(() => u.aufruf('einloggen', 'x'.repeat(500) + i, 'falsch'), /falsch|GESPERRT/);
+  assert.ok(u.eigenschaften.size <= vorher + 1, 'höchstens ein gemeinsamer Zähler');
+  assert.ok(u.aufruf('einloggen', 'ali', 'fahrer-123').token, 'echte Benutzer sind von der Sperre unbekannter Namen nicht betroffen');
+  assert.throws(() => u.aufruf('einloggen', 'ali', 'falsch'), /falsch/);
+  assert.ok([...u.eigenschaften.keys()].includes('FEHL_ali'), 'echte Benutzer haben ihren eigenen Zähler');
+});
+
+test('Geräteuhr in der Zukunft gewinnt keinen Konflikt: spätere Änderung aus dem Büro kommt an', () => {
+  const u = eingerichtet();
+  u.sync({ seit: 0, faelle: [fall(A, { kundeName: 'Handy', geaendertAm: '2030-01-01T00:00:00Z' })] });
+  const gespeichert = u.sync({ seit: 0 }).faelle.find(f => f.id === A);
+  assert.ok(Date.parse(gespeichert.geaendertAm) < Date.parse('2027-01-01'), 'Zeit wurde auf „jetzt“ gekappt');
+  u.zeitVor(60000);
+  u.sync({ seit: 0, faelle: [fall(A, { kundeName: 'Büro', geaendertAm: new Date(Date.now() + 60000).toISOString() })] });
+  assert.equal(u.sync({ seit: 0 }).faelle.find(f => f.id === A).kundeName, 'Büro');
+});

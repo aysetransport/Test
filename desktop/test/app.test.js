@@ -48,6 +48,8 @@ test('Windows-App: Cloud, Fall, E-Mail senden, Antwort abrufen und beantworten, 
   assert.match(exe, /Sicherheitsgründen nicht geöffnet/);
   const lnk = await s.evaluate(() => window.desktop.oeffneDatei('Lieferschein.LNK. ', new Uint8Array([1])).then(() => 'geöffnet', e => e.message));
   assert.match(lnk, /Sicherheitsgründen/, 'auch mit Großbuchstaben und Punkt/Leerzeichen am Ende');
+  for (const name of ['Rechnung.msc', 'Hilfe.chm', 'Tabelle.xll', 'Setup.appref-ms'])
+    assert.match(await s.evaluate(n => window.desktop.oeffneDatei(n, new Uint8Array([1])).then(() => 'geöffnet', e => e.message), name), /Sicherheitsgründen/, name);
 
   // Cloud: Test-Cloud eintragen (statt der fest hinterlegten echten Adresse) und PIN festlegen.
   await s.evaluate(url => { localStorage.setItem('schadensfaelle-v1', JSON.stringify({ apiUrl: url })); localStorage.setItem('crm-bereich', 'faelle'); }, cloud.url);
@@ -67,6 +69,8 @@ test('Windows-App: Cloud, Fall, E-Mail senden, Antwort abrufen und beantworten, 
   await s.locator('#konto-verbinden').click();
   await s.locator('#konto-fehler', { hasText: 'Keine Verbindung zum Postfach' }).waitFor({ timeout: 30000 });
   await s.getByRole('button', { name: 'Abbrechen' }).click();
+  // Web/Android-Darstellung (Linux-Test ohne Windows-Design): ungespeicherte Eingaben fragen per Aktionsblatt nach
+  if (await s.locator('dialog.aktionsblatt').count()) await s.locator('dialog.aktionsblatt #ja').click();
 
   // Konto mit dem unverschlüsselten Testserver einrichten (in der Oberfläche nur SSL/STARTTLS wählbar).
   await s.evaluate(async k => { mailKontoGesetzt('SCHADEN', await window.desktop.mail.einrichten(k.konfig, k.passwort, 'SCHADEN')); }, { konfig: gm.konfig, passwort: gm.passwort });
@@ -81,7 +85,7 @@ test('Windows-App: Cloud, Fall, E-Mail senden, Antwort abrufen und beantworten, 
   await s.locator('#wiedervorlage').waitFor();
 
   // Vorlage wählen, im Schreibfenster senden.
-  await s.getByRole('button', { name: '✉ E-Mail' }).click();
+  await s.getByRole('button', { name: /^(?:✉ )?E\-Mail$/ }).click();
   await s.getByRole('heading', { name: 'E-Mail schreiben' }).waitFor();
   await s.locator('[data-vorlage=ERINNERUNG]').click();
   assert.equal(await s.locator('#mail-form [name=an]').inputValue(), 'anna@kunde.example');
@@ -179,7 +183,7 @@ test('Windows-App: Zeichen des Auftraggebers, Bearbeitungsschritte, Dateianhang 
   assert.ok(await s.evaluate(() => Object.values(S.anlagen).some(a => a.anzeigename === 'Lieferschein.pdf' && !a.geloescht)));
 
   // An die Kundin, Auftraggeber in BCC; Bezug steht im Betreff.
-  await s.getByRole('button', { name: '✉ E-Mail' }).click();
+  await s.getByRole('button', { name: /^(?:✉ )?E\-Mail$/ }).click();
   await s.locator('[data-vorlage=ZWISCHENBESCHEID]').click();
   assert.match(await s.locator('#mail-form [name=betreff]').inputValue(), /– Bezug RK-2291 \[Fall/);
   await s.locator('#mail-bcc').check();
