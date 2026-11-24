@@ -55,7 +55,7 @@ jobs:
       # Als Release statt als Build-Datei: Releases zählen nicht zum (begrenzten) Speicher für Build-Dateien.
       # Nur vom Standard-Branch, immer derselbe Release „windows-app“ mit dem neuesten Installer.
       - name: Installer als Release bereitstellen
-        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+        if: github.ref_name == github.event.repository.default_branch
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -72,7 +72,7 @@ jobs:
       # „windows-app“ im öffentlichen Repository aysetransport/schaden. Braucht das Secret SCHADEN_TOKEN
       # (Fine-grained Token, nur aysetransport/schaden, Contents: Read and write).
       - name: App-Update veröffentlichen
-        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        if: github.ref_name == github.event.repository.default_branch
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.SCHADEN_TOKEN }}
