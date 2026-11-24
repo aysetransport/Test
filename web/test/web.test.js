@@ -2189,6 +2189,51 @@ test('Rolle geändert (Fahrer → Disposition): Gerät holt einmal den komplette
   await k.close(); await a.close(); await cloud.schliessen();
 });
 
+test('Rechte: Fahrer sieht nirgends Daten von Kollegen (Zeiten, Abwesenheiten, Aufgaben, Lohn) – auch nicht im gemeinsamen Tour-Team', async () => {
+  const cloud = await starteCloud();
+  const a = await geraet(cloud.url, { bereich: 'personal' });
+  await melde(a, PIN, true); await aktuell(a);
+  await a.evaluate(() => {
+    const ali = PersonalAktionen.speichern({ name: 'Ali Demir', rolle: 'FAHRER', telefon: '0171 1', stundenlohnCent: 1500 });
+    const cem = PersonalAktionen.speichern({ name: 'Cem Kaya', rolle: 'FAHRER', telefon: '0171 2', stundenlohnCent: 1700 });
+    const f = Aktionen.firmaSpeichern({ name: 'Möbel Krause', status: 'AKTIV' });
+    TourAktionen.neu(heute(), { kennzeichen: 'RS-AT 100', auftraggeberId: f, auftraggeber: '', name: 'Küche', fahrerId: ali, beifahrerIds: cem });
+    ZeitAktionen.speichern({ mitarbeiterId: ali, datum: heute(), beginn: '07:00', ende: '15:00', notiz: 'ALI-ZEIT' });
+    ZeitAktionen.speichern({ mitarbeiterId: cem, datum: heute(), beginn: '06:00', ende: '18:00', notiz: 'CEM-ZEIT' });
+    ZeitAktionen.speichern({ mitarbeiterId: cem, datum: plusTage(heute(), -3), beginn: '06:00', ende: '17:00', notiz: 'CEM-ZEIT-ALT' });
+    PersonalAktionen.abwesenheit({ mitarbeiterId: cem, von: plusTage(heute(), 2), bis: plusTage(heute(), 4), grund: 'Urlaub', notiz: 'CEM-URLAUB' });
+    AufgabeAktionen.speichern({ titel: 'CEM-AUFGABE', zustaendigId: cem });
+  });
+  await abgleich(a);
+  const ali = await a.evaluate(() => maZumNamen('Ali Demir').id);
+  await a.evaluate(id => api('benutzerSpeichern', PIN, { login: 'ali.demir', name: 'Ali Demir', rolle: 'FAHRER', mitarbeiterId: id, passwort: 'fahrer-123' }), ali);
+  const k = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1200, height: 900 } });
+  await k.route('https://script.google.com/**', r => r.abort());
+  const f = await k.newPage(); f.on('pageerror', e => { throw e; }); await f.goto(seite.url);
+  await f.evaluate(url => { S.apiUrl = url; S.nurLokal = false; speichere(); }, cloud.url);
+  await f.evaluate(() => einloggenMit('ali.demir', 'fahrer-123'));
+  await abgleich(f); await abgleich(f);
+  assert.equal(await f.evaluate(() => rolle()), 'FAHRER');
+  // Daten auf dem Gerät
+  const daten = await f.evaluate(() => JSON.stringify(Object.fromEntries(TABELLEN.map(t => [t, alle(t)]))));
+  for (const geheim of ['CEM-ZEIT', 'CEM-URLAUB', 'CEM-AUFGABE', '1700', '1500']) assert.ok(!daten.includes(geheim), `${geheim} liegt auf dem Fahrer-Gerät`);
+  // Jeder Bereich, den ein Fahrer öffnen kann
+  const bereiche = await f.evaluate(() => [...FAHRER_BEREICHE]);
+  for (const b of bereiche) {
+    await f.evaluate(b => bereichWechseln(b), b); await f.waitForTimeout(150);
+    const text = await f.evaluate(() => document.body.innerText);
+    for (const geheim of ['CEM-ZEIT', 'CEM-URLAUB', 'CEM-AUFGABE']) assert.ok(!text.includes(geheim), `${geheim} sichtbar im Bereich ${b}`);
+    if (b === 'zeiten') assert.ok(!/Cem Kaya/.test(text), 'Zeiterfassung zeigt den Kollegen');
+  }
+  // Gemeinsam genutztes Gerät: vorher war das Büro angemeldet (voller Bestand), dann meldet sich der Fahrer an
+  await a.evaluate(() => einloggenMit('ali.demir', 'fahrer-123'));
+  await abgleich(a); await abgleich(a);
+  assert.equal(await a.evaluate(() => rolle()), 'FAHRER');
+  const rest = await a.evaluate(() => JSON.stringify(Object.fromEntries(TABELLEN.map(t => [t, alle(t)]))));
+  for (const geheim of ['CEM-ZEIT', 'CEM-URLAUB', 'CEM-AUFGABE', '1700']) assert.ok(!rest.includes(geheim), `${geheim} bleibt nach Fahrer-Anmeldung auf dem Büro-Gerät`);
+  await k.close(); await a.close(); await cloud.schliessen();
+});
+
 // (läuft nach dem Logins-Test, nutzt eine eigene Test-Cloud)
 test('Persönlicher Anmeldelink: Fahrer tippt den Link an und ist angemeldet', async () => {
   const cloud = await starteCloud();
