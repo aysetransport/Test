@@ -49,10 +49,10 @@ android {
     // Fester Signaturschlüssel, sofern hinterlegt (Umgebungsvariablen, im Workflow aus GitHub-Secrets).
     // Ohne ihn signiert Gradle mit dem Testschlüssel des jeweiligen Rechners – dann lässt sich eine
     // neue APK nicht über eine mit anderem Schlüssel gebaute installieren.
-    // Schlüssel aus den Secrets (SIGNATUR_DATEI …), sonst der im Repository (signatur/, siehe LIESMICH.md).
+    // Der Schlüssel liegt nur in den GitHub-Secrets (öffentliches Repository), nie im Repository selbst.
     fun umgebung(name: String) = System.getenv(name)?.takeIf { it.isNotBlank() }
-    val signaturDatei = (umgebung("SIGNATUR_DATEI")?.let { file(it) } ?: file("signatur/ayse-crm.p12")).takeIf { it.isFile }
-    val signaturPasswort = umgebung("SIGNATUR_PASSWORT") ?: file("signatur/passwort.txt").takeIf { it.isFile }?.readText()?.trim()
+    val signaturDatei = umgebung("SIGNATUR_DATEI")?.let { file(it) }?.takeIf { it.isFile }
+    val signaturPasswort = umgebung("SIGNATUR_PASSWORT")
     val festeSignatur = signaturDatei?.let { datei ->
         signingConfigs.create("fest") {
             storeFile = datei

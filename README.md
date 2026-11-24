@@ -34,8 +34,9 @@ PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen.
   Diesen muss der Benutzer bestätigen, das schreibt Android ohne Play Store so vor (beim ersten Mal zusätzlich „Apps aus
   dieser Quelle zulassen“).
   Einmalig nötig: unter *Settings → Secrets and variables → Actions* das Secret `SCHADEN_TOKEN` anlegen
-  (Fine-grained Token, nur Repository `aysetransport/schaden`, *Contents: Read and write*). Die Android-APK ist mit dem
-  Schlüssel aus `app/signatur/` signiert.
+  (Fine-grained Token, nur Repository `aysetransport/schaden`, *Contents: Read and write*). Für die Android-APK zusätzlich
+  `SIGNATUR_BASE64` (Schlüssel als Base64), `SIGNATUR_PASSWORT` und `SIGNATUR_ALIAS` – der Schlüssel liegt nur dort,
+  nie im (öffentlichen) Repository. Ohne sie wird die APK gebaut, aber nicht veröffentlicht.
   Die Windows-Version kommt aus `desktop/package.json` und muss für ein Update steigen. Die Android-`versionCode`
   zählt im Workflow automatisch hoch.
 - **Veröffentlichen:** `node tools/app-update.js` ausführen (Version kommt aus `desktop/package.json`), dann
@@ -51,9 +52,9 @@ PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen.
   erfolgreichen Lauf auf dem Standard-Branch erneuert). Nicht signiert: SmartScreen
   → „Weitere Informationen → Trotzdem ausführen“. Installation ohne Administratorrechte.
 - **Android:** Release **„Android-App“** im Repository (Tag `android-app`, `Ayse-CRM.apk`, nach jedem Lauf auf dem
-  Standard-Branch erneuert). Signiert mit dem festen Schlüssel aus `app/signatur/` (siehe dortige LIESMICH), damit sich
-  jede neue APK über die installierte installieren lässt. Sind die Secrets `SIGNATUR_BASE64`, `SIGNATUR_PASSWORT` und
-  `SIGNATUR_ALIAS` gesetzt, gehen sie vor.
+  Standard-Branch erneuert). Signiert mit dem festen Schlüssel aus den Secrets, damit sich
+  jede neue APK über die installierte installieren lässt. Den Schlüssel nie wechseln (sonst einmal deinstallieren und
+  neu installieren); eine Sicherung gehört außerhalb von GitHub (z. B. Passwort-Manager).
 
 ## Entwickeln und testen
 
