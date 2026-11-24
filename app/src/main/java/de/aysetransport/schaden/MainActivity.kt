@@ -92,10 +92,7 @@ class MainActivity : ComponentActivity() {
             v.setPadding(rand.left, rand.top, rand.right, rand.bottom)
             WindowInsetsCompat.CONSUMED
         }
-        WindowCompat.getInsetsController(window, wurzel).apply {
-            isAppearanceLightStatusBars = false
-            isAppearanceLightNavigationBars = false
-        }
+        systemleisten(resources.configuration)
         geraet = Geraet(this, wurzel)
 
         val webUpdate = WebUpdate(applicationContext).also { it.beimStart() }
@@ -212,6 +209,21 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         webView.saveState(outState)
+    }
+
+    /** Systemleisten wie die Oberfläche: helles Design → dunkle Symbole, dunkles → helle; Grund wie die Seite (folgt dem Gerät). */
+    private fun systemleisten(konfig: android.content.res.Configuration) {
+        val hell = (konfig.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) != android.content.res.Configuration.UI_MODE_NIGHT_YES
+        window.decorView.setBackgroundColor(if (hell) 0xFFF2F2F7.toInt() else 0xFF000000.toInt())
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = hell
+            isAppearanceLightNavigationBars = hell
+        }
+    }
+
+    override fun onConfigurationChanged(neu: android.content.res.Configuration) {
+        super.onConfigurationChanged(neu)
+        systemleisten(neu)
     }
 
     override fun onResume() {

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Hintergrund des App-Symbols: roter Verlauf von oben links nach unten rechts (wie web/logo.svg). -->
+<!-- Hintergrund des App-Symbols: roter Verlauf von oben nach unten (wie web/logo.svg). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <gradient android:angle="315" android:startColor="#F43B52" android:endColor="#8C0D1B" />
+    <gradient android:angle="270" android:startColor="#FF5A66" android:endColor="#C40F25" />
 </shape>

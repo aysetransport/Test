@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="fenster_hintergrund">#0A0A0C</color>
+    <color name="fenster_hintergrund">#000000</color>
 </resources>

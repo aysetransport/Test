@@ -4,7 +4,7 @@
 const fs = require('fs'), path = require('path'), { chromium } = require('playwright');
 const web = path.join(__dirname, '..', 'web'), svg = fs.readFileSync(path.join(web, 'logo.svg'), 'utf8');
 // Windows maskiert nicht selbst: abgerundetes Quadrat mit etwas Rand, außen durchsichtig
-const rund = svg.replace('<defs>', '<defs><clipPath id="form"><rect x="48" y="48" width="928" height="928" rx="208"/></clipPath>').replace(/(<rect width="1024"[^>]*\/>)([\s\S]*)<\/svg>/, '<g clip-path="url(#form)">$1$2</g></svg>');
+const rund = svg.replace('<defs>', '<defs><clipPath id="form"><rect x="48" y="48" width="928" height="928" rx="208"/></clipPath>').replace('</defs>', '</defs><g clip-path="url(#form)">').replace('</svg>', '</g></svg>');
 (async () => {
   const b = await chromium.launch(), s = await b.newPage();
   for (const [datei, quelle, px] of [['icon-512.png', svg, 512], ['icon-192.png', svg, 192], ['icon-rund.png', rund, 512]]) {
