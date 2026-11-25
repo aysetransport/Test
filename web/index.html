@@ -393,6 +393,10 @@ dl > :nth-last-child(-n+2){border-bottom:0}
 .kontakt{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
 .kontakt .knopf{flex-direction:column;gap:4px;min-height:64px;border-radius:var(--r-kachel);background:var(--flaeche);color:var(--primaer);font-size:var(--t-klein);font-weight:600}
 .kontakt .knopf .ico{width:22px;height:22px}
+.karte .kontakt .knopf{background:var(--flaeche2)}
+.kontakt .knopf:disabled{opacity:1;color:var(--leise3)}
+/* Felder nebeneinander: Datum braucht seine Breite, sonst Umbruch statt abgeschnittenem Datum */
+.zeile > label.feld.fuell{min-width:140px}
 
 /* ===== Filter: Segment-Steuerung (2–4) bzw. Kapseln, die seitlich scrollen ===== */
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
@@ -402,13 +406,14 @@ dl > :nth-last-child(-n+2){border-bottom:0}
 /* Ebenen (mehrere gleichzeitig an): eingeschaltet getönt statt voll – kein „Meer aus Rot“ */
 .chips.ebenen .chip[aria-pressed=true]{background:color-mix(in srgb,var(--primaer) 14%,transparent);color:var(--primaer)}
 .chips.ebenen .chip[aria-pressed=false]{color:var(--leise)}
-.chips:not(.ebenen):has(> .chip:nth-child(2)):not(:has(> :nth-child(5))){display:flex;width:fit-content;max-width:100%;flex-wrap:nowrap;gap:2px;padding:3px;border-radius:999px;background:var(--flaeche2)}
-.chips:not(.ebenen):has(> .chip:nth-child(2)):not(:has(> :nth-child(5))) > .chip{flex:1 1 auto;min-width:0;min-height:30px;background:transparent;padding:0 14px;overflow:hidden;text-overflow:ellipsis}
-.chips:not(.ebenen):has(> .chip:nth-child(2)):not(:has(> :nth-child(5))) > .chip[aria-pressed=true]{background:var(--hoch);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.14),0 0 0 .5px rgba(0,0,0,.04)}
+.chips:not(.ebenen):has(> .chip:nth-child(2)):not(:has(> :nth-child(4))){display:flex;width:fit-content;max-width:100%;flex-wrap:nowrap;gap:2px;padding:3px;border-radius:999px;background:var(--flaeche2)}
+.chips:not(.ebenen):has(> .chip:nth-child(2)):not(:has(> :nth-child(4))) > .chip{flex:1 1 auto;min-width:0;min-height:30px;background:transparent;padding:0 14px;overflow:hidden;text-overflow:ellipsis}
+.chips:not(.ebenen):has(> .chip:nth-child(2)):not(:has(> :nth-child(4))) > .chip[aria-pressed=true]{background:var(--hoch);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.14),0 0 0 .5px rgba(0,0,0,.04)}
 @media (max-width:899px){
-  .chips:has(> :nth-child(5)){flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:calc(-1 * var(--rand-seite));padding-inline:var(--rand-seite)}
-  .chips:has(> :nth-child(5))::-webkit-scrollbar{display:none}
-  .chips:has(> :nth-child(5)) > .chip{flex:none}
+  .chips:has(> :nth-child(4)){flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:calc(-1 * var(--rand-seite));padding-inline:var(--rand-seite)}
+  .chips:has(> :nth-child(4))::-webkit-scrollbar{display:none}
+  .chips:has(> :nth-child(4)) > .chip{flex:none}
+  .karte .chips:has(> :nth-child(4)){margin-left:-16px!important;margin-right:-16px!important;padding-inline:16px} /* in Karten bis an den Kartenrand, Inhalt bündig */
 }
 
 /* ===== Eingaben: gefüllte Felder, Beschriftung darüber; Schalter statt Häkchen in Einstellungen ===== */
@@ -488,6 +493,15 @@ pre.vorschau{white-space:pre-wrap;font:inherit;background:var(--flaeche2);paddin
 .positionen{width:100%;border-collapse:collapse;margin:6px 0}.positionen th{text-align:left;font-size:var(--t-klein);color:var(--leise);padding:4px}
 .positionen td{padding:3px}.positionen input{width:100%;min-height:38px;padding:6px 10px;border:0;border-radius:10px;background:var(--flaeche2);color:inherit}
 .positionen td:nth-child(3){width:76px}.positionen td:nth-child(4){width:116px}.positionen td:nth-child(5){width:40px}
+/* iPhone: jede Position als eigener Block – Leistung über die ganze Breite, darunter Einheit, Menge, Preis mit Beschriftung */
+@media (max-width:700px){
+  .positionen,.positionen tbody{display:block}
+  .positionen tr:first-child:has(th){display:none}
+  .positionen tr{display:grid;grid-template-columns:1fr 1fr 1.2fr 36px;gap:8px;align-items:end;padding:10px 0;border-bottom:.5px solid var(--linie)}
+  .positionen td{display:flex;flex-direction:column;gap:4px;width:auto!important;padding:0;font-size:var(--t-mini);font-weight:600;color:var(--leise)}
+  .positionen td:nth-child(1){grid-column:1/-1}
+  .positionen td:nth-child(1)::before{content:"Leistung"}.positionen td:nth-child(2)::before{content:"Einheit"}.positionen td:nth-child(3)::before{content:"Menge"}.positionen td:nth-child(4)::before{content:"Einzelpreis €"}
+}
 .unterschrift-feld{width:100%;height:auto;aspect-ratio:600/220;border:1.5px dashed var(--leise3);border-radius:var(--r-kachel);background:#fff;touch-action:none;display:block}
 
 /* ===== Tourenplanung ===== */
@@ -554,7 +568,7 @@ pre.vorschau{white-space:pre-wrap;font:inherit;background:var(--flaeche2);paddin
 .kal-zelle.fremd{opacity:.55}.kal-zelle.we{background:color-mix(in srgb,var(--flaeche) 70%,var(--bg))}
 .kal-zelle.heute .kal-kopf b{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 6px;border-radius:999px;background:var(--primaer);color:#fff}
 .kal-zelle:hover{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--primaer) 35%,transparent)}
-.kal-kopf{font-size:var(--t-fuss);margin-bottom:4px}
+.kal-kopf{font-size:var(--t-fuss);margin-bottom:4px;text-align:center} /* wie der Apple-Kalender: Tageszahl mittig, „heute“ als Kreis frei von der Ecke */
 .kal-eintrag{font-size:var(--t-mini);line-height:1.3;border-radius:6px;padding:2px 5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 @media (max-width:700px){.kal-gitter{gap:3px}.kal-zelle{min-height:58px;padding:4px;border-radius:10px}.kal-eintrag{font-size:0;height:5px;padding:0;margin-top:2px;border-radius:3px}.kal-gitter.woche{grid-template-columns:1fr}.kal-gitter.woche .kal-wt{display:none}
   .kal-gitter.woche .kal-zelle{min-height:auto}.kal-gitter.woche .kal-eintrag{font-size:var(--t-klein);height:auto;padding:2px 5px}}
@@ -2689,7 +2703,7 @@ function zeichneEinstellungen() {
 }
 function zeichneEinstellungenVoll() {
   const e = S.einstellungen;
-  $('#detail').innerHTML = `<h2 class="gross" style="margin-bottom:12px">Einstellungen</h2>
+  $('#detail').innerHTML = `<div class="seitenkopf"><h1>Einstellungen</h1></div>
     <div class="karte block"><h3>Absender</h3><p class="leise" style="margin-bottom:8px">Erscheint als Grußformel in den Textvorlagen.</p>
       ${[['firma', 'Firma'], ['bearbeiter', 'Bearbeiter/in'], ['funktion', 'Funktion']].map(([k, l]) => `<label class="feld">${l}<input data-einst="${k}" value="${esc(e[k])}"></label>`).join('')}</div>
     <div class="karte block"><h3>Wiedervorlage</h3><p class="leise" style="margin-bottom:8px">Vorschlag für den ersten Termin eines neuen Falls und nach dem Nachhaken.</p>
@@ -6645,7 +6659,7 @@ function zeichneAuswertung() {
   }
   if (reiter === 'fertig') {
     const gruppen = [...new Set(FERTIGE.map(([g]) => g))];
-    return kopf + `<div class="dashboard">${gruppen.map(g => `<div class="karte block"><h3>${esc(g)}</h3>${FERTIGE.filter(([x]) => x === g).map(([, titel], i) => `<button class="vorlage" data-fertige="${esc(titel)}">${esc(titel)} →</button>`).join('')}</div>`).join('')}</div>`;
+    return kopf + `<div class="dashboard">${gruppen.map(g => gruppe(esc(g), FERTIGE.filter(([x]) => x === g).map(([, titel]) => `<button class="vorlage mit-pfeil" data-fertige="${esc(titel)}">${esc(titel)}</button>`).join(''))).join('')}</div>`;
   }
   // Baukasten
   const q = QUELLEN[st.q] || QUELLEN.touren, auswahl = (id, werte, wert, leer) => `<select id="${id}">${leer ? `<option value="">${leer}</option>` : ''}${Object.entries(werte).map(([k, v]) => `<option value="${k}" ${k === wert ? 'selected' : ''}>${esc(Array.isArray(v) ? v[0] : v.titel || v)}</option>`).join('')}</select>`;

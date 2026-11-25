@@ -114,7 +114,7 @@ test('Bedienung nach Apple (Web/Android): Verwerfen-Rückfrage, Aktionsblatt, Gl
   assert.ok(await s.evaluate(() => $('#suche-knopf').getBoundingClientRect().height >= 44 && [...document.querySelectorAll('header .symbol')].filter(e => e.getClientRects().length).every(e => e.getBoundingClientRect().height >= 44)));
   for (const k of ['faelle', 'zeiten', 'firmen']) {
     await s.evaluate(k => bereichWechseln(k), k);
-    assert.deepEqual(await s.evaluate(() => [...document.querySelectorAll('#liste *')].filter(e => e.getClientRects().length && !e.closest('.chips:has(> :nth-child(5))')).filter(e => e.getBoundingClientRect().right > innerWidth + 1).map(e => e.textContent.trim().slice(0, 30))), [], 'nichts ragt über den Rand: ' + k);
+    assert.deepEqual(await s.evaluate(() => [...document.querySelectorAll('#liste *')].filter(e => e.getClientRects().length && !e.closest('.chips:has(> :nth-child(4))')).filter(e => e.getBoundingClientRect().right > innerWidth + 1).map(e => e.textContent.trim().slice(0, 30))), [], 'nichts ragt über den Rand: ' + k);
   }
   await s.close();
 });
