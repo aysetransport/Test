@@ -2982,3 +2982,72 @@ test('Belege: Fahrer reicht per Foto ein, Büro übernimmt (Texterkennung, Fahrz
   assert.equal(await s.locator('[data-belege-pruefen]').count(), 0, 'Hinweis weg, wenn alles übernommen ist');
   await s.close();
 });
+
+test('Vorschuss-App (Chef): Anmeldung nur als Hauptadmin, Mitarbeiterstamm aus dem CRM, Vorschuss und Rückzahlung, offline weiterbuchen, Daten getrennt vom CRM', async () => {
+  const cloud = await starteCloud();
+  const u = cloud.umgebung, MA = 'cccccccc-0000-4000-8000-0000000000a1', MB = 'cccccccc-0000-4000-8000-0000000000b2', jetzt = new Date().toISOString();
+  u.aufruf('pinFestlegen', PIN);
+  u.aufruf('sync', PIN, { seit: 0, mitarbeiter: [{ id: MA, firmaId: '', name: 'Ali Demir', personalnummer: '17', rolle: 'FAHRER', aktiv: true, geaendertAm: jetzt },
+    { id: MB, firmaId: '', name: 'Bernd Schneider-Hohenstein', rolle: 'FAHRER', aktiv: true, geaendertAm: jetzt }] });
+  u.aufruf('benutzerSpeichern', PIN, { login: 'buero', name: 'Büro', rolle: 'DISPO', passwort: 'buero-123' });
+  u.aufruf('benutzerSpeichern', PIN, { login: 'chef', name: 'Chef', rolle: 'ADMIN', hauptadmin: true, passwort: 'chef-12345' });
+  const kontext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
+  await kontext.route('https://script.google.com/**', r => r.abort());
+  await kontext.addInitScript(url => { if (!localStorage.getItem('vorschuss-v1')) localStorage.setItem('vorschuss-v1', JSON.stringify({ url })); }, cloud.url);
+  const s = await kontext.newPage(); s.on('pageerror', f => { throw f; });
+  try {
+    await s.goto(seite.url + 'vorschuss/'); await s.waitForFunction(() => window.__appBereit);
+    // Büro darf nicht
+    await s.locator('#login [name=login]').fill('buero'); await s.locator('#login [name=passwort]').fill('buero-123'); await s.locator('#login button').click();
+    await s.locator('.fehler', { hasText: 'Nur der Chef' }).waitFor();
+    await s.locator('#login [name=login]').fill('chef'); await s.locator('#login [name=passwort]').fill('chef-12345'); await s.locator('#login button').click();
+    await s.locator('.zelle', { hasText: 'Ali Demir' }).waitFor();
+    // Vorschuss für Ali (über das Plus, Mitarbeiter wählen)
+    await s.locator('#plus').click();
+    await s.locator('#buchung [name=betrag]').fill('250,00');
+    await s.locator('#buchung [name=mitarbeiterId]').selectOption(MA);
+    await s.locator('#buchung [name=notiz]').fill('Kaution Wohnung');
+    await s.locator('#buchung button[type=submit]').click();
+    await s.waitForFunction(() => !Object.keys(Z.offen).length && Object.keys(Z.eintraege).length === 1);
+    assert.match(await s.locator('.kennzahl .zahl').textContent(), /250,00\s€/);
+    // Mitarbeiter öffnen, Rückzahlung über den Lohn
+    await s.locator('.zelle', { hasText: 'Ali Demir' }).click();
+    await s.locator('h1', { hasText: 'Ali Demir' }).waitFor();
+    await s.locator('[data-neu=RUECKZAHLUNG]').click();
+    assert.equal(await s.locator('[data-art=RUECKZAHLUNG]').getAttribute('aria-pressed'), 'true');
+    await s.locator('#buchung [name=betrag]').fill('50');
+    await s.locator('#buchung [name=weg]').selectOption('LOHN');
+    await s.locator('#buchung button[type=submit]').click();
+    await s.waitForFunction(() => !Object.keys(Z.offen).length && Object.keys(Z.eintraege).length === 2);
+    assert.match(await s.locator('.kennzahl .zahl').textContent(), /200,00\s€/);
+    // offline: Buchung wartet und geht später hoch
+    await kontext.route(cloud.url + '**', r => r.abort());
+    await s.locator('[data-neu=VORSCHUSS]').click();
+    await s.locator('#buchung [name=betrag]').fill('1.000');
+    await s.locator('#buchung button[type=submit]').click();
+    await s.locator('.zelle', { hasText: 'wartet' }).waitFor();
+    assert.match(await s.locator('.kennzahl .zahl').textContent(), /1\.200,00\s€/);
+    await kontext.unroute(cloud.url + '**');
+    await s.evaluate(() => abgleichen());
+    await s.waitForFunction(() => !Object.keys(Z.offen).length && Object.keys(Z.eintraege).length === 3);
+    // Ändern und Löschen
+    await s.locator('[data-eintrag]', { hasText: '1.000,00' }).click();
+    s.once('dialog', d => d.accept());
+    await s.locator('[data-loeschen]').click();
+    await s.waitForFunction(() => !Object.keys(Z.offen).length && Object.values(Z.eintraege).filter(e => e.geloescht).length === 1);
+    assert.match(await s.locator('.kennzahl .zahl').textContent(), /200,00\s€/);
+    // nichts ragt seitlich heraus (iPhone)
+    assert.equal(await s.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    // getrennt: eigene Datei, nicht in daten.json und nicht im Abgleich der CRM-Apps
+    const v = JSON.parse(u.datei('Schadensfaelle/vorschuesse.json').bytes.toString('utf8'));
+    assert.equal(Object.keys(v.eintraege).length, 3);
+    assert.ok(!JSON.stringify(cloudDaten(cloud)).includes('Kaution'));
+    assert.ok(!JSON.stringify(u.aufruf('sync', PIN, { seit: 0 })).includes('Kaution'));
+    // nach Neuladen sofort da (Gerätespeicher), Abmelden löscht ihn
+    await s.reload(); await s.waitForFunction(() => window.__appBereit);
+    await s.locator('h1', { hasText: 'Ali Demir' }).waitFor();
+    await s.goto(seite.url + 'vorschuss/#/'); await s.locator('[data-abmelden]').click();
+    await s.locator('#login').waitFor();
+    assert.equal(await s.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('vorschuss-v1')).eintraege).length), 0);
+  } finally { await kontext.close(); await cloud.schliessen(); }
+});
