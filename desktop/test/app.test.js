@@ -316,6 +316,11 @@ test('Windows-App: Unterfenster mit eigenem Bereich, gleicher Datenstand in beid
     const w = await x; await w.waitForLoadState();
     assert.ok(!w.url().includes('javascript') && !w.url().includes('böse'), w.url());
     assert.equal(app.windows().length, zahl + 1);
+    // losgekoppelt: nur der Datensatz, mit eigener (kleinerer) Fenstergröße
+    const y = app.waitForEvent('window');
+    await s.evaluate(() => window.desktop.fenster.neu('postfach', "#/mail/a!b~c*(d)'e%40x", true));
+    const l = await y; await l.waitForFunction(() => window.__appBereit);
+    assert.deepEqual(await l.evaluate(() => [ALLEIN, location.hash]), [true, "#/mail/a!b~c*(d)'e%40x"]);
   } finally {
     await app.close();
   }
