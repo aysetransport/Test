@@ -128,7 +128,7 @@ test('Navigation am Handy (360 px): jede Tab-Beschriftung passt mit Luft in ihre
   for (const k of await s.evaluate(() => Object.keys(BEREICHE).filter(bereichSichtbar))) {
     await s.evaluate(k => { S.einstellungen.navUnten = [k, ...navUnten().filter(x => x !== k)].slice(0, 4); bereichWechseln(k); }, k);
     const tab = await s.evaluate(() => { const kn = document.querySelector('.nav-klein .nav-knopf[aria-current=page]'), t = kn.querySelector('.nav-text');
-      const kl = t.cloneNode(true); kl.style.cssText = 'position:absolute;visibility:hidden;max-width:none;width:auto'; kn.append(kl); const voll = kl.getBoundingClientRect().width; kl.remove();
+      const kl = t.cloneNode(true); kl.style.cssText += ';position:absolute;visibility:hidden;max-width:none;width:auto'; kn.append(kl); const voll = kl.getBoundingClientRect().width; kl.remove();
       const tr = t.getBoundingClientRect(), lr = kn.querySelector('.nav-linse').getBoundingClientRect(), m = tr.left + tr.width / 2;
       return { text: t.textContent, ganz: voll <= tr.width + 0.5, rand: Math.min(m - voll / 2 - lr.left, lr.right - m - voll / 2) }; });
     assert.ok(tab.ganz && tab.rand >= 5, `Tab „${tab.text}“: ganz=${tab.ganz}, Rand ${tab.rand.toFixed(1)} px`);
