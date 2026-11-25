@@ -3002,6 +3002,16 @@ test('Vorschuss-App (Chef): Anmeldung nur als Hauptadmin, Mitarbeiterstamm aus d
     await s.locator('.fehler', { hasText: 'Nur der Chef' }).waitFor();
     await s.locator('#login [name=login]').fill('chef'); await s.locator('#login [name=passwort]').fill('chef-12345'); await s.locator('#login button').click();
     await s.locator('.zelle', { hasText: 'Ali Demir' }).waitFor();
+    // Cloud noch ohne Vorschüsse (Update nicht angekommen): Grund bleibt sichtbar, „Erneut versuchen“ lädt
+    await kontext.route(cloud.url + '**', async r => { const fn = JSON.parse(r.request().postData() || '{}').fn;
+      if (fn === 'vorschussSpeichern') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ error: 'Unbekannte Funktion: vorschussSpeichern' }) });
+      if (fn === 'cloudAktualisieren') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: { neu: false, api: 17 } }) });
+      return r.continue(); });
+    await s.evaluate(() => abgleichen());
+    await s.locator('#status.fehler-box', { hasText: 'kennt die Vorschüsse noch nicht' }).waitFor();
+    await kontext.unroute(cloud.url + '**');
+    await s.locator('[data-neu-laden]').click();
+    await s.locator('#status.fehler-box').waitFor({ state: 'detached' });
     // Vorschuss für Ali (über das Plus, Mitarbeiter wählen)
     await s.locator('#plus').click();
     await s.locator('#buchung [name=betrag]').fill('250,00');
