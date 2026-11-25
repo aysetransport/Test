@@ -286,7 +286,7 @@ test('Auftraggeber: Kontaktdaten am Fall und eigene Liste mit denselben Abgleich
   assert.deepEqual(weg.auftraggeber.map(e => [e.geloescht, e.name]), [[true, undefined]]);
   const spaeter = u.sync({ seit: weg.rev, kennung: r.kennung, auftraggeber: [{ id: AG, name: 'Wieder da?', geaendertAm: '2026-11-12T08:00:00Z' }] });
   assert.equal(spaeter.auftraggeber[0].geloescht, true, 'gelöscht bleibt gelöscht');
-  assert.equal(u.aufruf('status').api, 17);
+  assert.equal(u.aufruf('status').api, 18);
 });
 
 test('CRM: Ansprechpartner, Preise usw. gleichen sich ab und verschwinden mit ihrer Firma', () => {
@@ -536,10 +536,10 @@ test('Hauptadmin: verwaltet Admins, schaltet die Cloud-PIN ab; Notfall-Funktion 
 test('Selbst-Update: lädt Code.gs, prüft Prüfsumme, ersetzt Code, neue Version auf derselben Bereitstellung; nur Hauptadmin', () => {
   const crypto = require('node:crypto');
   const sha = x => crypto.createHash('sha256').update(x, 'utf8').digest('hex');
-  const neuerCode = '// neue Fassung\nvar API_VERSION = 18;';
-  const web = { 'cloud-update.json': JSON.stringify({ stand: 500, api: 18, version: '4.16.0', sha256: sha(neuerCode) }), 'cloud/Code.gs': neuerCode };
+  const neuerCode = '// neue Fassung\nvar API_VERSION = 19;';
+  const web = { 'cloud-update.json': JSON.stringify({ stand: 500, api: 19, version: '4.16.0', sha256: sha(neuerCode) }), 'cloud/Code.gs': neuerCode };
   const api = [], projekt = { files: [{ name: 'appsscript', type: 'JSON', source: '{}' }, { name: 'Code', type: 'SERVER_JS', source: 'alt' }] };
-  let deployment = { deploymentConfig: { versionNumber: 7 } }, statusApi = 18;
+  let deployment = { deploymentConfig: { versionNumber: 7 } }, statusApi = 19;
   const antwort = (code, text) => ({ getResponseCode: () => code, getContentText: () => text });
   const UrlFetchApp = { fetch(url, opt = {}) {
     if (url.startsWith('https://aysetransport.github.io/schaden/')) { const p = url.replace('https://aysetransport.github.io/schaden/', '').replace(/\?.*$/, ''); return web[p] != null ? antwort(200, web[p]) : antwort(404, ''); }
@@ -561,20 +561,20 @@ test('Selbst-Update: lädt Code.gs, prüft Prüfsumme, ersetzt Code, neue Versio
   u.aufruf('pinFestlegen', 'pin-1234');
   assert.equal(u.aufruf('status').selbstUpdate, true);
   const info = u.aufruf('cloudUpdateInfo', 'pin-1234');
-  assert.equal(info.verfuegbar.api, 18);
+  assert.equal(info.verfuegbar.api, 19);
   const r = u.aufruf('cloudAktualisieren', 'pin-1234');
-  assert.deepEqual(r, { neu: true, vorher: 17, api: 18, version: 8 });
+  assert.deepEqual(r, { neu: true, vorher: 18, api: 19, version: 8 });
   assert.equal(projekt.files.find(f => f.name === 'Code').source, neuerCode, 'Code ersetzt');
   assert.equal(deployment.deploymentConfig.versionNumber, 8, 'dieselbe Bereitstellung zeigt auf die neue Version');
   assert.equal(u.eigenschaften.get('CODE_STAND'), '500');
   assert.equal(u.aufruf('cloudAktualisieren', 'pin-1234').neu, false, 'kein zweites Mal');
   // Prüfsumme falsch → nichts geändert
-  web['cloud-update.json'] = JSON.stringify({ stand: 600, api: 18, sha256: 'falsch' });
+  web['cloud-update.json'] = JSON.stringify({ stand: 600, api: 19, sha256: 'falsch' });
   const anzahl = api.length;
   assert.throws(() => u.aufruf('cloudAktualisieren', 'pin-1234'), /Prüfsumme/);
   assert.equal(api.length, anzahl, 'keine Änderung am Projekt');
   // neue Version antwortet nicht → zurück auf vorherige
-  web['cloud-update.json'] = JSON.stringify({ stand: 700, api: 19, sha256: sha(neuerCode) }); statusApi = 18;
+  web['cloud-update.json'] = JSON.stringify({ stand: 700, api: 20, sha256: sha(neuerCode) }); statusApi = 19;
   assert.throws(() => u.aufruf('cloudAktualisieren', 'pin-1234'), /vorherige Version ist wieder aktiv/);
   assert.equal(deployment.deploymentConfig.versionNumber, 8, 'zurückgesetzt');
   // nur Hauptadmin
@@ -619,4 +619,43 @@ test('Geräteuhr in der Zukunft gewinnt keinen Konflikt: spätere Änderung aus 
   u.zeitVor(60000);
   u.sync({ seit: 0, faelle: [fall(A, { kundeName: 'Büro', geaendertAm: new Date(Date.now() + 60000).toISOString() })] });
   assert.equal(u.sync({ seit: 0 }).faelle.find(f => f.id === A).kundeName, 'Büro');
+});
+
+test('Vorschüsse: eigene Datei (nie im CRM-Abgleich), nur Hauptadmin, Mitarbeiterstamm nur lesend, spätere Änderung gewinnt', () => {
+  const u = eingerichtet();
+  const MA = 'cccccccc-0000-4000-8000-000000000001', MB = 'cccccccc-0000-4000-8000-000000000002', V = 'dddddddd-0000-4000-8000-000000000001';
+  const jetzt = new Date().toISOString();
+  u.sync({ seit: 0, mitarbeiter: [{ id: MA, firmaId: '', name: 'Ali Demir', personalnummer: '17', rolle: 'FAHRER', aktiv: true, stundenlohnCent: 1500, geaendertAm: jetzt },
+    { id: MB, firmaId: '', name: 'Ben Alt', rolle: 'FAHRER', aktiv: true, austritt: '2020-01-31', geaendertAm: jetzt }] });
+  // Mitarbeiterstamm: nur Name, Nummer, aktiv – keine Lohndaten
+  let r = u.aufruf('vorschussLaden', PIN);
+  assert.deepEqual(r.eintraege, []);
+  assert.deepEqual(r.mitarbeiter.find(m => m.id === MA), { id: MA, name: 'Ali Demir', personalnummer: '17', aktiv: true, rolle: 'FAHRER' });
+  assert.equal(r.mitarbeiter.find(m => m.id === MB).aktiv, false, 'ausgetreten');
+  // anlegen, Prüfung der Eingaben
+  r = u.aufruf('vorschussSpeichern', PIN, [{ id: V, mitarbeiterId: MA, art: 'VORSCHUSS', weg: 'BAR', datum: '2026-11-03', betragCent: 50000, notiz: 'Kaution Wohnung', geaendertAm: jetzt }]);
+  assert.equal(r.eintraege.length, 1);
+  assert.throws(() => u.aufruf('vorschussSpeichern', PIN, [{ id: V, mitarbeiterId: MA, datum: '2026-11-03', betragCent: 0 }]), /Betrag fehlt/);
+  assert.throws(() => u.aufruf('vorschussSpeichern', PIN, [{ id: 'x', mitarbeiterId: MA, datum: '2026-11-03', betragCent: 5 }]), /Ungültige Kennung/);
+  // ältere Änderung verliert
+  u.aufruf('vorschussSpeichern', PIN, [{ id: V, mitarbeiterId: MA, datum: '2026-11-03', betragCent: 1, geaendertAm: '2020-01-01T00:00:00Z' }]);
+  assert.equal(u.aufruf('vorschussLaden', PIN).eintraege[0].betragCent, 50000);
+  // getrennt: weder in daten.json noch im Abgleich
+  const sync = u.sync({ seit: 0 });
+  assert.ok(!JSON.stringify(sync).includes('Kaution'), 'nicht im Abgleich');
+  // nur Hauptadmin: Büro (DISPO) und Admin ohne Hauptadmin-Recht nicht
+  u.aufruf('benutzerSpeichern', PIN, { login: 'buero', name: 'Büro', rolle: 'DISPO', passwort: 'buero-123' });
+  u.aufruf('benutzerSpeichern', PIN, { login: 'admin2', name: 'Admin', rolle: 'ADMIN', passwort: 'admin-123' });
+  for (const [l, p] of [['buero', 'buero-123'], ['admin2', 'admin-123']]) {
+    const t = u.aufruf('einloggen', l, p).token;
+    assert.throws(() => u.aufruf('vorschussLaden', t), /Nur der Hauptadmin/);
+    assert.throws(() => u.aufruf('vorschussSpeichern', t, []), /Nur der Hauptadmin/);
+  }
+  u.aufruf('benutzerSpeichern', PIN, { login: 'chef', name: 'Chef', rolle: 'ADMIN', hauptadmin: true, passwort: 'chef-12345' });
+  const chef = u.aufruf('einloggen', 'chef', 'chef-12345');
+  assert.equal(chef.hauptadmin, true);
+  assert.equal(u.aufruf('vorschussLaden', chef.token).eintraege.length, 1);
+  // löschen
+  u.aufruf('vorschussSpeichern', chef.token, [{ id: V, mitarbeiterId: MA, datum: '2026-11-03', betragCent: 50000, geloescht: true, geaendertAm: new Date(Date.now() + 1000).toISOString() }]);
+  assert.equal(u.aufruf('vorschussLaden', PIN).eintraege[0].geloescht, true);
 });
