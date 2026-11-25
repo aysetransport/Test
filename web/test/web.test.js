@@ -130,7 +130,8 @@ test('Navigation am Handy (360 px): jede Tab-Beschriftung passt mit Luft in ihre
     const tab = await s.evaluate(() => { const kn = document.querySelector('.nav-klein .nav-knopf[aria-current=page]'), t = kn.querySelector('.nav-text');
       const kl = t.cloneNode(true); kl.style.cssText += ';position:absolute;visibility:hidden;max-width:none;width:auto'; kn.append(kl); const voll = kl.getBoundingClientRect().width; kl.remove();
       const tr = t.getBoundingClientRect(), lr = kn.querySelector('.nav-linse').getBoundingClientRect(), m = tr.left + tr.width / 2;
-      return { text: t.textContent, ganz: voll <= tr.width + 0.5, rand: Math.min(m - voll / 2 - lr.left, lr.right - m - voll / 2) }; });
+      const ganz = t.scrollWidth <= t.clientWidth + 0.5 && t.scrollHeight <= t.clientHeight + 0.5; // nichts abgeschnitten (ein- oder zweizeilig)
+      return { text: t.textContent, ganz, rand: Math.min(m - Math.min(voll, tr.width) / 2 - lr.left, lr.right - m - Math.min(voll, tr.width) / 2) }; });
     assert.ok(tab.ganz && tab.rand >= 5, `Tab „${tab.text}“: ganz=${tab.ganz}, Rand ${tab.rand.toFixed(1)} px`);
     await s.evaluate(() => window.scrollTo(0, 400)); await s.waitForTimeout(100);
     const kopf = await s.evaluate(() => { const ti = $('#app-titel'), gross = ($('#liste .seitenkopf h1') || {}).textContent || '', tr = ti.getBoundingClientRect();
@@ -140,6 +141,7 @@ test('Navigation am Handy (360 px): jede Tab-Beschriftung passt mit Luft in ihre
     if (kopf.gross) assert.equal(kopf.klein, kopf.gross, 'kleiner Titel = großer Titel: ' + k);
     assert.ok(!kopf.stoesst, 'Titel berührt keinen Knopf: ' + k);
     await s.evaluate(() => window.scrollTo(0, 0));
+    await s.waitForFunction(() => !document.body.classList.contains('leiste-klein')); // Leiste wieder ausgeklappt, bevor der nächste Tab gemessen wird
   }
   await s.close();
 });

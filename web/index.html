@@ -238,7 +238,7 @@ main>section{padding:8px calc(var(--rand-seite) + env(safe-area-inset-right)) 40
   .nav-klein .nav-knopf{flex-direction:column;gap:2px;padding:6px 0;min-height:50px;border-radius:999px;font-size:clamp(9.5px,2.65vw,11px);font-weight:600;letter-spacing:-.015em;text-align:center;min-width:0;color:var(--text);justify-content:center;z-index:1}
   .nav-klein .nav-symbol{color:inherit}
   .nav-klein .nav-knopf[aria-current=page]{color:var(--primaer)}
-  .nav-knopf .nav-text{max-width:calc(100% - 12px);overflow:hidden;white-space:nowrap} /* mind. 6 px Luft zur Blase; Größe passt tabsEinpassen() an */
+  .nav-knopf .nav-text{max-width:calc(100% - 12px);overflow:hidden;white-space:nowrap;line-height:1.25;text-align:center;hyphens:auto;-webkit-hyphens:auto;overflow-wrap:anywhere} /* mind. 6 px Luft zur Blase; Größe passt tabsEinpassen() an */
   .nav-knopf .zahl{position:absolute;top:3px;right:calc(50% - 24px);margin:0;min-width:8px;width:8px;height:8px;padding:0;color:transparent;overflow:hidden;text-indent:200%;line-height:0}
   .nav-linse{position:absolute;inset:0;z-index:-1; /* konzentrisch: überall derselbe Abstand zum Leistenrand */ border-radius:inherit;pointer-events:none;background:color-mix(in srgb,var(--text) 10%,transparent);box-shadow:inset 0 1px 0 var(--glas-licht)}
   /* Herunterscrollen: Tab-Leiste tritt zurück (nur Symbole) */
@@ -1919,9 +1919,10 @@ const bewegung = () => !matchMedia('(prefers-reduced-motion: reduce)').matches;
 let linseVorher = null;
 /** Tab-Beschriftungen passen immer ganz in ihre Blase – auch mit breiteren Systemschriften (Android, Windows): Schrift notfalls etwas kleiner, nie „…“. */
 function tabsEinpassen() {
-  for (const t of document.querySelectorAll('#navi .nav-klein .nav-text')) { if (!t.clientWidth) continue; einpassen(t, t.clientWidth, 8.5); t.style.whiteSpace = ''; }
+  for (const t of document.querySelectorAll('#navi .nav-klein .nav-text')) if (t.clientWidth) einpassen(t, t.clientWidth, 8.5); // reicht auch die kleinste Größe nicht: zwei Zeilen statt abgeschnitten
 }
 addEventListener('resize', () => tabsEinpassen());
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => tabsEinpassen()); // nach dem Laden der Schriften neu einpassen
 function navLinse() {
   const leiste = $('#navi .nav-klein'); if (!leiste || !leiste.offsetParent) return;
   tabsEinpassen();
@@ -1941,7 +1942,7 @@ function navLinse() {
     if (wartet) return; wartet = true;
     requestAnimationFrame(() => { wartet = false; const y = scrollY, d = y - zuletzt;
       document.body.classList.toggle('titel-klein', y > 56); document.body.classList.toggle('gescrollt', y > 2); // großer Titel ist weggescrollt → kleiner Titel in der Kopfleiste
-      if (Math.abs(d) > 6) { document.body.classList.toggle('leiste-klein', d > 0 && y > 80); zuletzt = y; } });
+      if (Math.abs(d) > 6) { const war = document.body.classList.contains('leiste-klein'); if (war !== document.body.classList.toggle('leiste-klein', d > 0 && y > 80) && war) tabsEinpassen(); zuletzt = y; } }); // ausgeklappt: Beschriftungen waren versteckt, also jetzt einpassen
   }, { passive: true });
 })();
 /** iOS-Sheet: am oberen Rand nach unten ziehen schließt – wie „Abbrechen“ (Dialoge, die nicht geschlossen werden dürfen, federn zurück). */
@@ -2356,9 +2357,13 @@ document.addEventListener('input', e => { if (e.target.matches && e.target.match
 /** Text in die gegebene Breite einpassen: Schrift schrittweise kleiner (bis zur Untergrenze), sonst auf zwei Zeilen – nie „…“. */
 function einpassen(el, breite, klein = 13) {
   el.style.fontSize = ''; el.style.whiteSpace = '';
+  // exakte Textbreite (scrollWidth rundet auf ganze Pixel – 41,3 px gälten sonst in 41 px als passend); Eingabefelder über scrollWidth
+  const textBreite = () => { if (el.tagName === 'INPUT') return el.scrollWidth; const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().width; };
+  const innen = () => breite - (parseFloat(getComputedStyle(el).paddingLeft) || 0) - (parseFloat(getComputedStyle(el).paddingRight) || 0);
+  const zuBreit = () => (el.tagName === 'INPUT' ? textBreite() > breite + 0.5 : textBreite() > innen() + 0.1);
   let g = parseFloat(getComputedStyle(el).fontSize);
-  while (el.scrollWidth > breite + 0.5 && g > klein) { g -= 0.5; el.style.fontSize = `${g}px`; }
-  if (el.scrollWidth > breite + 0.5) el.style.whiteSpace = 'normal';
+  while (zuBreit() && g > klein) { g -= 0.5; el.style.fontSize = `${g}px`; }
+  if (zuBreit()) el.style.whiteSpace = 'normal';
 }
 function titelPlatz() {
   const ti = $('#app-titel');
