@@ -227,6 +227,9 @@ test('Windows-App: zweites Postfach, Zuordnung zur Firma, Eingang „Nicht zugeo
 
     // Postfach: „Nicht zugeordnet“ und von Hand dem Fall zuordnen – der Anhang wird Anlage des Falls.
     await s.locator('#navi [data-bereich=postfach]:visible').click();
+    // Fenster unter 1500 px: Ordner sind eingeklappt – wie ein Nutzer auf den aktuellen Ordner tippen, damit alle erscheinen
+    await s.locator(".pf-ordner .pf-o[aria-current=true]").waitFor();
+    if (!(await s.locator('.pf-o[data-pf-ordner="V:OFFEN"]').isVisible())) await s.locator('.pf-ordner .pf-o[aria-current=true]').click();
     await s.locator('.pf-o[data-pf-ordner="V:OFFEN"]', { hasText: 'Nicht zugeordnet' }).locator('.pf-n', { hasText: '1' }).waitFor();
     await s.locator('.pf-o[data-pf-ordner="V:OFFEN"]').click();
     await s.locator('#postfach').getByText('Anfrage Umzug').click();
