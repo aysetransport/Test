@@ -3,7 +3,10 @@
  * Bedient die Web-App in einem echten Browser gegen das lokale Cloud-Skript (cloud/test/mock-server.js).
  * Start:  node --test web/test/
  */
-const test = require('node:test');
+const knoten = require('node:test');
+// Grenze je Test hier, nicht über --test-timeout: das gälte auch für die ganze Datei, und die Suite läuft länger als zwei Minuten.
+const test = (name, fn) => knoten(name, { timeout: 120000 }, fn);
+test.before = knoten.before; test.after = knoten.after;
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require('playwright');
