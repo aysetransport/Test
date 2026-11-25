@@ -1250,6 +1250,42 @@ test('Postfach wie Outlook: Serverordner, Abgleich in beide Richtungen, Relevant
   await kontext.close();
 });
 
+test('Postfach bei halber Fensterbreite: eingeklappte Ordner, eine Spalte, Mail loskoppeln (Knopf, Doppelklick) und losgekoppeltes Fenster', async () => {
+  const { s, kontext } = await postfachGeraet();
+  await kontext.addInitScript(() => { window.__neu = []; window.desktop = window.desktop || {}; window.desktop.fenster = Object.assign(window.desktop.fenster || {}, { neu: async (...a) => { window.__neu.push(a); return 2; }, blinken: async () => true, zaehler: async () => true }); });
+  await s.reload(); await s.waitForFunction(() => window.__appBereit && MAIL.konto && MAILSPEICHER.geladen);
+  await s.evaluate(h => { __imap.leg('INBOX', { messageId: 'h1@x', von: 'schaden@versicherung.example', vonName: 'Versicherung Schadenabteilung', betreff: 'Gutachten liegt vor', text: 'Anbei das Gutachten.', zeitpunkt: h }); }, heuteIso(8));
+  await s.evaluate(() => postfachAbrufen(true)); await s.evaluate(() => bereichWechseln('postfach'));
+  await s.setViewportSize({ width: 960, height: 800 });
+  // Ordner eingeklappt: nur der aktuelle, Tippen klappt auf
+  assert.equal(await s.locator('.pf-ordner .pf-o:visible').count(), 1);
+  await s.locator('.pf-ordner .pf-o[aria-current=true]').click();
+  assert.ok(await s.locator('.pf-ordner .pf-o:visible').count() > 3, 'Ordnerliste aufgeklappt');
+  await s.locator('.pf-ordner .pf-o[aria-current=true]').click();
+  // eine Spalte: Mail füllt das Fenster, Liste ausgeblendet, nichts ragt heraus
+  await s.locator('#postfach .pf-zeile', { hasText: 'Gutachten liegt vor' }).click();
+  await s.waitForFunction(() => document.body.classList.contains('breit-detail'));
+  assert.equal(await s.locator('#liste').isVisible(), false);
+  const b = await s.evaluate(() => ({ lese: $('#detail .pf-lese').getBoundingClientRect().width, sw: document.documentElement.scrollWidth, iw: innerWidth }));
+  assert.ok(b.lese > 700 && b.sw <= b.iw, JSON.stringify(b));
+  // Loskoppeln: eigenes Fenster nur mit der Mail, hier zurück zur Liste
+  await s.locator('[data-mail-akt=fenster]').click();
+  await s.waitForFunction(() => location.hash === '#/' && __neu.length === 1);
+  assert.deepEqual(await s.evaluate(() => __neu[0]), ['postfach', '#/mail/h1%40x', true]);
+  // Doppelklick in der Liste (breites Fenster mit Lesebereich)
+  await s.setViewportSize({ width: 1500, height: 900 });
+  await s.locator('#postfach .pf-zeile', { hasText: 'Gutachten liegt vor' }).dblclick();
+  await s.waitForFunction(() => __neu.length === 2);
+  // losgekoppeltes Fenster: ohne Navigation und Liste, Fenstertitel = Betreff
+  const f = await kontext.newPage(); f.on('pageerror', x => { throw x; });
+  await f.goto(seite.url + '?neben=1&bereich=postfach&allein=1#/mail/h1%40x'); await f.waitForFunction(() => window.__appBereit);
+  await f.locator('#detail .pf-betreffzeile', { hasText: 'Gutachten liegt vor' }).waitFor();
+  assert.equal(await f.locator('#navi').isVisible(), false);
+  assert.equal(await f.locator('[data-mail-akt=fenster]').count(), 0);
+  assert.match(await f.title(), /^Gutachten liegt vor/);
+  await kontext.close();
+});
+
 test('Postfach: Verfassen (Chips, Cc, Format, Signatur, Wichtigkeit), Antworten an alle, Anhang-Erinnerung, Senden rückgängig, Regeln, Blockieren, Zurückstellen, Abwesenheitsnotiz, Mehrfachauswahl', async () => {
   const { s, kontext } = await postfachGeraet({ mailRueckgaengig: 5 });
   await s.evaluate(([h]) => {

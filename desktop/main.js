@@ -168,8 +168,8 @@ function lageMerken() {
   try { fs.writeFileSync(fensterDatei(), JSON.stringify({ ...fenster.getNormalBounds(), maximiert: fenster.isMaximized() })); } catch {}
 }
 /** Ein Fenster der App. haupt = das erste (Lage merken, beim Schließen gehen alle zu); sonst ein Unterfenster für mehrere Dinge gleichzeitig. */
-function fensterBauen(url, haupt) {
-  const lage = haupt ? letzteLage() : { width: 1100, height: 800 };
+function fensterBauen(url, haupt, klein = false) {
+  const lage = haupt ? letzteLage() : klein ? { width: 960, height: 860 } : { width: 1100, height: 800 }; // losgekoppelte Mail: Lesefenster
   const w = new BrowserWindow({
     width: lage.width || 1280, height: lage.height || 860, ...(lage.x != null ? { x: lage.x, y: lage.y } : {}), minWidth: 380, minHeight: 500,
     title: 'Ayse CRM', icon: path.join(ORDNER, 'icon-rund.png'), show: false,
@@ -220,9 +220,10 @@ function fensterBauen(url, haupt) {
 }
 function erstelleFenster() { fenster = fensterBauen('app://schaden/index.html', true); }
 /** Unterfenster mit einem Bereich und ggf. einem Datensatz (#/beleg/…); es teilt den Datenstand mit dem Hauptfenster. */
-behandle('fenster:neu', (bereich, ziel) => {
-  const b = /^[a-z]{1,20}$/.test(String(bereich)) ? bereich : '', z = /^#\/[\w%@.\/-]{0,200}$/.test(String(ziel)) ? ziel : '';
-  const x = fensterBauen(`app://schaden/index.html?neben=1${b ? '&bereich=' + b : ''}${z}`, false);
+behandle('fenster:neu', (bereich, ziel, allein) => {
+  // encodeURIComponent lässt !~*'() stehen – Mail-IDs enthalten die mitunter
+  const b = /^[a-z]{1,20}$/.test(String(bereich)) ? bereich : '', z = /^#\/[\w%@.\/!~*'()-]{0,400}$/.test(String(ziel)) ? ziel : '';
+  const x = fensterBauen(`app://schaden/index.html?neben=1${b ? '&bereich=' + b : ''}${allein === true && z ? '&allein=1' : ''}${z}`, false, allein === true && z);
   return x.id;
 });
 if (IST_WINDOWS) {

@@ -35,7 +35,7 @@ contextBridge.exposeInMainWorld('desktop', {
     zaehler: (anzahl, png) => aufruf('fenster:zaehler', anzahl, png),
     blinken: () => aufruf('fenster:blinken'),
     zoom: f => aufruf('fenster:zoom', f),
-    neu: (bereich, ziel) => aufruf('fenster:neu', bereich, ziel), // Unterfenster: Bereich und ggf. Datensatz (#/beleg/…)
+    neu: (bereich, ziel, allein) => aufruf('fenster:neu', bereich, ziel, allein === true), // Unterfenster: Bereich und ggf. Datensatz (#/beleg/…); allein = losgekoppelt, nur der Datensatz
   },
   // Scanner (WIA, Stapel über den Einzug) und Texterkennung (offline) – z. B. für Tankbelege
   scan: { geraete: () => aufruf('scan:geraete'), stapel: (id, modus) => aufruf('scan:stapel', id, modus) /* 'STAPEL' | 'EINZELN' */, pruefen: (id, test) => aufruf('scan:pruefen', id, test), lesen: base64 => aufruf('ocr:lesen', base64) },
