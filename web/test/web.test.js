@@ -81,7 +81,7 @@ test('Liquid Glass und Animationen (Web/Android): Glas auf schwebenden Flächen,
   await s.evaluate(() => dialog('<h2>Test</h2>'));
   assert.equal(await s.evaluate(() => getComputedStyle($('#dialog')).animationName), 'sheet-auf', 'am Handy als iOS-Sheet von unten');
   assert.equal(await s.locator('.nav-klein .nav-linse').count(), 1, 'Glaslinse unter dem aktiven Tab');
-  assert.equal(await s.evaluate(() => getComputedStyle($('#dialog')).backdropFilter), 'none', 'bewegte Flächen ohne Echtzeit-Unschärfe (flüssig)');
+  assert.match(await s.evaluate(() => getComputedStyle($('#dialog')).backdropFilter), /blur/, 'Sheet schon beim Aufgehen Glas (kein Umspringen)');
   assert.match(await s.evaluate(() => getComputedStyle($('#suche-knopf')).backdropFilter), /blur/, 'stehende Glasknöpfe mit Unschärfe');
   await s.evaluate(() => $('#dialog').close());
   await s.emulateMedia({ reducedMotion: 'reduce' });
@@ -103,10 +103,8 @@ test('Bedienung nach Apple (Web/Android): Verwerfen-Rückfrage, Aktionsblatt, Gl
   await s.keyboard.press('Escape');
   await s.locator('dialog.aktionsblatt #ja').click();
   assert.equal(await s.evaluate(() => $('#dialog').open), false, 'verworfen → geschlossen');
-  // stehendes Sheet wird echtes Glas, beim Hereinfedern nicht
+  // Sheet ist vom ersten Bild an Glas (kein Umspringen von Milchglas zu Glas beim Aufgehen)
   await s.evaluate(() => dialog('<h2>Glas</h2>'));
-  assert.equal(await s.evaluate(() => getComputedStyle($('#dialog')).backdropFilter), 'none');
-  await s.waitForFunction(() => $('#dialog').classList.contains('ruhig'));
   assert.match(await s.evaluate(() => getComputedStyle($('#dialog')).backdropFilter), /blur/);
   await s.evaluate(() => $('#dialog').close());
   // Bestätigen als Aktionsblatt

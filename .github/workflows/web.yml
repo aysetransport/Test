@@ -27,4 +27,4 @@ jobs:
           npm install --no-save --no-package-lock playwright@1.63.0
           npx playwright install --with-deps chromium
       - name: Web-App im Browser testen
-        run: node --test web/test/web.test.js # Grenze je Test steht in der Datei (120 s)
+        run: node --test --test-force-exit web/test/web.test.js # Grenze je Test steht in der Datei (120 s); force-exit: offene Browser-/Server-Reste halten den Lauf nicht nach dem letzten Test fest
