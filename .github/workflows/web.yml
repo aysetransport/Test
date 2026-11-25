@@ -27,4 +27,4 @@ jobs:
           npm install --no-save --no-package-lock playwright@1.63.0
           npx playwright install --with-deps chromium
       - name: Web-App im Browser testen
-        run: node --test --test-timeout=90000 web/test/web.test.js
+        run: node --test web/test/web.test.js # Grenze je Test steht in der Datei (120 s)
