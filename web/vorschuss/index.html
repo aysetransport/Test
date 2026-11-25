@@ -238,6 +238,7 @@ async function abgleichen(still) {
     if (/Nur der Hauptadmin/.test(e.message)) { Z.token = ''; sichern(); zeichne(); toast('Nur der Chef (Hauptadmin) hat Zugriff.'); return; }
     const n = Object.keys(Z.offen).length, m = e.message;
     const grund = /Unbekannte Funktion/.test(m) ? 'Die Cloud kennt die Vorschüsse noch nicht – ihr Update ist noch nicht angekommen. Bitte in ein paar Minuten erneut versuchen, oder in Ayse CRM unter Einstellungen → Cloud „Aktualisieren“ tippen.'
+      : /^UPDATE: .*(Berechtigung|permission|authoriz)/i.test(m) ? 'Die Cloud darf sich noch nicht selbst aktualisieren. Einmalig muss der Besitzer des Google-Kontos das Cloud-Skript von Hand erneuern und „selbstUpdateEinrichten“ ausführen – danach lädt die App.'
       : /^UPDATE: /.test(m) ? 'Die Cloud konnte sich nicht aktualisieren: ' + m.slice(8) + ' – bitte in Ayse CRM unter Einstellungen → Cloud aktualisieren.'
       : /fetch|network|load failed|json/i.test(m) ? 'Keine Verbindung zur Cloud.' : 'Laden fehlgeschlagen: ' + m;
     zeigeStatus(grund + (n ? ` ${n === 1 ? '1 Buchung wartet' : n + ' Buchungen warten'} und wird übertragen, sobald es klappt.` : ''), true);
