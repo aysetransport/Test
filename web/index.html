@@ -112,7 +112,7 @@ a{color:var(--primaer);text-decoration:none}a:hover{text-decoration:underline}
 kbd{font:600 var(--t-klein) ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--flaeche2);border-radius:6px;padding:2px 6px}
 .sprung{position:fixed;left:8px;top:-60px;z-index:100;padding:10px 16px;border-radius:999px;border:0;background:var(--primaer);color:#fff}.sprung:focus{top:8px}
 .leise{color:var(--leise);font-size:var(--t-fuss)}
-.titel{font-size:var(--t-kopf);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.titel{font-size:var(--t-kopf);font-weight:600;overflow-wrap:anywhere} /* lange Namen brechen um statt mit „…“ gekürzt zu werden */
 .gross{font-size:var(--t-titel2);font-weight:700;letter-spacing:-.02em}
 .fuell{flex:1;min-width:0}
 .zeile{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -135,7 +135,7 @@ header{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:8px;m
 header::before{content:"";position:absolute;inset:0 0 -28px 0;z-index:-1;pointer-events:none;opacity:0;transition:opacity .2s;
   background:linear-gradient(to bottom,var(--bg) 0%,var(--bg) 55%,color-mix(in srgb,var(--bg) 70%,transparent) 78%,transparent)}
 body.gescrollt header::before{opacity:1}
-#app-titel{border:0;background:transparent;cursor:pointer;color:var(--text);font-size:var(--t-kopf);font-weight:600;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#app-titel{border:0;background:transparent;cursor:pointer;color:var(--text);font-size:var(--t-kopf);font-weight:600;padding:4px 6px;white-space:nowrap;overflow:hidden;min-width:0;line-height:1.15} /* Größe passt JS an (titelPlatz) – nie mit „…“ gekürzt */
 #menue-knopf{display:none}
 /* Glaskreise in der Leiste (44 pt) */
 .symbol{display:inline-grid;place-items:center;border:0;background:transparent;color:var(--text);cursor:pointer;padding:8px;border-radius:999px;font-size:18px;line-height:1;min-width:36px;min-height:36px}
@@ -218,36 +218,36 @@ main>section{padding:8px calc(var(--rand-seite) + env(safe-area-inset-right)) 40
 }
 @media (max-width:899px){
   /* Tab-Leiste: schwebendes Glas unten, Suche als eigener Kreis daneben (iOS 26) */
-  :root{--kopf-hoehe:56px}
+  :root{--kopf-hoehe:56px;--tab-hoehe:58px;--tab-rand:10px}
   header{justify-content:flex-end;gap:8px}
   #zurueck{margin-right:auto}
   #app-titel{position:absolute;left:50%;transform:translateX(-50%);max-width:46vw;opacity:0;pointer-events:none;transition:opacity .2s}
   body.titel-klein #app-titel{opacity:1}
   #einstellungen-knopf{display:none}
   #suche-global{display:none}
-  #suche-knopf{display:grid;place-items:center;position:fixed;z-index:7;right:calc(14px + env(safe-area-inset-right));bottom:calc(12px + env(safe-area-inset-bottom));width:var(--tab-hoehe);height:var(--tab-hoehe);
+  #suche-knopf{display:grid;place-items:center;position:fixed;z-index:7;right:calc(var(--tab-rand) + env(safe-area-inset-right));bottom:calc(12px + env(safe-area-inset-bottom));width:var(--tab-hoehe);height:var(--tab-hoehe);
     transform-origin:100% 100%;transition:transform .35s var(--weich)}
   body.sucht #suche-global{display:block;position:fixed;left:12px;right:12px;top:calc(8px + env(safe-area-inset-top));max-width:none;z-index:21}
   body.sucht #globale-suche{height:48px;background:var(--glas-dicht);box-shadow:var(--schatten-gross);-webkit-backdrop-filter:var(--unschaerfe);backdrop-filter:var(--unschaerfe)}
   #neu-knopf{width:44px;height:44px;padding:0;border-radius:50%;color:var(--text);background:var(--glas);border:1px solid var(--glas-rand);-webkit-backdrop-filter:var(--unschaerfe);backdrop-filter:var(--unschaerfe);box-shadow:inset 0 1px 0 var(--glas-licht),var(--schatten)}
   #neu-knopf .ico{margin:0;width:22px;height:22px}
   #neu-knopf .lang{display:none}
-  #navi{position:fixed;left:calc(14px + env(safe-area-inset-left));right:calc(14px + var(--tab-hoehe) + 10px + env(safe-area-inset-right));bottom:calc(12px + env(safe-area-inset-bottom));
-    padding:4px;border-radius:999px;border:1px solid var(--glas-rand);
+  #navi{position:fixed;left:calc(var(--tab-rand) + env(safe-area-inset-left));right:calc(var(--tab-rand) + var(--tab-hoehe) + 8px + env(safe-area-inset-right));bottom:calc(12px + env(safe-area-inset-bottom));
+    padding:3px;border-radius:999px;border:1px solid var(--glas-rand);
     box-shadow:inset 0 1px 0 var(--glas-licht),var(--schatten-gross);transform-origin:0 100%;transition:transform .35s var(--weich)}
   .nav-gross{display:none}.nav-klein{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0}
-  .nav-klein .nav-knopf{flex-direction:column;gap:2px;padding:7px 2px;min-height:52px;border-radius:999px;font-size:10.5px;font-weight:600;text-align:center;min-width:0;color:var(--text);justify-content:center;z-index:1}
+  .nav-klein .nav-knopf{flex-direction:column;gap:2px;padding:6px 0;min-height:50px;border-radius:999px;font-size:clamp(9.5px,2.65vw,11px);font-weight:600;letter-spacing:-.015em;text-align:center;min-width:0;color:var(--text);justify-content:center;z-index:1}
   .nav-klein .nav-symbol{color:inherit}
   .nav-klein .nav-knopf[aria-current=page]{color:var(--primaer)}
-  .nav-knopf .nav-text{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity .2s}
+  .nav-knopf .nav-text{max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity .2s} /* mind. 4 px Luft zur Blase */
   .nav-knopf .zahl{position:absolute;top:3px;right:calc(50% - 24px);margin:0;min-width:8px;width:8px;height:8px;padding:0;font-size:0;line-height:0}
-  .nav-linse{position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;background:color-mix(in srgb,var(--text) 10%,transparent);box-shadow:inset 0 1px 0 var(--glas-licht)}
+  .nav-linse{position:absolute;inset:0 -3px;z-index:-1; /* etwas breiter als der Tab (wie iOS 26), reicht bis an den Leistenrand */ border-radius:inherit;pointer-events:none;background:color-mix(in srgb,var(--text) 10%,transparent);box-shadow:inset 0 1px 0 var(--glas-licht)}
   /* Herunterscrollen: Tab-Leiste tritt zurück (nur Symbole) */
   body.leiste-klein .nav-klein .nav-text{opacity:0}
   body.leiste-klein #navi{transform:translateY(8px) scale(.9)}
   body.leiste-klein #suche-knopf{transform:translateY(8px) scale(.82)}
   /* „Mehr“: Liste aller Bereiche als schwebendes Glas über der Leiste */
-  body.nav-offen .nav-gross{display:flex;flex-direction:column;gap:1px;position:fixed;left:calc(14px + env(safe-area-inset-left));right:calc(14px + env(safe-area-inset-right));bottom:calc(var(--tab-hoehe) + 24px + env(safe-area-inset-bottom));
+  body.nav-offen .nav-gross{display:flex;flex-direction:column;gap:1px;position:fixed;left:calc(var(--tab-rand) + env(safe-area-inset-left));right:calc(var(--tab-rand) + env(safe-area-inset-right));bottom:calc(var(--tab-hoehe) + 24px + env(safe-area-inset-bottom));
     max-height:min(70vh,600px);overflow:auto;padding:8px;border-radius:30px;background:var(--hoch);border:1px solid var(--glas-rand);box-shadow:var(--schatten-gross);z-index:30;transform-origin:50% 100%}
   body.nav-offen .nav-gross .nav-knopf{flex-direction:row;gap:14px;padding:11px 12px;min-height:48px;font-size:var(--t-kopf)}
   body.nav-offen .nav-gross .nav-knopf[aria-current=page]{background:color-mix(in srgb,var(--primaer) 14%,transparent);color:var(--primaer)}
@@ -274,6 +274,13 @@ body[data-rolle=GESPERRT] :is(#menue-knopf,#suche-knopf,#suche-global,#neu-knopf
 /* iPhone: Werkzeuge stehen nicht im Inhalt, sondern im „⋯“-Menü der Navigationsleiste */
 #mehr-knopf{display:none}
 @media (max-width:899px){.werkzeuge{display:none}#mehr-knopf:not([hidden]){display:inline-grid}}
+/* PC, schmale Listenspalte: Werkzeuge in einer Zeile, seitlich scrollbar, am Rand weich auslaufend – statt vier umbrochener Zeilen */
+@media (min-width:900px){
+  body:not(.breit) #liste .werkzeuge{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:calc(-1 * var(--rand-seite));padding-inline:var(--rand-seite);
+    -webkit-mask:linear-gradient(to right,transparent,#000 var(--rand-seite),#000 calc(100% - var(--rand-seite)),transparent);mask:linear-gradient(to right,transparent,#000 var(--rand-seite),#000 calc(100% - var(--rand-seite)),transparent)}
+  body:not(.breit) #liste .werkzeuge::-webkit-scrollbar{display:none}
+  body:not(.breit) #liste .werkzeuge > *{flex:none}
+}
 .abschnitt{font-size:var(--t-fuss);font-weight:600;color:var(--leise);margin:22px 4px 8px}
 .statistik-titel{font-size:var(--t-titel3);font-weight:700;margin:6px 0 12px}
 
@@ -538,10 +545,11 @@ pre.vorschau{white-space:pre-wrap;font:inherit;background:var(--flaeche2);paddin
   .tour-hinweise{grid-column:2/6}
 }
 @container (max-width:560px){
-  .tour{grid-template-columns:22px repeat(2,minmax(0,1fr)) auto;padding:10px 8px}
-  .tour .tf.kz,.tour .tf.ag,.tour .tf.zeit{grid-column:2/3}.tour .tf.nr,.tour .tf.name,.tour .tf.art{grid-column:3/4}
-  .tour .tf.fahrer,.tour .tf.team,.tour-hinweise{grid-column:2/4}
-  .tour-knoepfe{grid-column:4;grid-row:1/span 4}
+  /* Handy: Kennzeichen + Tour-Nr., Ladezeit + Einsatzart nebeneinander; Auftraggeber, Ziel, Fahrer, Beifahrer über die volle Breite; Knöpfe unten */
+  .tour{grid-template-columns:22px minmax(0,1.4fr) minmax(0,1fr);padding:12px 12px 8px 8px}
+  .tour .tf.kz,.tour .tf.zeit{grid-column:2/3}.tour .tf.nr,.tour .tf.art{grid-column:3/4}
+  .tour .tf.ag,.tour .tf.name,.tour .tf.fahrer,.tour .tf.team,.tour-hinweise{grid-column:2/4}
+  .tour-knoepfe{grid-column:2/4;grid-row:auto;display:flex;justify-content:flex-end;gap:4px;align-self:auto;padding-top:2px}
 }
 @media (max-width:600px){.tp-frei{grid-template-columns:1fr}.tp-datum .tp-wochentag{width:100%;margin:2px 0 0}}
 .wochenplan td{vertical-align:top;min-width:110px}.wochenplan td.we{background:color-mix(in srgb,var(--flaeche2) 50%,transparent)}.wochenplan th.heute{color:var(--primaer)}
@@ -561,6 +569,16 @@ pre.vorschau{white-space:pre-wrap;font:inherit;background:var(--flaeche2);paddin
 .kal-tag{min-height:40px;border:0;border-radius:50%;background:transparent;cursor:pointer;font-size:var(--t-unter);color:var(--text)}
 .kal-tag:hover{background:var(--flaeche2)}
 .kal-tag.we{color:var(--leise)}.kal-tag.heute{color:var(--primaer);font-weight:700}
+/* Einsatz/Abwesenheit im Personal-Kalender: deutlich sichtbare Flächen (danach werden die schriftlichen Listen geführt) */
+.kal-tag:is(.blau,.gelb,.rot,.lila){border-radius:12px;font-weight:700}
+.kal-tag.blau{background:color-mix(in srgb,var(--sys-blau) 24%,transparent);color:var(--blau-t)}
+.kal-tag.gelb{background:color-mix(in srgb,var(--sys-gelb) 38%,transparent);color:var(--gelb-t)}
+.kal-tag.rot{background:color-mix(in srgb,var(--sys-rot) 24%,transparent);color:var(--rot-t)}
+.kal-tag.lila{background:color-mix(in srgb,var(--sys-lila) 24%,transparent);color:var(--lila-t)}
+.kal-tag:is(.blau,.gelb,.rot,.lila):hover{filter:brightness(.95)}
+/* heute: roter Kreis (wie der Apple-Kalender); ist der Tag markiert, ein roter Ring um die Fläche */
+.kal-tag.heute:not(.blau):not(.gelb):not(.rot):not(.lila){background:var(--primaer);color:#fff;border-radius:50%}
+.kal-tag.heute:is(.blau,.gelb,.rot,.lila){box-shadow:inset 0 0 0 2px var(--primaer)}
 .kal-gitter{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
 .kal-wt{font-size:var(--t-klein);font-weight:600;color:var(--leise);text-align:center;padding:2px 0}
 .kal-zelle{background:var(--flaeche);border-radius:14px;min-height:100px;padding:6px;cursor:pointer;overflow:hidden;min-width:0;border:0;text-align:left}
@@ -2314,10 +2332,38 @@ document.addEventListener('click', e => { if (e.target.closest('[data-anmelden]'
 const aktuelleWerkzeuge = () => (document.body.classList.contains('zeigt-detail') ? $('#detail') : $('#liste')).querySelector('.werkzeuge');
 $('#mehr-knopf').onclick = e => { const l = aktuelleWerkzeuge(); if (l) werkzeugMenue(l, e.currentTarget); };
 function kopfTitel(r = route()) {
-  const titel = (r.art && ($('#detail h1, #detail h2') || {}).textContent) || t(BEREICHE[ANSICHT.bereich][0]);
+  // Apple: der kleine Titel in der Leiste ist genau der große Titel der Ansicht (nicht ein Kurzname)
+  const ansicht = r.art ? $('#detail') : $('#liste'), gross = ansicht && ansicht.querySelector('.seitenkopf h1, h1, h2');
+  const titel = (gross && gross.textContent.trim()) || t(BEREICHE[ANSICHT.bereich][0]);
   $('#mehr-knopf').hidden = !aktuelleWerkzeuge();
-  $('#app-titel').textContent = String(titel).trim().slice(0, 40);
+  $('#app-titel').textContent = String(titel).trim().slice(0, 60);
+  titelPlatz(); tourFelderEinpassen();
 }
+/** Tourenplanung: lange Werte (Namen, Auftraggeber) passen in ihr Feld, notfalls etwas kleiner geschrieben – statt abgeschnitten. */
+function tourFelderEinpassen(wurzel = document) { for (const i of wurzel.querySelectorAll('#tourplan .tf input')) if (i.clientWidth) einpassen(i, i.clientWidth, 12); }
+document.addEventListener('input', e => { if (e.target.matches && e.target.matches('#tourplan .tf input')) einpassen(e.target, e.target.clientWidth, 12); });
+/** Kleiner Titel (Handy) mittig, aber nie über den Knöpfen: Breite = doppelter Abstand zur nächsten Knopfkante, endet sonst mit „…“. */
+/** Text in die gegebene Breite einpassen: Schrift schrittweise kleiner (bis zur Untergrenze), sonst auf zwei Zeilen – nie „…“. */
+function einpassen(el, breite, klein = 13) {
+  el.style.fontSize = ''; el.style.whiteSpace = '';
+  let g = parseFloat(getComputedStyle(el).fontSize);
+  while (el.scrollWidth > breite + 0.5 && g > klein) { g -= 0.5; el.style.fontSize = `${g}px`; }
+  if (el.scrollWidth > breite + 0.5) el.style.whiteSpace = 'normal';
+}
+function titelPlatz() {
+  const ti = $('#app-titel');
+  if (!matchMedia('(max-width:899px)').matches) { ti.style.maxWidth = ''; ti.style.left = ''; ti.style.transform = ''; einpassen(ti, ti.clientWidth); return; }
+  const mitte = innerWidth / 2, knoepfe = [...document.querySelectorAll('header > button:not(#app-titel)')].filter(k => k.getClientRects().length && getComputedStyle(k).display !== 'none').map(k => k.getBoundingClientRect());
+  const links = Math.max(16, ...knoepfe.filter(k => k.right <= mitte).map(k => k.right)), rechts = Math.min(innerWidth - 16, ...knoepfe.filter(k => k.left >= mitte).map(k => k.left));
+  const mittig = 2 * Math.min(mitte - links, rechts - mitte) - 16;
+  ti.style.left = ''; ti.style.transform = ''; ti.style.maxWidth = `${Math.max(0, mittig)}px`;
+  ti.style.fontSize = ''; ti.style.whiteSpace = '';
+  if (ti.scrollWidth > mittig) { // passt nicht mittig (z. B. drei Knöpfe rechts): wie iOS in den freien Raum zwischen den Knöpfen
+    ti.style.left = `${links + 8}px`; ti.style.transform = 'none'; ti.style.maxWidth = `${Math.max(0, rechts - links - 16)}px`;
+    einpassen(ti, rechts - links - 16);
+  }
+}
+addEventListener('resize', () => titelPlatz());
 function zeichne() {
   if (rolle() === 'GESPERRT') { sperrbild(); return; }
   document.body.dataset.rolle = rolle();
@@ -2713,7 +2759,7 @@ function zeichneEinstellungenVoll() {
         <p class="leise" style="overflow-wrap:anywhere;margin:6px 0">${esc(apiUrl())}</p>
         <div class="zeile"><button class="knopf" id="jetzt">Jetzt abgleichen</button><button class="knopf" id="abmelden">Auf diesem Gerät abmelden</button></div>`
       : `<p class="leise" style="margin-bottom:8px">Derzeit bleiben alle Fälle nur in diesem Browser. Mit der Adresse des Cloud-Skripts werden sie in Google Drive gespeichert und mit anderen Geräten geteilt.</p>
-        <label class="feld">Cloud-Adresse (…/exec)<input id="cloud-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(apiUrl())}"></label>
+        <label class="feld">Cloud-Adresse (…/exec)<textarea id="cloud-url" rows="3" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" style="min-height:0;word-break:break-all">${esc(apiUrl())}</textarea></label>
         <button class="knopf voll" id="verbinden">Verbinden</button>`}</div>
     ${updateKarte()}
     ${cloudUpdateKarte()}
@@ -2722,7 +2768,7 @@ function zeichneEinstellungenVoll() {
       ${[['name', 'Firmenname'], ['strasse', 'Straße und Hausnummer'], ['plzOrt', 'PLZ und Ort'], ['telefon', 'Telefon'], ['email', 'E-Mail'], ['steuer', 'Steuernummer'], ['ustId', 'USt-IdNr.'], ['geschaeftsfuehrer', 'Geschäftsführer/in (Name, erscheint in der Fußzeile und wahlweise als Unterschrift)'],
         ['bank', 'Bank'], ['iban', 'IBAN'], ['bic', 'BIC'], ['zahlungsziel', 'Zahlungsziel (Tage)'], ['mwst', 'MwSt.-Satz (%)'], ['fuss', 'Zusatz in der Fußzeile'], ['hinweisElektronisch', 'Hinweis unter der Unterschrift (leer = kein Hinweis)'],
         ['startRechnung', 'Startnummer Rechnungen (z. B. 1001 → R' + new Date().getFullYear() + '-1001)'], ['startAngebot', 'Startnummer Angebote (z. B. 1 → A' + new Date().getFullYear() + '-0001)']]
-        .map(([k, l]) => `<label class="feld">${l}<input data-rechnung="${k}" value="${esc(rechnungsDaten()[k])}"></label>`).join('')}</div>
+        .map(([k, l]) => `<label class="feld">${l}${['fuss', 'hinweisElektronisch'].includes(k) ? `<textarea data-rechnung="${k}" rows="2">${esc(rechnungsDaten()[k])}</textarea>` : `<input data-rechnung="${k}" value="${esc(rechnungsDaten()[k])}">`}</label>`).join('')}</div>
     <div class="karte block"><h3>CRM</h3>
       <div class="zeile"><button class="knopf" id="crm-csv">CRM für Excel exportieren (6 CSV-Dateien)</button></div></div>
     ${mitCloud() && PIN ? `<div class="karte block"><h3>Anmeldung</h3><p>Angemeldet als <b>${esc((S.zugang || {}).name || 'Admin')}</b> · ${esc(ROLLEN_TEXT[rolle()])}</p>
@@ -4507,7 +4553,7 @@ function zeichneMitarbeiter(id) {
     <div class="karte block"><h3>Urlaub ${heute().slice(0, 4)}</h3>
       ${m.urlaubstage ? `<div class="kennzahlen vier" style="margin:0"><div class="kennzahl"><b>${u.anspruch}</b><span>Anspruch</span></div><div class="kennzahl"><b>${u.genommen}</b><span>genommen</span></div>
         <div class="kennzahl"><b>${u.geplant}</b><span>geplant</span></div><div class="kennzahl ${u.rest < 0 ? 'rot' : ''}"><b>${u.rest}</b><span>Rest</span></div></div>`
-        : `<p class="leise">Urlaubsanspruch über ✎ eintragen. Bisher ${u.genommen} Tage genommen, ${u.geplant} geplant.</p>`}</div>
+        : `<p class="leise">Urlaubsanspruch über ✎ eintragen. Bisher ${u.genommen} ${u.genommen === 1 ? 'Tag' : 'Tage'} genommen, ${u.geplant} geplant.</p>`}</div>
     <div class="karte block"><div class="zeile eng"><h3 class="fuell" style="margin:0">Kalender</h3>
       <button class="symbol" data-ma-monat="-1" aria-label="Voriger Monat">◀</button><b>${esc(new Date(monat + '-15').toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }))}</b><button class="symbol" data-ma-monat="1" aria-label="Nächster Monat">▶</button></div>
       ${kalenderMonat(m, monat)}</div>
