@@ -12,6 +12,7 @@ const NATIV_API = 2;
 const BASIS = process.env.SCHADEN_UPDATE_BASIS || 'https://aysetransport.github.io/schaden/';
 const MANIFEST = 'app-update.json';
 
+/** Baut das Web-Update für den Hauptprozess: prüft app-update.json, lädt neue Dateien mit Prüfsumme, liefert beim Laden die geprüfte Fassung und fällt bei Startproblemen auf die mitgelieferte zurück. */
 function webUpdate({ datenOrdner, appOrdner, appVersion, holen }) {
   const ordner = path.join(datenOrdner, 'webupdate'), zustandDatei = path.join(ordner, 'zustand.json');
   const lies = d => { try { return JSON.parse(fs.readFileSync(d, 'utf8')); } catch { return null; } };

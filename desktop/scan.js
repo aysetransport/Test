@@ -17,6 +17,7 @@ function Code($fehler) { $x = $fehler.Exception; while ($x) { if (((($x.HResult 
 function Text($fehler) { $c = Code $fehler; $m = $fehler.Exception.Message -replace '\\s+', ' '; if ($c) { '{0} (0x{1:X8})' -f $m, $c } else { $m } }
 # „Gerät ausgelastet“ (0x80210006): kurz warten und erneut versuchen
 function Versuche([scriptblock]$was) { for ($i = 0; ; $i++) { try { return & $was } catch { if ((Code $_) -eq -2145320954 -and $i -lt 5) { Start-Sleep -Seconds 2 } else { throw } } } }
+# Scanner wählen: der erste (bzw. der mit SCAN_ID)
 function Geraet() {
   $dm = New-Object -ComObject WIA.DeviceManager
   foreach ($d in $dm.DeviceInfos) { if ($d.Type -eq 1 -and ($env:SCAN_ID -eq '' -or $d.DeviceID -eq $env:SCAN_ID)) { return $d } }
@@ -28,12 +29,14 @@ function SetzeMax($props, $id) { foreach ($p in $props) { if ($p.PropertyID -eq 
 function Einzug($dev) { foreach ($it in $dev.Items) { foreach ($p in $it.Properties) { if ($p.PropertyID -eq 4125 -and ([string]$p.Value) -match 'FE131934') { return $it } } }; return $dev.Items.Item(1) }
 # Bild holen: JPEG direkt, sonst BMP, sonst über den Windows-Scan-Dialog (manche HP-Treiber können nur das). Der erste Weg, der klappt, bleibt.
 # BMP ist unkomprimiert (oft 25 MB+) → als PNG ablegen (Schwarz-Weiß: ~30 KB, verlustfrei – besser für die Texterkennung als JPEG)
+# Bild speichern: JPG/PNG direkt, sonst (BMP/TIFF) als PNG umwandeln
 function Speichere($img, $ziel) {
   if ($img.FileExtension -match '^(jpe?g|png)$') { $img.SaveFile("$ziel.$($img.FileExtension)"); return }
   $roh = "$ziel.roh.$($img.FileExtension)"; $img.SaveFile($roh); Add-Type -AssemblyName System.Drawing
   $b = [System.Drawing.Image]::FromFile($roh); $b.Save("$ziel.png", [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose(); Remove-Item $roh
 }
 $script:wege = @('JPEG', 'BMP', 'DIALOG')
+# Bild holen: nacheinander über die möglichen Wege (Dialog, Formate), bis einer klappt; Fehler sammeln
 function Hole($item) {
   $fehler = @()
   foreach ($weg in $script:wege) {
@@ -93,6 +96,7 @@ const WIA_FEHLER = [[/80210006|ausgelastet|busy/i, 'Der Scanner meldet „ausgel
   [/80210002|Papierstau|paper jam/i, 'Papierstau im Scanner – Beleg entnehmen und erneut scannen.'],
   [/80210064|abgebrochen|cancel/i, 'Scan abgebrochen.']];
 let laufend = null; // ein noch laufender Scan-Versuch belegt den Scanner – vor dem nächsten beenden
+/** Führt ein PowerShell-Skript aus (nur Windows; ein laufender Scan wird vorher beendet) und liefert seine Ausgabe. */
 function powershell(skript, env = {}) {
   if (process.platform !== 'win32') return Promise.reject(new Error('Scannen geht nur in der Windows-App'));
   if (laufend) { try { laufend.kill(); } catch {} laufend = null; }
@@ -148,6 +152,7 @@ async function pruefen(id, testscan) {
 
 // Texterkennung: ein Arbeiter für die ganze Sitzung (das Laden der deutschen Sprachdaten dauert ein paar Sekunden).
 let arbeiter = null;
+/** Texterkennung (deutsch, offline) eines Bildes; der Arbeiter wird beim ersten Aufruf gestartet und wiederverwendet. */
 async function lesen(base64) {
   if (!arbeiter) {
     const { createWorker } = require('tesseract.js');

@@ -22,6 +22,7 @@ const ANBIETER = {
   TONLINE: { label: 'Telekom (T-Online)', imapHost: 'secureimap.t-online.de', imapPort: 993, imapSicherheit: 'SSL', smtpHost: 'securesmtp.t-online.de', smtpPort: 465, smtpSicherheit: 'SSL' },
 };
 
+/** IMAP-Verbindung zum Postfach (SSL, STARTTLS oder unverschlüsselt je nach Konto), mit festen Zeitgrenzen. */
 function imap(k, passwort) {
   return new ImapFlow({
     host: k.imapHost, port: k.imapPort, secure: k.imapSicherheit === 'SSL',
@@ -30,6 +31,7 @@ function imap(k, passwort) {
   });
 }
 
+/** SMTP-Versand über den Server des Kontos (SSL, STARTTLS oder unverschlüsselt). */
 function smtp(k, passwort) {
   return nodemailer.createTransport({
     host: k.smtpHost, port: k.smtpPort, secure: k.smtpSicherheit === 'SSL',
@@ -38,6 +40,7 @@ function smtp(k, passwort) {
   });
 }
 
+/** Übersetzt Fehler von IMAP/SMTP in verständliche Meldungen; Anmeldefehler werden markiert (die Oberfläche fragt dann nach dem Passwort). */
 function uebersetze(e) {
   if (e instanceof MailFehler) return e;
   const auth = e && (e.authenticationFailed || e.responseCode === 535 || e.code === 'EAUTH' || /auth/i.test(e.serverResponseCode || '') || /AUTHENTICATIONFAILED|Invalid credentials|LOGIN failed/i.test(e.responseText || e.response || e.message || ''));
@@ -45,6 +48,7 @@ function uebersetze(e) {
   return new MailFehler('Keine Verbindung zum Postfach: ' + ((e && (e.responseText || e.message)) || e));
 }
 
+/** Verbindet, führt die Arbeit aus und trennt sicher wieder – auch bei Fehlern. */
 async function mitImap(k, passwort, arbeit) {
   const client = imap(k, passwort);
   client.on('error', () => {}); // Verbindungsfehler kommen über die Promises
@@ -64,6 +68,7 @@ async function pruefe(k, passwort) {
   try { await smtp(k, passwort).verify(); } catch (e) { throw uebersetze(e); }
 }
 
+/** Ordner für gesendete Mails: per Kennzeichnung (\\Sent), sonst über übliche Namen (Gesendet, Sent Items …). */
 async function gesendetOrdner(client) {
   const ordner = await client.list();
   const sent = ordner.find(f => f.specialUse === '\\Sent');
@@ -132,6 +137,7 @@ const SPEZIAL_NAMEN = [
 ];
 const MAX_HTML = 1500000;
 
+/** Art eines Ordners (INBOX, SENT, TRASH, JUNK, ARCHIVE, DRAFTS) aus Kennzeichnung oder Namen. */
 function spezialVon(f) {
   if (String(f.path).toUpperCase() === 'INBOX') return 'INBOX';
   if (f.specialUse && SPEZIAL[f.specialUse]) return SPEZIAL[f.specialUse];
@@ -139,6 +145,7 @@ function spezialVon(f) {
   return treffer ? treffer[0] : '';
 }
 
+/** Alle Ordner des Postfachs mit Anzahl und ungelesenen Mails. */
 async function ordner(k, passwort) {
   return mitImap(k, passwort, async client => {
     const liste = await client.list({ statusQuery: { messages: true, unseen: true } });
@@ -171,6 +178,7 @@ async function stand(k, passwort, { ordner: pfad = 'INBOX', seit = '' } = {}) {
 }
 
 const kopf = (m, name) => { const w = m.headers && m.headers.get(name); return w == null ? '' : typeof w === 'string' ? w : w.text || w.value || String(w); };
+/** Wichtigkeit einer Mail (HOCH/NIEDRIG/normal) aus Priority-, Importance- und X-Priority-Kopf. */
 function wichtigkeit(m) {
   const p = (m.priority || kopf(m, 'priority')).toLowerCase();
   if (p === 'high') return 'HOCH';
@@ -180,6 +188,7 @@ function wichtigkeit(m) {
   if (imp === 'low' || /^[45]/.test(prio)) return 'NIEDRIG';
   return '';
 }
+/** Abmelde-Adresse eines Newsletters (List-Unsubscribe: https oder mailto). */
 function abmelden(m) {
   const liste = m.headers && m.headers.get('list');
   if (liste && liste.unsubscribe) { const u = liste.unsubscribe; return u.url && /^https:/i.test(u.url) ? u.url : u.mail ? 'mailto:' + u.mail : ''; }
@@ -276,6 +285,7 @@ async function aktion(k, passwort, { ordner: pfad = 'INBOX', uids = [], aktion: 
   });
 }
 
+/** Ordner anlegen, umbenennen oder löschen. */
 async function ordnerAktion(k, passwort, { aktion: was, pfad, neu } = {}) {
   return mitImap(k, passwort, async client => {
     if (was === 'anlegen') { await client.mailboxCreate(pfad); return true; }
@@ -285,6 +295,7 @@ async function ordnerAktion(k, passwort, { aktion: was, pfad, neu } = {}) {
   });
 }
 
+/** Rohe Mail (Quelltext) vom Server, nur lesend geöffnet. */
 async function quelleRoh(client, pfad, uid) {
   const sperre = await client.getMailboxLock(pfad, { readOnly: true });
   try {
@@ -293,6 +304,7 @@ async function quelleRoh(client, pfad, uid) {
     return m.source;
   } finally { sperre.release(); }
 }
+/** Einen Anhang einer Mail als Base64 (für Vorschau/Speichern). */
 async function anhang(k, passwort, { ordner: pfad = 'INBOX', uid, nr = 0 } = {}) {
   return mitImap(k, passwort, async client => {
     const a = echteAnhaenge(await simpleParser(await quelleRoh(client, pfad, uid)))[Number(nr)];
@@ -300,18 +312,21 @@ async function anhang(k, passwort, { ordner: pfad = 'INBOX', uid, nr = 0 } = {})
     return { name: a.filename || 'Anhang', mimeType: (a.contentType || 'application/octet-stream').toLowerCase(), base64: a.content.toString('base64') };
   });
 }
+/** Quelltext einer Mail als Base64 (Mail speichern als .eml). */
 async function quelle(k, passwort, { ordner: pfad = 'INBOX', uid } = {}) {
   return mitImap(k, passwort, async client => (await quelleRoh(client, pfad, uid)).toString('base64'));
 }
 
 /** Einheitlicher Einstieg für die Oberfläche: mail.ruf(befehl, daten, konto). */
 const BEFEHLE = { ordner, stand, lade, suche, aktion, ordnerAktion, anhang, quelle, sende: (k, p, d) => sende(k, p, d) };
+/** Führt einen Mail-Befehl der Oberfläche aus (nur bekannte Befehle aus BEFEHLE). */
 async function ruf(k, passwort, befehl, daten) {
   const f = Object.prototype.hasOwnProperty.call(BEFEHLE, befehl) && BEFEHLE[befehl];
   if (!f) throw new MailFehler('Unbekannter Befehl: ' + befehl);
   return befehl === 'ordner' ? f(k, passwort) : f(k, passwort, daten || {});
 }
 
+/** Einfacher Text aus HTML (für Vorschau und Suche): Skripte/Stile weg, Umbrüche erhalten, Entitäten aufgelöst. */
 function htmlAlsText(html) {
   return String(html)
     .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '')

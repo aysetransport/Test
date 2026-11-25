@@ -65,6 +65,7 @@ data class MailKonfig(
     val smtpSicherheit: String,
 ) {
     companion object {
+        /** Kontoeinstellungen aus der Oberfläche (JSON) lesen und prüfen. */
         fun aus(j: JsonObject): MailKonfig {
             fun t(n: String) = (j[n] as? JsonPrimitive)?.content?.trim().orEmpty()
             fun z(n: String, vorgabe: Int) = t(n).toIntOrNull() ?: vorgabe
@@ -91,6 +92,7 @@ data class MailKonfig(
  */
 class Postfach {
 
+    /** JavaMail-Sitzung mit IMAP/SMTP-Einstellungen des Kontos (SSL/STARTTLS, Zeitgrenzen). */
     private fun session(k: MailKonfig): Session {
         val p = Properties()
         val imap = if (k.imapSicherheit == "SSL") "imaps" else "imap"
@@ -125,6 +127,7 @@ class Postfach {
         throw MailFehler("Keine Verbindung zum Postfach: ${e.message ?: e.javaClass.simpleName}")
     }
 
+    /** IMAP-Verbindung öffnen und anmelden. */
     private fun oeffne(k: MailKonfig, passwort: String): Store =
         session(k).store.apply { connect(k.imapHost, k.imapPort, k.benutzer, passwort) }
 
@@ -216,6 +219,7 @@ class Postfach {
         messageId
     }
 
+    /** Ordner für gesendete Mails: per Kennzeichnung (\\Sent), sonst über übliche Namen. */
     private fun gesendetOrdner(store: Store): Folder? {
         val alle = store.defaultFolder.list("*")
         alle.firstOrNull { f -> (f as? IMAPFolder)?.attributes?.any { it.equals("\\Sent", ignoreCase = true) } == true }?.let { return it }
@@ -223,6 +227,7 @@ class Postfach {
         return namen.firstNotNullOfOrNull { n -> alle.firstOrNull { it.fullName.equals(n, ignoreCase = true) } }
     }
 
+    /** Liest eine Mail in das Format der Oberfläche (Absender, Betreff, Text, Anhänge-Liste, Kennzeichen). */
     private fun lies(ordner: IMAPFolder, m: MimeMessage): JsonObject {
         val von = m.from?.firstOrNull() as? InternetAddress
         val anhaenge = mutableListOf<JsonObject>()
@@ -272,6 +277,7 @@ class Postfach {
     // Dieselben Bausteine wie die Windows-App (desktop/mail.js): ordner, stand, lade, suche, aktion, ordnerAktion,
     // anhang, quelle, sende – die Oberfläche setzt daraus alles Weitere zusammen.
 
+    /** Führt einen Mail-Befehl der Oberfläche aus (gleiche Befehle wie in der Windows-App); Fehler als verständlicher Text. */
     fun ruf(k: MailKonfig, passwort: String, befehl: String, d: JsonObject): JsonElement = mitFehlertext {
         when (befehl) {
             "ordner" -> ordner(k, passwort)
@@ -292,6 +298,7 @@ class Postfach {
     private fun JsonObject.uids() = (this["uids"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.longOrNull }.toLongArray()
     private fun datum(iso: String): Date? = iso.takeIf { it.isNotBlank() }?.let { runCatching { Date.from(Instant.parse(if (it.length == 10) "${it}T00:00:00Z" else it)) }.getOrNull() }
 
+    /** Art eines Ordners (INBOX, SENT, TRASH, JUNK, ARCHIVE, DRAFTS) aus Kennzeichnung oder Namen. */
     private fun spezial(f: IMAPFolder): String {
         if (f.fullName.equals("INBOX", ignoreCase = true)) return "INBOX"
         val attr = f.attributes.orEmpty().map { it.lowercase() }
@@ -299,6 +306,7 @@ class Postfach {
         return SPEZIAL_NAMEN.firstOrNull { (_, r) -> r.matches(f.fullName) }?.first.orEmpty()
     }
 
+    /** Alle Ordner mit Anzahl und ungelesenen Mails. */
     private fun ordner(k: MailKonfig, passwort: String): JsonElement = oeffne(k, passwort).use { store ->
         JsonArray(store.defaultFolder.list("*").map { f ->
             val imap = f as IMAPFolder
@@ -320,6 +328,7 @@ class Postfach {
             try { arbeit(store, f) } finally { if (f.isOpen) f.close(false) }
         }
 
+    /** Stand eines Ordners: UIDs und Kennzeichen (seit Datum) – zum Abgleich mit der Oberfläche. */
     private fun stand(k: MailKonfig, passwort: String, d: JsonObject): JsonElement = imOrdner(k, passwort, d.text("ordner", "INBOX")) { _, f ->
         val seit = datum(d.text("seit"))
         val nachrichten = if (f.messageCount == 0) emptyArray() else if (seit != null) f.search(ReceivedDateTerm(ComparisonTerm.GE, seit)) else f.messages
@@ -352,6 +361,7 @@ class Postfach {
 
     private fun kopf(m: MimeMessage, n: String) = m.getHeader(n)?.firstOrNull().orEmpty()
 
+    /** Mail vollständig für die Oberfläche: Text, HTML, kleine Anhänge (bis maxAnhang) eingebettet. */
     private fun alsMail(f: IMAPFolder, m: MimeMessage, maxAnhang: Int): JsonObject {
         val basis = lies(f, m)
         var html = ""
@@ -401,6 +411,7 @@ class Postfach {
         }
     }
 
+    /** Lädt mehrere Mails per UID. */
     private fun lade(k: MailKonfig, passwort: String, d: JsonObject): JsonElement {
         val uids = d.uids(); if (uids.isEmpty()) return JsonArray(emptyList())
         val max = (d["maxAnhang"] as? JsonPrimitive)?.intOrNull ?: (3 * 1024 * 1024)
@@ -411,6 +422,7 @@ class Postfach {
         }
     }
 
+    /** Suche auf dem Server (Text, Absender, Zeitraum). */
     private fun suche(k: MailKonfig, passwort: String, d: JsonObject): JsonElement = imOrdner(k, passwort, d.text("ordner", "INBOX")) { _, f ->
         val teile = mutableListOf<SearchTerm>()
         d.text("text").takeIf { it.isNotBlank() }?.let { teile += OrTerm(arrayOf(SubjectTerm(it), BodyTerm(it), FromStringTerm(it), RecipientStringTerm(Message.RecipientType.TO, it))) }
@@ -427,6 +439,7 @@ class Postfach {
         JsonArray(treffer.map { f.getUID(it) }.sortedDescending().take(max).map { JsonPrimitive(it) })
     }
 
+    /** Aktion für mehrere Mails: gelesen/ungelesen, markieren, verschieben, löschen; liefert neue UIDs nach dem Verschieben. */
     private fun aktion(k: MailKonfig, passwort: String, d: JsonObject): JsonElement {
         val uids = d.uids(); if (uids.isEmpty()) return buildJsonObject { put("neueUids", JsonObject(emptyMap())) }
         val was = d.text("aktion")
@@ -453,6 +466,7 @@ class Postfach {
         }
     }
 
+    /** Ordner anlegen, umbenennen oder löschen. */
     private fun ordnerAktion(k: MailKonfig, passwort: String, d: JsonObject): JsonElement = oeffne(k, passwort).use { store ->
         val f = store.getFolder(d.text("pfad"))
         when (d.text("aktion")) {
@@ -464,9 +478,11 @@ class Postfach {
         JsonPrimitive(true)
     }
 
+    /** Mail per UID oder klare Meldung, wenn sie nicht mehr existiert. */
     private fun nachricht(f: IMAPFolder, uid: Long): MimeMessage =
         (f.getMessageByUID(uid) as? MimeMessage) ?: throw MailFehler("Die E-Mail gibt es auf dem Server nicht mehr.")
 
+    /** Einen Anhang als Base64. */
     private fun anhang(k: MailKonfig, passwort: String, d: JsonObject): JsonElement = imOrdner(k, passwort, d.text("ordner", "INBOX")) { _, f ->
         val nr = d.text("nr", "0").toIntOrNull() ?: 0
         val teil = anhangTeile(nachricht(f, d.text("uid").toLongOrNull() ?: 0)).filter { p -> p.inputStream.use { it.read() } != -1 }.getOrNull(nr)
@@ -478,6 +494,7 @@ class Postfach {
         }
     }
 
+    /** Quelltext einer Mail als Base64 (.eml). */
     private fun quelle(k: MailKonfig, passwort: String, d: JsonObject): JsonElement = imOrdner(k, passwort, d.text("ordner", "INBOX")) { _, f ->
         val aus = ByteArrayOutputStream(); nachricht(f, d.text("uid").toLongOrNull() ?: 0).writeTo(aus)
         JsonPrimitive(Base64.getEncoder().encodeToString(aus.toByteArray()))

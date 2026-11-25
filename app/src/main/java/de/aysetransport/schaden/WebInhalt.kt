@@ -20,6 +20,7 @@ object WebInhalt {
         return html.substring(0, kopf.range.last + 1) + "<script src=\"android.js\"></script>" + html.substring(kopf.range.last + 1)
     }
 
+    /** MIME-Typ für ausgelieferte App-Dateien. */
     private fun mime(pfad: String) = when (pfad.substringAfterLast('.').lowercase()) {
         "html" -> "text/html"; "js" -> "text/javascript"; "json", "webmanifest" -> "application/json"; "png" -> "image/png"; "css" -> "text/css"
         else -> "application/octet-stream"

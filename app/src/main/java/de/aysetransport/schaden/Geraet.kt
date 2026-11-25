@@ -52,6 +52,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
 
     private fun sicher(name: String?) = (name ?: "Datei").replace(Regex("[\\\\/:*?\"<>|]"), "_").take(120).ifBlank { "Datei" }
 
+    /** MIME-Typ zur Dateiendung (für Öffnen und Teilen). */
     private fun mimeTyp(name: String) =
         MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
 
@@ -110,12 +111,14 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
         wurzel.addView(w, 0, FrameLayout.LayoutParams(breitePx, hoehePx))
         w.webViewClient = object : WebViewClient() {
             private var fertig = false
+            /** Druck/PDF: Stürzt die unsichtbare Seite ab, wird der Auftrag mit verständlicher Meldung beendet statt die App mitzureißen. */
             override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
                 wurzel.removeView(view)
                 view.destroy()
                 if (fortsetzung.isActive) fortsetzung.resumeWithException(IOException("Die Seite konnte nicht aufbereitet werden – bitte noch einmal versuchen."))
                 return true
             }
+            /** Druck/PDF: Seite fertig geladen – kurz warten (Bilder, Schriften), dann weiter. */
             override fun onPageFinished(view: WebView, url: String?) {
                 if (fertig) return
                 fertig = true
@@ -177,6 +180,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
             .show()
     }
 
+    /** Öffnet die SMS-App mit vorbereiteter Nachricht (Fallback, wenn direktes Senden nicht erlaubt ist). */
     private fun smsApp(adresse: String) {
         try { activity.startActivity(Intent(Intent.ACTION_VIEW, adresse.toUri())) } catch (e: ActivityNotFoundException) { meldung("Keine SMS-App gefunden.") }
     }
@@ -185,6 +189,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
 
     private fun smsErlaubt() = SMS_RECHTE.all { ContextCompat.checkSelfPermission(activity, it) == PackageManager.PERMISSION_GRANTED }
 
+    /** Sendet eine SMS an mehrere Nummern direkt (nach Erlaubnis) und meldet am Ende gesammelt Erfolg oder Fehler. */
     private fun sendeSms(nummern: List<String>, text: String) {
         var offen = nummern.size
         val fehler = mutableListOf<String>()
@@ -212,6 +217,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
             var offen = teile.size
             var fehler = 0
             empfaenger = object : BroadcastReceiver() {
+                /** Empfängt die Sendebestätigungen der Teil-SMS; nach der letzten wird ausgewertet und abgemeldet. */
                 override fun onReceive(c: Context, i: Intent) {
                     if (resultCode != Activity.RESULT_OK && fehler == 0) fehler = resultCode
                     if (--offen > 0) return
@@ -257,6 +263,7 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
     // ------------------------------ Benachrichtigungen ------------------------------
     private val kanal = "mail"
 
+    /** Zeigt eine Benachrichtigung (fragt ab Android 13 nach der Erlaubnis); Antippen öffnet das Ziel in der App. */
     fun benachrichtige(titel: String, text: String, ziel: String?): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED

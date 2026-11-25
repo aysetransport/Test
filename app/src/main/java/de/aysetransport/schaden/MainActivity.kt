@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
     private var offenesZiel: String? = null
     private var zielBereit = false
 
+    /** Hinweis statt leerer Seite, wenn Android die Anzeige (WebView) wiederholt beendet hat. */
     private fun zeigeStoerung() {
         setContentView(android.widget.TextView(this).apply {
             text = "Die Anzeige wurde vom System mehrfach beendet (zu wenig Speicher?).\n\nBitte die App schließen und neu öffnen. Deine Daten bleiben erhalten."
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
     fun frageSms(weiter: (Boolean) -> Unit) { nachSmsFrage = weiter; smsFrage.launch(Geraet.SMS_RECHTE) }
     private var schonGefragt = false
 
+    /** Fragt einmal nach der Erlaubnis für Benachrichtigungen (ab Android 13). */
     fun frageBenachrichtigungen() {
         if (schonGefragt || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         schonGefragt = true
@@ -109,6 +111,7 @@ class MainActivity : ComponentActivity() {
         webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true)
         WebView.setWebContentsDebuggingEnabled(applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0)
         webView.webViewClient = object : WebViewClient() {
+            /** Alle Anfragen an app://… beantwortet WebInhalt (mitgelieferte bzw. per Update geprüfte Dateien). */
             override fun shouldInterceptRequest(view: WebView, anfrage: WebResourceRequest): WebResourceResponse? =
                 lader.shouldInterceptRequest(anfrage.url)
 
@@ -127,6 +130,7 @@ class MainActivity : ComponentActivity() {
                 return true
             }
 
+            /** Links nach außen (Telefon, Mail, Webseiten) öffnen die Apps des Geräts statt die App-Seite zu verlassen. */
             override fun shouldOverrideUrlLoading(view: WebView, anfrage: WebResourceRequest): Boolean {
                 val url = anfrage.url
                 if (url.host == WebInhalt.HOST) return false
@@ -136,6 +140,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
+            /** Dateiauswahl (Fotos, Belege, Scans) über die Android-Auswahl bzw. Kamera. */
             override fun onShowFileChooser(view: WebView, rueckruf: ValueCallback<Array<Uri>>, parameter: FileChooserParams): Boolean {
                 dateiRueckruf?.onReceiveValue(null)
                 dateiRueckruf = rueckruf
@@ -163,6 +168,7 @@ class MainActivity : ComponentActivity() {
         )
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            /** Zurück-Taste: erst die Oberfläche fragen (Dialog schließen, Ansicht zurück), sonst App verlassen. */
             override fun handleOnBackPressed() {
                 webView.evaluateJavascript("window.__androidZurueck ? window.__androidZurueck() : false") { erledigt ->
                     if (erledigt != "true") { isEnabled = false; onBackPressedDispatcher.onBackPressed(); isEnabled = true }
@@ -196,11 +202,13 @@ class MainActivity : ComponentActivity() {
         return chooser
     }
 
+    /** Antippen einer Benachrichtigung bei laufender App: Ziel (z. B. Mail, Tour) öffnen. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intent.getStringExtra(ZIEL)?.let { if (zielBereit) zeigeZiel(it) else offenesZiel = it }
     }
 
+    /** Übergibt ein Ziel an die Oberfläche (window.__androidZiel). */
     private fun zeigeZiel(ziel: String) {
         offenesZiel = null
         webView.evaluateJavascript("window.__androidZiel && window.__androidZiel(${kotlinx.serialization.json.JsonPrimitive(ziel)})", null)
@@ -221,6 +229,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Hell/Dunkel gewechselt: System- und Navigationsleiste anpassen. */
     override fun onConfigurationChanged(neu: android.content.res.Configuration) {
         super.onConfigurationChanged(neu)
         systemleisten(neu)
