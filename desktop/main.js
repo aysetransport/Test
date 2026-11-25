@@ -28,9 +28,11 @@ let update = null; // In-App-Update der Oberfläche (webupdate.js), nach app.whe
 // und beliebig viele weitere mit eigener Kennung aus der Oberfläche (mailkonto-<kennung>.json).
 const art = a => (/^[A-Z][A-Z0-9_]{0,23}$/.test(String(a)) ? a : 'SCHADEN');
 const kontoDatei = a => path.join(app.getPath('userData'), art(a) === 'SCHADEN' ? 'mailkonto.json' : `mailkonto-${art(a).toLowerCase()}.json`);
+/** Gespeichertes Mail-Konto (Datei je Konto im Datenordner) oder null. */
 function ladeKonto(a) {
   try { return JSON.parse(fs.readFileSync(kontoDatei(a), 'utf8')); } catch { return null; }
 }
+/** Passwort eines Kontos im Klartext – über Windows (safeStorage/DPAPI) entschlüsselt; ältere Konten liegen nur Base64-kodiert. */
 function passwort(konto) {
   if (!konto || !konto.passwort) throw new mail.MailFehler('Kein E-Mail-Konto eingerichtet');
   const roh = Buffer.from(konto.passwort, 'base64');
@@ -40,6 +42,7 @@ const ohnePasswort = k => (k ? Object.fromEntries(Object.entries(k).filter(([n])
 
 let aufrufer = null; // Fenster, aus dem der laufende Aufruf kommt (mehrere Fenster)
 const quelle = () => (aufrufer && !aufrufer.isDestroyed() ? aufrufer : fenster);
+/** Registriert einen IPC-Kanal für die Oberfläche: Ergebnis als {ok}, Fehler als {fehler, anmeldung} (preload.js wirft daraus wieder einen Fehler). */
 function behandle(kanal, arbeit) {
   ipcMain.handle(kanal, async (_e, ...args) => {
     aufrufer = BrowserWindow.fromWebContents(_e.sender);
@@ -150,6 +153,7 @@ const IST_WINDOWS = process.platform === 'win32';
 const windowsBuild = () => (IST_WINDOWS ? Number(String(os.release()).split('.')[2]) || 0 : 0);
 const TITEL_HOEHE = 48;
 const fensterDatei = () => path.join(app.getPath('userData'), 'fenster.json');
+/** Angaben für die Oberfläche: Windows ja/nein, Windows 11, Akzentfarbe, dunkles Design, Höhe der Titelleiste, App-Version. */
 function fensterInfo() {
   let akzent = '';
   try { if (IST_WINDOWS) akzent = '#' + systemPreferences.getAccentColor().slice(0, 6); } catch {}
@@ -163,6 +167,7 @@ function letzteLage() {
     return sichtbar ? l : { width: l.width, height: l.height, maximiert: l.maximiert };
   } catch { return {}; }
 }
+/** Merkt Größe, Lage und Maximierung des Hauptfensters für den nächsten Start. */
 function lageMerken() {
   if (!fenster || fenster.isDestroyed()) return;
   try { fs.writeFileSync(fensterDatei(), JSON.stringify({ ...fenster.getNormalBounds(), maximiert: fenster.isMaximized() })); } catch {}

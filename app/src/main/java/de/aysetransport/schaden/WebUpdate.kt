@@ -31,8 +31,11 @@ class WebUpdate(private val context: Context) {
     private val ordner get() = File(context.filesDir, "webupdate")
     private val zustand get() = File(ordner, "zustand.json")
 
+    /** Liest eine JSON-Datei (null bei Fehler). */
     private fun lies(datei: File): JsonObject? = runCatching { Json.parseToJsonElement(datei.readText()).jsonObject }.getOrNull()
+    /** Manifest der mitgelieferten Fassung (assets/app-update.json). */
     private fun gebuendelt(): JsonObject? = runCatching { context.assets.open(MANIFEST).use { Json.parseToJsonElement(it.readBytes().toString(Charsets.UTF_8)).jsonObject } }.getOrNull()
+    /** Stand (Zeitstempel) aus einem Manifest; 0 wenn unbekannt. */
     private fun stand(o: JsonObject?): Long = runCatching { o!!["stand"]!!.jsonPrimitive.long }.getOrDefault(0L)
 
     /** Beim App-Start: kaputte oder veraltete Fassung verwerfen, Startversuch zählen. */
@@ -53,6 +56,7 @@ class WebUpdate(private val context: Context) {
         return if (f.path.startsWith(File(ordner, "dateien").canonicalPath + File.separator) && f.isFile) f else null
     }
 
+    /** Auskunft für die Oberfläche (Einstellungen): Schnittstelle, App-Version, aktiver Stand und letzter Fehler des Web-Updates. */
     fun info(): JsonElement = buildJsonObject {
         val z = lies(zustand)
         put("nativ", NATIV_API)
@@ -71,6 +75,7 @@ class WebUpdate(private val context: Context) {
     @Synchronized
     fun zuruecksetzen() { ordner.deleteRecursively() }
 
+    /** Lädt eine Datei der Update-Quelle ohne Zwischenspeicher. */
     private fun hole(pfad: String): ByteArray {
         val v = URL(BASIS + pfad + "?t=" + System.currentTimeMillis()).openConnection() as HttpURLConnection
         v.connectTimeout = 15000; v.readTimeout = 60000; v.useCaches = false

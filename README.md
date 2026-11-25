@@ -14,6 +14,9 @@ Eine Oberfläche, drei Wege, sie zu nutzen:
 
 Alle Geräte gleichen sich über das Cloud-Skript ab. Ohne Cloud arbeitet jedes Gerät für sich.
 
+**Dokumentation für Betreuung und Fehlersuche:** [`docs/`](docs/README.md) – Aufbau, Datenmodell, Cloud, Apps,
+Veröffentlichen, Tests und vor allem [Fehlerbehebung](docs/fehlerbehebung.md).
+
 ## Cloud einrichten (einmalig)
 
 1. [script.google.com](https://script.google.com) → **Neues Projekt**, `cloud/Code.gs` und `cloud/appsscript.json` einfügen.

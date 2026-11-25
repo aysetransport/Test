@@ -50,6 +50,7 @@ class Bruecke(
         }
     }
 
+    /** Führt einen Aufruf der Oberfläche aus (window.android…): Name des Befehls und Argumente als JSON; liefert JSON zurück. */
     suspend fun ausfuehren(name: String, a: JsonArray): JsonElement {
         fun t(i: Int): String? = (a.getOrNull(i) as? JsonPrimitive)?.takeIf { it.isString }?.content
         fun o(i: Int): JsonObject = (a.getOrNull(i) as? JsonObject) ?: JsonObject(emptyMap())

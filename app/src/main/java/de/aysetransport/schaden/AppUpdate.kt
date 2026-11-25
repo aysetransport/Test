@@ -31,6 +31,7 @@ class AppUpdate(private val activity: MainActivity) {
     private val apk get() = File(activity.cacheDir, "update/Ayse-CRM.apk")
     private var bereit = ""
 
+    /** Öffnet eine Datei der Update-Quelle ohne Zwischenspeicher; wirft bei anderem Status als 200. */
     private fun oeffne(pfad: String): HttpURLConnection {
         val v = URL(BASIS + pfad).openConnection() as HttpURLConnection
         v.connectTimeout = 15000; v.readTimeout = 60000; v.useCaches = false
@@ -72,6 +73,7 @@ class AppUpdate(private val activity: MainActivity) {
         activity.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
+    /** SHA-256 einer Datei als Hex – die heruntergeladene APK muss zur Angabe in android-update.json passen. */
     private fun sha(datei: File): String {
         val md = MessageDigest.getInstance("SHA-256")
         datei.inputStream().use { ein -> val puffer = ByteArray(1 shl 16); while (true) { val n = ein.read(puffer); if (n < 0) break; md.update(puffer, 0, n) } }
