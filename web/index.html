@@ -861,6 +861,12 @@ tr.im-bild td{background:color-mix(in srgb,var(--primaer) 12%,transparent)}
 :is(header .symbol,#sync,#suche-knopf,#neu-knopf,#navi,#toast,dialog.menue,#globale-suche,.werkzeuge .knopf:not(.voll),.pf-tabs,.pf-leiste,.chips:not(.ebenen):has(> .chip:nth-child(2)):not(:has(> :nth-child(4))),.ab-gruppe,.ab-abbrechen,dialog:not(.menue):not(.aktionsblatt)) *{--linse:initial} /* Linse gilt nur für das Element selbst (und sein Glas-::before) */
 .lichtbrechung :is(header .symbol,#sync,#suche-knopf,#toast,dialog.menue),.lichtbrechung #navi::before{
   background-image:radial-gradient(140% 120% at var(--glanz-x,30%) var(--glanz-y,0%),rgba(255,255,255,.24),rgba(255,255,255,.05) 45%,transparent 70%)}
+/* Große Glasflächen mit viel Text (Plus-Menü, Menüs, Aktionsblätter, Suchtreffer): dichter getönt und stärker weichgezeichnet, damit sie lesbar
+   bleiben – Rand bricht trotzdem, Glanz wandert. Kleine Knöpfe und Leisten bleiben klar. */
+:root :is(dialog.menue,.ab-gruppe,.ab-abbrechen,#suchtreffer),:root.lichtbrechung :is(dialog.menue,.ab-gruppe,.ab-abbrechen,#suchtreffer){--glas:rgba(248,248,250,.84);--unschaerfe:blur(18px) saturate(180%)}
+@media (prefers-color-scheme:dark){:root:not([data-thema=hell]) :is(dialog.menue,.ab-gruppe,.ab-abbrechen,#suchtreffer),:root:not([data-thema=hell]).lichtbrechung :is(dialog.menue,.ab-gruppe,.ab-abbrechen,#suchtreffer){--glas:rgba(30,30,32,.84)}}
+:root[data-thema=dunkel] :is(dialog.menue,.ab-gruppe,.ab-abbrechen,#suchtreffer),:root[data-thema=dunkel].lichtbrechung :is(dialog.menue,.ab-gruppe,.ab-abbrechen,#suchtreffer){--glas:rgba(30,30,32,.84)}
+dialog.aktionsblatt :is(.ab-gruppe,.ab-abbrechen){background:var(--glas)}
 /* Weitere Bedienelemente aus Glas: Suchfeld, Werkzeugknöpfe, Segmente, Mail-Werkzeugleiste, Aktionsblätter, Sheets */
 :is(#globale-suche,.werkzeuge .knopf:not(.voll),.pf-tabs,.chips:not(.ebenen):has(> .chip:nth-child(2)):not(:has(> :nth-child(4)))){position:relative;background-color:var(--glas);border:1px solid var(--glas-rand);
   -webkit-backdrop-filter:var(--linse,) var(--unschaerfe);backdrop-filter:var(--linse,) var(--unschaerfe);box-shadow:inset 0 1px 0 var(--glas-licht),var(--schatten)}
