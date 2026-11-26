@@ -30,7 +30,6 @@ contextBridge.exposeInMainWorld('desktop', {
   fenster: {
     info: () => ipcRenderer.sendSync('fenster:info'),
     beiAenderung: rueckruf => ipcRenderer.on('fenster:info', (_e, info) => rueckruf(info)),
-    beiZoom: rueckruf => ipcRenderer.on('fenster:zoom', (_e, f) => rueckruf(f)),
     titelleiste: (farbe, symbol, thema) => aufruf('fenster:titelleiste', farbe, symbol, thema),
     zaehler: (anzahl, png) => aufruf('fenster:zaehler', anzahl, png),
     blinken: () => aufruf('fenster:blinken'),

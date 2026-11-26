@@ -120,5 +120,5 @@ in `cloud/test/cloud.test.js` ergänzen.
 | Funktion | Wann |
 |---|---|
 | `selbstUpdateEinrichten` | Einmalig nach dem Einrichten bzw. wenn das Selbst-Update an Berechtigungen scheitert |
-| `pinZuruecksetzen` | PIN vergessen – danach legt das nächste Gerät eine neue PIN fest |
+| `pinZuruecksetzen` | PIN vergessen – setzt sofort eine neue, zufällige PIN und zeigt sie im Ausführungsprotokoll („Neue Cloud-PIN: …“) |
 | `notfallPinAnmeldungEinschalten` | PIN-Anmeldung wieder einschalten (z. B. Hauptadmin-Passwort verloren) |

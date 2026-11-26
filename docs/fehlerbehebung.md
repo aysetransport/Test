@@ -18,7 +18,7 @@ sie liegt und was hilft. Hintergründe: [cloud.md](cloud.md), [apps.md](apps.md)
 | Symptom | Ursache | Lösung |
 |---|---|---|
 | „Anmeldung nötig“ / „Anmeldung abgelaufen“ | Sitzung abgelaufen, Passwort/PIN geändert, Benutzer gesperrt | Punkt antippen und neu anmelden. Benutzer prüfen unter ⚙ → Benutzer (aktiv?) |
-| „PIN falsch“ bzw. „GESPERRT … Minuten“ | Falsche PIN, nach 8 Versuchen gesperrt | Warten (Sperre verdoppelt sich je Fehlversuch, max. 7 Tage). PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen, dann legt das nächste Gerät eine neue fest |
+| „PIN falsch“ bzw. „GESPERRT … Minuten“ | Falsche PIN, nach 8 Versuchen gesperrt | Warten (Sperre verdoppelt sich je Fehlversuch, max. 7 Tage). PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen – die neue PIN steht im Ausführungsprotokoll |
 | „PIN_AUS: Die Anmeldung mit der Cloud-PIN ist abgeschaltet“ | Hauptadmin hat PIN-Anmeldung abgeschaltet | Mit Benutzer-Login anmelden. Notfall: `notfallPinAnmeldungEinschalten` im Skript-Editor |
 | „Offline · n Änderungen warten“ | Kein Netz oder Cloud nicht erreichbar | Netz prüfen. Änderungen bleiben auf dem Gerät und gehen automatisch raus |
 | „Das Cloud-Skript ist veraltet …“ | Oberfläche braucht neuere Cloud (`CLOUD_API` > `API_VERSION`) | ⚙ → Cloud-Skript → Aktualisieren (Hauptadmin). Geht das nicht: von Hand einspielen ([cloud.md](cloud.md), „Neue Version von Hand einspielen“) |

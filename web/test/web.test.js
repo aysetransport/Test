@@ -2032,6 +2032,11 @@ test('Rechte: Disposition und Fahrer sehen keine Exporte/Importe und nur erlaubt
   await s.evaluate(() => { window.__csv = 0; const b = document.createElement('button'); b.dataset.personalCsv = ''; document.body.appendChild(b); window.ladeHerunter = () => window.__csv++; b.click(); });
   assert.equal(await s.evaluate(() => window.__csv), 0);
   await s.locator('#toast', { hasText: 'Nur für Admins' }).waitFor();
+  // Lohnabrechnungen legt nur der Admin ab – die Cloud lehnt sie für das Büro ab, der Upload bliebe sonst hängen
+  await s.evaluate(() => { location.hash = '#/mitarbeiter/' + alle('mitarbeiter')[0].id; });
+  await s.locator('#ma-dok-art').waitFor();
+  assert.equal(await s.locator('#ma-dok-art option', { hasText: 'Lohnabrechnung' }).count(), 0);
+  assert.ok(await s.locator('#ma-dok-art option', { hasText: 'Arbeitsvertrag' }).count());
   await s.evaluate(() => { location.hash = '#/einstellungen'; });
   await s.locator('#detail h3', { hasText: 'Bedienung' }).waitFor();
   const dispo = await s.$$eval('#detail > .karte.block h3', l => l.map(x => x.textContent));
@@ -2054,7 +2059,7 @@ test('Windows-App im Apple-Design: Start ohne Fehler, Titelleiste gehört dem Fe
     window.__fenster = { titel: [], zaehler: [] };
     window.desktop = { plattform: 'win32', beiZiel() {}, benachrichtige: async () => true, oeffneExtern: async () => true, oeffneDatei: async () => true,
       mail: { anbieter: async () => ({}), konto: async () => null, schnittstelle: 2, ruf: async () => [] },
-      fenster: { info: () => ({ windows: true, windows11: true, mica: true, akzent: '#C239B3', dunkel: true, titelHoehe: 48 }), beiAenderung() {}, beiZoom() {},
+      fenster: { info: () => ({ windows: true, windows11: true, mica: true, akzent: '#C239B3', dunkel: true, titelHoehe: 48 }), beiAenderung() {},
         titelleiste: async (f, s, th) => { window.__fenster.titel.push([f, s, th]); return true; }, zaehler: async n => { window.__fenster.zaehler.push(n); return true; }, blinken: async () => true, zoom: async () => 1 } };
   });
   const s = await kontext.newPage();

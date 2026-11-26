@@ -58,6 +58,8 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
 
     /** Öffnet eine Datei (Anlage, Dokument) mit einer passenden App des Geräts. */
     fun oeffne(name: String, bytes: ByteArray) {
+        // Ayse CRM darf Apps installieren (eigene Updates) – Installationspakete aus Mails daher nie öffnen (Phishing).
+        if (istInstallationspaket(name)) throw IOException("„${sicher(name)}“ ist ein App-Installationspaket und wird aus Sicherheitsgründen nicht geöffnet.")
         val ordner = File(activity.cacheDir, "oeffnen").apply { mkdirs() }
         ordner.listFiles()?.forEach { it.delete() } // nur die zuletzt geöffnete Datei aufheben
         val datei = File(ordner, sicher(name)).apply { writeBytes(bytes) }
@@ -320,6 +322,9 @@ class Geraet(private val activity: MainActivity, private val wurzel: FrameLayout
             else -> "Fehlercode $code von Android"
         }
         private val NUMMER = Regex("^[+0-9 ()/-]{3,}$")
+
+        /** Android-Installationspakete (APK und gebündelte Formate) – werden aus Anlagen nie geöffnet. */
+        fun istInstallationspaket(name: String) = Regex("\\.(apk|apks|apkm|xapk|aab)[.\\s]*$", RegexOption.IGNORE_CASE).containsMatchIn(name)
 
         /** Empfänger und Text aus einer sms:-Adresse der Oberfläche (sms:+49…,+49…?body=…); null, wenn etwas fehlt. */
         fun smsZiel(adresse: String): Pair<List<String>, String>? {

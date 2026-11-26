@@ -92,6 +92,7 @@ function erstelleUmgebung(zusatz = {}) {
         getProperties: () => Object.fromEntries(eigenschaften),
       }),
     },
+    Logger: { log() {} },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     // Selbst-Update: Tests geben UrlFetchApp/ScriptApp vor (sonst nicht vorhanden)
     ...zusatz,

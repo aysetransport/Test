@@ -114,6 +114,11 @@ class AppTest {
         assertEquals("Fehlercode 999 von Android", Geraet.smsFehlerText(999))
     }
 
+    @Test fun installationspaketeAusMailsWerdenNichtGeoeffnet() {
+        for (n in listOf("Rechnung.apk", "rechnung.pdf.APK", "x.xapk", "app.apks ", "a.apk.")) assertEquals(n, true, Geraet.istInstallationspaket(n))
+        for (n in listOf("Rechnung.pdf", "apk-liste.xlsx", "Foto.jpg", "apk")) assertEquals(n, false, Geraet.istInstallationspaket(n))
+    }
+
     @Test fun smsTextImNormalenZeichensatz() {
         assertEquals("Tour am Mo - 12 Tel. 0171 \"Hamburg\" Größe äöüß ...", Geraet.gsm7("Tour am Mo – 12 ☎ 0171 „Hamburg“ Größe äöüß …"))
         assertEquals("Vater Café ", Geraet.gsm7("Váter Café 🚚"))

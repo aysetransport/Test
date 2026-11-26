@@ -216,8 +216,6 @@ function fensterBauen(url, haupt, klein = false) {
     else if (i.control && (i.key === '-' || i.code === 'NumpadSubtract')) { wc.setZoomFactor(Math.max(0.6, Math.round((z - 0.1) * 10) / 10)); e.preventDefault(); }
     else if (i.control && (i.key === '0' || i.code === 'Numpad0')) { wc.setZoomFactor(1); e.preventDefault(); }
     else if (i.key === 'F11') { w.setFullScreen(!w.isFullScreen()); e.preventDefault(); }
-    else return;
-    wc.send('w:zoom', wc.getZoomFactor());
   });
   w.once('ready-to-show', () => w.show());
   w.loadURL(url);

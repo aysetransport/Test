@@ -86,13 +86,30 @@ test('unbekannte Funktionen und interne Helfer sind nicht aufrufbar', () => {
   assert.equal(u.post('kein json').error !== undefined, true);
 });
 
-test('pinZuruecksetzen erlaubt eine neue PIN und behält die Daten', () => {
+test('pinZuruecksetzen setzt sofort eine neue PIN (kein Moment ohne PIN) und behält die Daten', () => {
   const u = eingerichtet();
   u.sync({ seit: 0, faelle: [fall(A)] });
-  u.kontext.pinZuruecksetzen();
-  assert.equal(u.aufruf('status').eingerichtet, false);
-  u.aufruf('pinFestlegen', 'neue-pin-9');
-  assert.equal(u.aufruf('sync', 'neue-pin-9', { seit: 0 }).faelle.length, 1);
+  const neu = u.kontext.pinZuruecksetzen();
+  assert.equal(u.aufruf('status').eingerichtet, true);
+  assert.throws(() => u.aufruf('pinFestlegen', 'fremde-pin-9'), /bereits eine PIN/);
+  assert.throws(() => u.aufruf('sync', PIN, { seit: 0 }), /PIN falsch/);
+  assert.equal(u.aufruf('sync', neu, { seit: 0 }).faelle.length, 1);
+});
+
+test('zwei Geräte vergeben dieselbe Rechnungsnummer: der zweite Entwurf wird umnummeriert, Versendetes und Externes nicht', () => {
+  const u = eingerichtet();
+  const beleg = (id, extra = {}) => ({ id, firmaId: '', art: 'RECHNUNG', nummer: 'RE2026-0042', datum: '2026-11-10', status: 'ENTWURF', positionen: '[]', mwstProzent: 19, geaendertAm: '2026-11-10T08:00:00Z', ...extra });
+  const R1 = 'cccccccc-0000-4000-8000-000000000001', R2 = 'cccccccc-0000-4000-8000-000000000002', R3 = 'cccccccc-0000-4000-8000-000000000003', R4 = 'cccccccc-0000-4000-8000-000000000004';
+  u.sync({ seit: 0, belege: [beleg(R1)] });
+  const z = u.sync({ seit: 0, belege: [beleg(R2)] });
+  const nr = Object.fromEntries(z.belege.map(b => [b.id, b.nummer]));
+  assert.deepEqual(nr, { [R1]: 'RE2026-0042', [R2]: 'RE2026-0043' });
+  // Das Gerät bearbeitet den Entwurf noch mit der alten Nummer: er behält seine neue
+  const b = u.sync({ seit: z.rev, belege: [beleg(R2, { notiz: 'x', geaendertAm: '2026-11-11T08:00:00Z' })] });
+  assert.equal(b.belege.find(x => x.id === R2).nummer, 'RE2026-0043');
+  // Schon versendet bzw. fremde Nummer (Gutschriftverfahren): nie umnummerieren
+  const c = u.sync({ seit: 0, belege: [beleg(R3, { status: 'OFFEN' }), beleg(R4, { extern: true })] });
+  assert.deepEqual([c.belege.find(x => x.id === R3).nummer, c.belege.find(x => x.id === R4).nummer], ['RE2026-0042', 'RE2026-0042']);
 });
 
 test('ein Gerät lädt hoch, das andere bekommt nur Neues', () => {

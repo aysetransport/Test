@@ -25,7 +25,7 @@ Veröffentlichen, Tests und vor allem [Fehlerbehebung](docs/fehlerbehebung.md).
    Später lassen sich unter ⚙ → Benutzer persönliche Logins anlegen (Admin, Disposition, Fahrer).
 
 Danach aktualisiert sich das Skript selbst (⚙ → Cloud-Skript, einmalig die Apps Script API einschalten).
-PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen.
+PIN vergessen: im Skript-Editor `pinZuruecksetzen` ausführen – die neue PIN steht danach im Ausführungsprotokoll.
 
 ## Updates
 
